@@ -1,0 +1,16 @@
+name: Deploy BE
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy-laravel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Update
+        run: |
+          curl -X POST https://mogamogapecahtelor.faaruq.com/laravel \
+            -H "Authorization: Bearer ${{ secrets.API_PASSWORD }}" \
+            -H "Content-Type: application/json" \
+            --fail --show-error
