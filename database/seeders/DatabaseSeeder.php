@@ -4,7 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Users;
 use App\Models\Pasien;
-use App\Models\Layanan;
+//use App\Models\Layanan;
 use App\Models\Artikel;
 use Database\Seeders\ProvinsiSeeder;
 use Database\Seeders\TenagaMedisSeeder;
