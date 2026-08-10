@@ -124,46 +124,66 @@ class BookingController extends Controller
         //    Gunakan jarak 0 sebagai default; dapat diperluas jika kolom ditambahkan.
         $distance = 0;
 
-        // 2. Load Template Master Tarif dari relasi MasterLayanan
-        $masterTarif = $layanan->masterTarif;
+        // 2. Load Template Master Tarif dari relasi MasterLayanan & Kota (jika ada)
+        $idKota = $request->input('id_kota');
+        $masterTarif = null;
+        if ($idKota) {
+            $masterTarif = \App\Models\MasterTarif::where('id_layanan', $layanan->id_layanan)
+                ->where('id_kota', $idKota)
+                ->where('is_active', true)
+                ->first();
+        }
+        if (!$masterTarif) {
+            $masterTarif = \App\Models\MasterTarif::where('id_layanan', $layanan->id_layanan)
+                ->whereNull('id_kota')
+                ->where('is_active', true)
+                ->first();
+        }
 
-        // SL = Tarif Layanan / Jasa (dari kolom harga di master_layanan)
-        $sl = (float) $layanan->harga;
+        // SL = Tarif Layanan / Jasa (dari kolom harga di master_layanan atau dari masterTarif blueprint)
+        $tarifLayananJasaMedis = $masterTarif ? (float) $masterTarif->tarif_layanan : (float) $layanan->harga;
 
-        // SB = Tarif BHP — ambil dari pivot mapping_layanan_bhp
-        $sb      = 0;
-        $hppBhp  = 0;
+        // SB = Tarif BHP — ambil dari blueprint atau dihitung dari default layanan
+        $tarifBahanHabisPakai = 0.0;
+        $hppBhp = 0.0;
+        $totalBhpDihitungManual = 0.0;
         foreach ($layanan->bhpItems as $bhpItem) {
-            $qty      = (int) ($bhpItem->pivot->qty_default ?? 1);
+            $qty = (int) ($bhpItem->pivot->qty_default ?? 1);
             $hargaBhp = (float) $bhpItem->harga_jual;
-            $hppBhp   += (float) $bhpItem->harga_modal * $qty;
-            $sb       += $hargaBhp * $qty;
+            $hppBhp += (float) $bhpItem->harga_modal * $qty;
+            $totalBhpDihitungManual += $hargaBhp * $qty;
+        }
+
+        if ($masterTarif) {
+            $tarifBahanHabisPakai = (float) $masterTarif->total_bhp;
+        } else {
+            $tarifBahanHabisPakai = $totalBhpDihitungManual;
         }
 
         // ST = Tarif Transport (dari template master_tarif)
-        $tarifTransportPerKm = $masterTarif ? (float) $masterTarif->tarif_transport_per_km : 0.0;
-        $st = 0.0;
+        $tarifTransportBaseFare = $masterTarif ? (float) $masterTarif->transport_base_fare : 0.0;
+        $tarifTransportPerKm = $masterTarif ? (float) $masterTarif->transport_per_km : 0.0;
+        $tarifTransportasiFinal = 0.0;
         if (!$layanan->include_transport && $distance > 0) {
-            $st = $distance * $tarifTransportPerKm;
+            $tarifTransportasiFinal = $tarifTransportBaseFare + ($distance * $tarifTransportPerKm);
         }
 
         // BA = Biaya Administrasi (snapshot dari master_tarif)
-        $ba = $masterTarif ? (float) $masterTarif->biaya_admin : 0.0;
+        $biayaAdministrasiAplikasi = $masterTarif ? (float) $masterTarif->total_biaya_admin : 0.0;
 
         // PPN — dihitung dari (SL + SB + ST)
-        $persenPpn = $masterTarif ? (float) $masterTarif->persentase_ppn : 0.0;
-        $ppn       = ($sl + $sb + $st) * ($persenPpn / 100);
+        $persentasePpnPajak = $masterTarif ? (float) $masterTarif->persen_ppn : 0.0;
+        $nominalPpnPajak = ($tarifLayananJasaMedis + $tarifBahanHabisPakai + $tarifTransportasiFinal) * ($persentasePpnPajak / 100);
 
         // TOTAL yang dibayar pasien
-        $total = $sl + $sb + $st + $ba + $ppn;
+        $totalTagihanPasien = $tarifLayananJasaMedis + $tarifBahanHabisPakai + $tarifTransportasiFinal + $biayaAdministrasiAplikasi + $nominalPpnPajak;
 
         // Bagi Hasil — snapshot dari master_tarif
-        $persenFeeNakesRaw = $masterTarif ? (float) $masterTarif->fee_nakes_persen : 0.0;
-        $persenFeeNakes    = $persenFeeNakesRaw / 100;
-        $hakNakes          = ($sl * $persenFeeNakes) + $st;
+        $persentaseBagianNakes = $masterTarif ? (float) $masterTarif->potongan_persen_nakes : 0.0;
+        $nominalHakNakes = ($tarifLayananJasaMedis * ($persentaseBagianNakes / 100)) + $tarifTransportasiFinal;
 
         $feeMidtrans = (float) env('FEE_MIDTRANS', 4000.0);
-        $profitHc    = ($sl * (1 - $persenFeeNakes)) + $sb + $ba - $feeMidtrans - $hppBhp;
+        $estimasiProfitHomeCare = ($tarifLayananJasaMedis * ((100 - $persentaseBagianNakes) / 100)) + $tarifBahanHabisPakai + $biayaAdministrasiAplikasi - $feeMidtrans - $hppBhp;
 
         $idPromo = $validate['id_promo'] ?? null;
         if (is_array($idPromo)) {
@@ -194,20 +214,20 @@ class BookingController extends Controller
 
             $transaction = Transaksi::create([
                 'id_booking' => $booking->id_booking,
-                'jumlah_total' => $total,
+                'jumlah_total' => $totalTagihanPasien,
                 'metode_pembayaran' => 'QRIS',
                 'status_transaksi' => 'Belum Bayar',
-                'sl' => $sl,
-                'sb' => $sb,
-                'st' => $st,
-                'ba' => $ba,
-                'ppn' => $ppn,
-                'persen_ppn' => $persenPpn,
-                'persen_fee_nakes' => $persenFeeNakesRaw,
+                'sl' => $tarifLayananJasaMedis,
+                'sb' => $tarifBahanHabisPakai,
+                'st' => $tarifTransportasiFinal,
+                'ba' => $biayaAdministrasiAplikasi,
+                'ppn' => $nominalPpnPajak,
+                'persen_ppn' => $persentasePpnPajak,
+                'persen_fee_nakes' => $persentaseBagianNakes,
                 'fee_midtrans' => $feeMidtrans,
                 'hpp_bhp' => $hppBhp,
-                'hak_nakes' => $hakNakes,
-                'profit_hc' => $profitHc,
+                'hak_nakes' => $nominalHakNakes,
+                'profit_hc' => $estimasiProfitHomeCare,
             ]);
 
             MidtransConfig::$serverKey = config('services.midtrans.server_key');
@@ -221,51 +241,51 @@ class BookingController extends Controller
             
             $itemDetails[] = [
                 'id' => 'LYN-' . $layanan->id_layanan,
-                'price' => (float) $sl,
+                'price' => (float) $tarifLayananJasaMedis,
                 'quantity' => 1,
                 'name' => substr($layanan->nama_layanan, 0, 50),
             ];
             
-            if ($sb > 0) {
+            if ($tarifBahanHabisPakai > 0) {
                 $itemDetails[] = [
                     'id' => 'BHP-' . $booking->id_booking,
-                    'price' => (float) $sb,
+                    'price' => (float) $tarifBahanHabisPakai,
                     'quantity' => 1,
                     'name' => 'Bahan Habis Pakai (BHP)',
                 ];
             }
             
-            if ($st > 0) {
+            if ($tarifTransportasiFinal > 0) {
                 $itemDetails[] = [
                     'id' => 'TRN-' . $booking->id_booking,
-                    'price' => (float) $st,
+                    'price' => (float) $tarifTransportasiFinal,
                     'quantity' => 1,
                     'name' => 'Biaya Transportasi (' . round($distance, 1) . ' km)',
                 ];
             }
             
-            if ($ba > 0) {
+            if ($biayaAdministrasiAplikasi > 0) {
                 $itemDetails[] = [
                     'id' => 'ADM-' . $booking->id_booking,
-                    'price' => (float) $ba,
+                    'price' => (float) $biayaAdministrasiAplikasi,
                     'quantity' => 1,
                     'name' => 'Biaya Administrasi',
                 ];
             }
             
-            if ($ppn > 0) {
+            if ($nominalPpnPajak > 0) {
                 $itemDetails[] = [
                     'id' => 'TAX-' . $booking->id_booking,
-                    'price' => (float) $ppn,
+                    'price' => (float) $nominalPpnPajak,
                     'quantity' => 1,
-                    'name' => 'PPN (' . $persenPpn . '%)',
+                    'name' => 'PPN (' . $persentasePpnPajak . '%)',
                 ];
             }
 
             $params = [
                 'transaction_details' => [
                     'order_id' => $orderId,
-                    'gross_amount' => (float) $total,
+                    'gross_amount' => (float) $totalTagihanPasien,
                 ],
                 'customer_details' => [
                     'first_name' => $pasien->nama_lengkap ?? $user->email ?? 'Pasien',

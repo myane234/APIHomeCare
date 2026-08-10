@@ -19,6 +19,10 @@ use App\Http\Controllers\KategoriLayananController;
 use App\Http\Controllers\KategoriArtikelController;
 use App\Http\Controllers\KategoriPembayaranController;
 use App\Http\Controllers\MetodePembayaranController;
+use App\Http\Controllers\TarifTransportController;
+use App\Http\Controllers\KomponenTarifController;
+use App\Http\Controllers\BhpController;
+use App\Http\Controllers\MappingLayananBhpController;
 
 Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
     
@@ -106,6 +110,20 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
     // Master Data (BHP & Tarif)
     Route::apiResource('/bhp-items', SuperAdminDataBarang::class);
     Route::apiResource('/master-tarif', SuperAdminMasterTarif::class);
+
+    // Tarif Transport CRUD
+    Route::apiResource('/tarif-transport', TarifTransportController::class);
+
+    // Komponen Tarif / Biaya CRUD
+    Route::apiResource('/komponen-biaya', KomponenTarifController::class);
+
+    // BHP Item CRUD
+    Route::apiResource('/bhp', BhpController::class);
+
+    // Mapping Layanan BHP
+    Route::get('/mapping-layanan-bhp', [MappingLayananBhpController::class, 'index']);
+    Route::get('/mapping-layanan-bhp/{id_layanan}', [MappingLayananBhpController::class, 'show']);
+    Route::post('/mapping-layanan-bhp/{id_layanan}/sync', [MappingLayananBhpController::class, 'sync']);
 
     // Master Wilayah - Provinsi
     Route::prefix('wilayah-layanan')->group(function () {
