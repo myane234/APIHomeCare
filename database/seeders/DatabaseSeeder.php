@@ -26,7 +26,7 @@ class DatabaseSeeder extends Seeder
             SuperAdminSeeder::class,
             KategoriLayananSeeder::class,
             //LayananSeeder::class,
-            PromoSeeder::class,
+            //PromoSeeder::class,
             ProvinsiSeeder::class,
             KotaKabupatenSeeder::class,
             ArtikelSeeder::class,
