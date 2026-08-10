@@ -124,6 +124,7 @@ return new class extends Migration {
             $table->string('nama_metode')->comment('Ex: BCA VA, ShopeePay, Mandiri VA');
             $table->enum('tipe_potongan', ['nominal', 'persen']);
             $table->decimal('nilai_potongan', 10, 2);
+            $table->string('logo')->nullable()->comment('Logo / foto metode pembayaran');
 
             $table->boolean('is_active')->default(true);
             $table->timestamps();

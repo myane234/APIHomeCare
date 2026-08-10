@@ -17,6 +17,7 @@ class MasterMetodePembayaran extends Model
         'nama_metode',
         'tipe_potongan',
         'nilai_potongan',
+        'logo',
         'is_active',
     ];
 

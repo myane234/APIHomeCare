@@ -17,6 +17,8 @@ use App\Http\Controllers\WilayahLayananController;
 use App\Http\Controllers\KotaKabupatenController;
 use App\Http\Controllers\KategoriLayananController;
 use App\Http\Controllers\KategoriArtikelController;
+use App\Http\Controllers\KategoriPembayaranController;
+use App\Http\Controllers\MetodePembayaranController;
 
 Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
     
@@ -52,6 +54,18 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
     Route::get('/artikel/kategori/{id}', [KategoriArtikelController::class, 'show']);
     Route::put('/artikel/kategori/{id}', [KategoriArtikelController::class, 'update']);
     Route::delete('/artikel/kategori/{id}', [KategoriArtikelController::class, 'destroy']);
+
+    // Kategori Pembayaran CRUD
+    Route::post('/pembayaran/kategori', [KategoriPembayaranController::class, 'store']);
+    Route::get('/pembayaran/kategori/{id}', [KategoriPembayaranController::class, 'show']);
+    Route::put('/pembayaran/kategori/{id}', [KategoriPembayaranController::class, 'update']);
+    Route::delete('/pembayaran/kategori/{id}', [KategoriPembayaranController::class, 'destroy']);
+
+    // Metode Pembayaran CRUD
+    Route::post('/pembayaran/metode', [MetodePembayaranController::class, 'store']);
+    Route::get('/pembayaran/metode/{id}', [MetodePembayaranController::class, 'show']);
+    Route::post('/pembayaran/metode/{id}', [MetodePembayaranController::class, 'update']);
+    Route::delete('/pembayaran/metode/{id}', [MetodePembayaranController::class, 'destroy']);
 
     //Super Admin
     // Management Nakes - Admin
