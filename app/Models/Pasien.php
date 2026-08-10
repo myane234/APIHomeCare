@@ -35,8 +35,8 @@ class Pasien extends Model
         return $this->hasOne(TenagaMedis::class, 'id_pasien', 'id_pasien');
     }
 
-    public function nakesRequests()
-    {
-        return $this->hasMany(NakesRequest::class, 'id_pasien', 'id_pasien');
-    }
+    // public function nakesRequests()
+    // {
+    //     return $this->hasMany(NakesRequest::class, 'id_pasien', 'id_pasien');
+    // }
 }

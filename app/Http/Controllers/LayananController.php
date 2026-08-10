@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\KategoriLayanan;
-use App\Models\Layanan;
+use App\Models\MasterLayanan;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Storage;
@@ -71,7 +71,7 @@ class LayananController extends Controller
             ], 200);
         }
 
-        $query = Layanan::with('kategori');
+        $query = MasterLayanan::with('kategori');
 
         if ($request->has('kategori_layanan')) {
             // Find category id by name if the frontend still passes name, or just use id
@@ -103,14 +103,15 @@ class LayananController extends Controller
     {
         // Validasi wajib (required) untuk deskripsi dan foto
         $validated = $request->validate([
-            'nama_layanan' => ['required', 'string', 'max:255'],
-            'deskripsi_layanan' => ['required', 'string'],
-            'foto_layanan' => ['required', 'image', 'mimes:jpeg,png,jpg', 'max:2048'], // Wajib file gambar max 2MB
-            'include_transport' => ['required', 'boolean'],
+            'nama_layanan'        => ['required', 'string', 'max:255'],
+            'deskripsi_layanan'   => ['required', 'string'],
+            'foto_layanan'        => ['required', 'image', 'mimes:jpeg,png,jpg', 'max:2048'],
             'id_kategori_layanan' => ['required', 'exists:kategori_layanans,id_kategori_layanan'],
-            'harga' => ['required', 'numeric'],
-            'tipe_layanan' => ['required', 'in:durasi,tindakan'],
-            'durasi_menit' => ['nullable', 'integer'],
+            'id_master_tarif'     => ['nullable', 'exists:master_tarif,id_master_tarif'],
+            'harga'               => ['required', 'numeric', 'min:0'],
+            'include_transport'   => ['required', 'boolean'],
+            'tipe_layanan'        => ['required', 'in:durasi,tindakan'],
+            'durasi_menit'        => ['nullable', 'integer', 'min:1'],
         ]);
 
         // Handle upload file ke storage/app/public/layanan
@@ -119,7 +120,7 @@ class LayananController extends Controller
             $validated['foto_layanan'] = $path;
         }
 
-        $layanan = Layanan::create($validated);
+        $layanan = MasterLayanan::create($validated);
         
         // Ubah format response agar mengembalikan URL penuh gambar
         $layanan->foto_layanan = url(Storage::url($layanan->foto_layanan));
@@ -132,7 +133,7 @@ class LayananController extends Controller
      */
     public function show($id)
     {
-        $layanan = Layanan::query()->findOrFail($id);
+        $layanan = MasterLayanan::query()->findOrFail($id);
         
         // Ubah path menjadi URL penuh sebelum di-return
         $layanan->foto_layanan = $layanan->foto_layanan ? url(Storage::url($layanan->foto_layanan)) : null;
@@ -145,7 +146,7 @@ class LayananController extends Controller
      */
      public function update(Request $request, $id)
     {
-        $layanan = Layanan::query()->findOrFail($id);
+        $layanan = MasterLayanan::query()->findOrFail($id);
 
         $validated = $request->validate([
             'nama_layanan' => ['sometimes', 'required', 'string', 'max:255'],
@@ -183,7 +184,7 @@ class LayananController extends Controller
      */
     public function destroy($id)
     {
-        $layanan = Layanan::query()->findOrFail($id);
+        $layanan = MasterLayanan::query()->findOrFail($id);
         
         if ($layanan->foto_layanan) {
             Storage::disk('public')->delete($layanan->foto_layanan);

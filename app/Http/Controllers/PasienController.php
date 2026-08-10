@@ -70,6 +70,7 @@ class PasienController extends Controller
 
     // 1. Validasi Input Profil
     $validate = $request->validate([
+        'nama_lengkap' => 'nullable|string',
         'nik'            => 'nullable|string',
         'golongan_darah' => ['nullable', Rule::enum(KategoriGoldar::class)],
         'no_hp'          => 'nullable|string',
