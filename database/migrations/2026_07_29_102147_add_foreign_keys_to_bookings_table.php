@@ -9,13 +9,17 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
+
     public function up(): void
     {
         Schema::table('bookings', function (Blueprint $table) {
-            $table->foreign(['id_layanan'])->references(['id_layanan'])->on('layanans')->onUpdate('restrict')->onDelete('restrict');
-            $table->foreign(['id_pasien'])->references(['id_pasien'])->on('pasiens')->onUpdate('restrict')->onDelete('restrict');
-            $table->foreign(['id_promo'])->references(['id_promo'])->on('promos')->onUpdate('restrict')->onDelete('restrict');
-            $table->foreign(['id_tenaga_medis'])->references(['id_tenaga_medis'])->on('tenaga_medis')->onUpdate('restrict')->onDelete('restrict');
+            // Foreign key to master_tarif explicitly
+            $table->foreign('id_master_tarif')->references('id_master_tarif')->on('master_tarif')->onUpdate('restrict')->onDelete('restrict');
+            
+            $table->foreign('id_pasien')->references('id_pasien')->on('pasiens')->onUpdate('restrict')->onDelete('restrict');
+            $table->foreign('id_promo')->references('id_promo')->on('promos')->onUpdate('restrict')->onDelete('restrict');
+            $table->foreign('id_tenaga_medis')->references('id_tenaga_medis')->on('tenaga_medis')->onUpdate('restrict')->onDelete('restrict');
+            $table->foreign('id_metode_pembayaran')->references('id_metode')->on('master_metode_pembayaran')->onUpdate('restrict')->onDelete('restrict');
         });
     }
 
@@ -25,10 +29,11 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('bookings', function (Blueprint $table) {
-            $table->dropForeign('bookings_id_layanan_foreign');
-            $table->dropForeign('bookings_id_pasien_foreign');
-            $table->dropForeign('bookings_id_promo_foreign');
-            $table->dropForeign('bookings_id_tenaga_medis_foreign');
+            $table->dropForeign(['id_master_tarif']);
+            $table->dropForeign(['id_pasien']);
+            $table->dropForeign(['id_promo']);
+            $table->dropForeign(['id_tenaga_medis']);
+            $table->dropForeign(['id_metode_pembayaran']);
         });
     }
 };
