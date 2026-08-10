@@ -7,14 +7,8 @@ use Illuminate\Http\Request;
 
 
 /**
- * Master Tarif Transport
- * 
- * @group Master Data
- * 
- * @subgroup Master Tarif Transport
- * 
- * @resource Master Tarif Transport
- */
+ * @group masterTarif Transport
+ *  */
 class TarifTransportController extends Controller
 {
     /**

@@ -8,57 +8,56 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Model MasterTarif
  *
- * Merepresentasikan tabel master_tarif yang berfungsi sebagai
- * template / blueprint komponen biaya layanan. Nilai-nilainya
- * akan di-snapshot ke tabel transaksis saat booking dibuat
- * sehingga histori tarif tetap akurat meskipun template diubah.
- *
- * @property int         $id_master_tarif
- * @property string      $nama_template
- * @property string|null $keterangan
- * @property float       $biaya_admin
- * @property float       $persentase_ppn
- * @property float       $fee_nakes_persen
- * @property float       $fee_nakes_nominal
- * @property float       $tarif_transport_per_km
- * @property bool        $is_active
+ * Blueprint utama semua komponen tarif yang dihitung secara dinamis.
  */
 class MasterTarif extends Model
 {
     use HasFactory;
 
-    protected $table      = 'master_tarif';
+    protected $table = 'master_tarif';
     protected $primaryKey = 'id_master_tarif';
 
     protected $fillable = [
         'nama_template',
-        'keterangan',
-        'biaya_admin',
-        'persentase_ppn',
-        'fee_nakes_persen',
+        'id_layanan',
+        'id_kota',
+        'tarif_pasien',
+        'transport_base_fare',
+        'transport_per_km',
+        'total_bhp',
+        'potongan_persen_nakes',
         'fee_nakes_nominal',
-        'tarif_transport_per_km',
+        'total_ppn',
+        'total_biaya_admin',
+        'total_asuransi',
+        'subtotal',
+        'total_tarif_final',
         'is_active',
+        'synced_at',
     ];
 
     protected $casts = [
-        'biaya_admin'            => 'decimal:2',
-        'persentase_ppn'         => 'decimal:2',
-        'fee_nakes_persen'       => 'decimal:2',
-        'fee_nakes_nominal'      => 'decimal:2',
-        'tarif_transport_per_km' => 'decimal:2',
-        'is_active'              => 'boolean',
+        'tarif_pasien' => 'decimal:2',
+        'transport_base_fare' => 'decimal:2',
+        'transport_per_km' => 'decimal:2',
+        'total_bhp' => 'decimal:2',
+        'fee_nakes_nominal' => 'decimal:2',
+        'total_ppn' => 'decimal:2',
+        'total_biaya_admin' => 'decimal:2',
+        'total_asuransi' => 'decimal:2',
+        'subtotal' => 'decimal:2',
+        'total_tarif_final' => 'decimal:2',
+        'is_active' => 'boolean',
+        'synced_at' => 'datetime',
     ];
 
-    // ---------------------------------------------------------------
-    // Relations
-    // ---------------------------------------------------------------
-
-    /**
-     * Layanan-layanan yang menggunakan template tarif ini.
-     */
-    public function layanans()
+    public function layanan()
     {
-        return $this->hasMany(MasterLayanan::class, 'id_master_tarif', 'id_master_tarif');
+        return $this->belongsTo(MasterLayanan::class, 'id_layanan', 'id_layanan');
+    }
+
+    public function kota()
+    {
+        return $this->belongsTo(KotaKabupaten::class, 'id_kota', 'id_kota');
     }
 }
