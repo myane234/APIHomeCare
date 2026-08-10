@@ -37,26 +37,41 @@ return new class extends Migration {
         //     $table->boolean('is_active')->default(true);
         //     $table->timestamps();
 
+        // 2. TABEL MASTER TARIF LAYANAN (Core Jasa - Blueprint Pembagian)
+        Schema::create('master_tarif_layanan', function (Blueprint $table) {
+            $table->id('id_tarif');
+            $table->unsignedBigInteger('id_layanan');
+            $table->unsignedBigInteger('id_kota')->nullable()->comment('Null = Nasional');
 
-        //     $table->foreign('id_layanan')
-        //         ->references('id_layanan')
-        //         ->on('master_layanan')
-        //         ->onDelete('cascade');
+            $table->decimal('tarif_dasar', 12, 2)->comment('Harga dasar layanan');
+            $table->integer('persentase_nakes')->default(80)->comment('Porsi pendapatan nakes (%)');
+            $table->integer('persentase_homecare')->default(20)->comment('Porsi margin homecare (%)');
 
-        //     $table->foreign('id_kota')
-        //         ->references('id_kota')
-        //         ->on('master_kota_kabupaten')
-        //         ->onUpdate('cascade')
-        //         ->onDelete('cascade');
-        // });
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+
+            //     $table->foreign('id_layanan')
+            //         ->references('id_layanan')
+            //         ->on('master_layanan')
+            //         ->onDelete('cascade');
+
+            //     $table->foreign('id_kota')
+            //         ->references('id_kota')
+            //         ->on('master_kota_kabupaten')
+            //         ->onUpdate('cascade')
+            //         ->onDelete('cascade');
+            // });
+            $table->foreign('id_layanan')->references('id_layanan')->on('master_layanan')->onDelete('cascade');
+            $table->foreign('id_kota')->references('id_kota')->on('master_kota_kabupaten')->onDelete('cascade');
+        });
 
         // 3. TABEL MASTER TARIF TRANSPORT
         Schema::create('master_tarif_transport', function (Blueprint $table) {
             $table->id('id_transport');
             $table->unsignedBigInteger('id_kota');
 
-            $table->decimal('base_fare', 10, 2);
-            $table->decimal('tarif_per_km', 10, 2);
+            $table->decimal('tarif_awal', 10, 2)->comment('Tarif minimal/awal transport');
+            $table->decimal('tarif_per_kilometer', 10, 2);
 
             $table->foreign('id_kota')
                 ->references('id_kota')
@@ -64,6 +79,8 @@ return new class extends Migration {
                 ->onUpdate('cascade')
                 ->onDelete('cascade');
             $table->timestamps();
+
+            $table->foreign('id_kota')->references('id_kota')->on('master_kota_kabupaten')->onDelete('cascade');
         });
 
         // 4. TABEL MASTER BHP
@@ -129,10 +146,25 @@ return new class extends Migration {
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
+
+        // 9. TABEL MASTER TARIF (BUNDLING / CETAKAN UTAMA)
+        Schema::create('master_tarif', function (Blueprint $table) {
+            $table->id('id_master_tarif');
+            $table->string('nama_tarif')->comment('Contoh: Reguler, VIP, Khusus');
+            $table->unsignedBigInteger('id_tarif_layanan');
+            $table->unsignedBigInteger('id_tarif_transport')->nullable();
+
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+
+            $table->foreign('id_tarif_layanan')->references('id_tarif')->on('master_tarif_layanan')->onDelete('cascade');
+            $table->foreign('id_tarif_transport')->references('id_transport')->on('master_tarif_transport')->onDelete('cascade');
+        });
     }
 
     public function down(): void
     {
+        Schema::dropIfExists('master_tarif');
         Schema::dropIfExists('master_komponen_biaya');
         Schema::dropIfExists('master_metode_pembayaran');
         Schema::dropIfExists('master_kategori_pembayaran');
