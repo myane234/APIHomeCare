@@ -6,8 +6,34 @@ use Illuminate\Http\Request;
 
 use App\Models\KategoriLayanan;
 
+/**
+ * Master Kategori Layanan
+ * 
+ * @group Master Data
+ * 
+ * @subgroup Master Kategori Layanan
+ * 
+ * @resource Master Kategori Layanan
+ */
+
 class KategoriLayananController extends Controller
 {
+    /**
+     * Get all master kategori layanan
+     * 
+     * @response 200 {
+     *  "success": true,
+     *  "message": "Berhasil mengambil daftar kategori layanan",
+     *  "data": [
+     *      {
+     *          "id_kategori_layanan": 1,
+     *          "nama_kategori": "Layanan Medis",
+     *          "created_at": "2022-01-01T00:00:00.000000Z",
+     *          "updated_at": "2022-01-01T00:00:00.000000Z"
+     *      }
+     *  ]
+     * }
+     */
     public function index()
     {
         $kategori = KategoriLayanan::all();
