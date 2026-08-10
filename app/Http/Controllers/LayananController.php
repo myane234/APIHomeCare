@@ -107,7 +107,6 @@ class LayananController extends Controller
             'deskripsi_layanan'   => ['required', 'string'],
             'foto_layanan'        => ['required', 'image', 'mimes:jpeg,png,jpg', 'max:2048'],
             'id_kategori_layanan' => ['required', 'exists:kategori_layanans,id_kategori_layanan'],
-            'id_master_tarif'     => ['nullable', 'exists:master_tarif,id_master_tarif'],
             'harga'               => ['required', 'numeric', 'min:0'],
             'include_transport'   => ['required', 'boolean'],
             'tipe_layanan'        => ['required', 'in:durasi,tindakan'],

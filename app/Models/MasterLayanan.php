@@ -14,10 +14,6 @@ use Illuminate\Support\Facades\Storage;
  * yang menentukan komponen biaya (biaya admin, PPN, fee nakes, transport).
  *
  * @property int         $id_layanan
- * @property int|null    $id_master_tarif
- * @property int         $id_kategori_layanan
- * @property string      $nama_layanan
- * @property string|null $deskripsi_layanan
  * @property float       $harga             — tarif jasa / SL
  * @property bool        $include_transport — true = transport sudah termasuk harga
  * @property string      $foto_layanan
@@ -32,7 +28,6 @@ class MasterLayanan extends Model
     protected $primaryKey = 'id_layanan';
 
     protected $fillable = [
-        'id_master_tarif',
         'id_kategori_layanan',
         'nama_layanan',
         'deskripsi_layanan',
@@ -69,11 +64,11 @@ class MasterLayanan extends Model
     // ---------------------------------------------------------------
 
     /**
-     * Template tarif / blueprint komponen biaya untuk layanan ini.
+     * Template tarif (MasterTarif) yang mereferensikan layanan ini.
      */
     public function masterTarif()
     {
-        return $this->belongsTo(MasterTarif::class, 'id_master_tarif', 'id_master_tarif');
+        return $this->hasMany(MasterTarif::class, 'id_layanan', 'id_layanan');
     }
 
     /**
