@@ -8,12 +8,37 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 /**
- * @group Mapping BHP perLayanan
+ * Mapping BHP per Layanan
+ * 
+ * @group Master Data
+ * 
+ * @subgroup Mapping BHP per Layanan
+ * 
+ * @resource Mapping BHP per Layanan
  */
 class MappingLayananBhpController extends Controller
 {
     /**
      * Get list layanan dengan mapping BHP-nya
+     * 
+     * @response 200 {
+     *  "success": true,
+     *  "message": "Berhasil mengambil mapping layanan dengan BHP",
+     *  "data": [
+     *      {
+     *          "id_layanan": 1,
+     *          "nama_layanan": "Infus Whitening",
+     *          "bhp_items": [
+     *              {
+     *                  "id_bhp": 1,
+     *                  "nama_bhp": "Jarum Suntik",
+     *                  "qty_default": 2,
+     *                  "is_mandatory": true
+     *              }
+     *          ]
+     *      }
+     *  ]
+     * }
      */
     public function index()
     {
@@ -28,6 +53,23 @@ class MappingLayananBhpController extends Controller
 
     /**
      * Tampilkan detail mapping BHP pada satu Layanan
+     * 
+     * @response 200 {
+     *  "success": true,
+     *  "message": "Detail mapping BHP untuk layanan terpilih",
+     *  "data": {
+     *      "id_layanan": 1,
+     *      "nama_layanan": "Infus Whitening",
+     *      "bhp_items": [
+     *          {
+     *              "id_bhp": 1,
+     *              "nama_bhp": "Jarum Suntik",
+     *              "qty_default": 2,
+     *              "is_mandatory": true
+     *          }
+     *      ]
+     *  }
+     * }
      */
     public function show($id_layanan)
     {
@@ -42,13 +84,21 @@ class MappingLayananBhpController extends Controller
 
     /**
      * Sync (Update keseluruhan) mapping BHP untuk suatu layanan
-     * Request Array format: 
-     * [
-     *   "bhp_items" => [
-     *       [ "id_bhp" => 1, "qty_default" => 2, "is_mandatory" => true ],
-     *       [ "id_bhp" => 2, "qty_default" => 1, "is_mandatory" => false ]
-     *   ]
-     * ]
+     * 
+     * @bodyParam bhp_items array required Daftar item BHP
+     * @bodyParam bhp_items.*.id_bhp int required ID BHP
+     * @bodyParam bhp_items.*.qty_default int optional Jumlah default BHP (default: 1)
+     * @bodyParam bhp_items.*.is_mandatory boolean optional Apakah wajib digunakan (default: true)
+     * 
+     * @response 200 {
+     *  "success": true,
+     *  "message": "Mapping BHP untuk layanan berhasil disinkronisasi",
+     *  "data": {
+     *      "id_layanan": 1,
+     *      "nama_layanan": "Infus Whitening",
+     *      "bhp_items": []
+     *  }
+     * }
      */
     public function sync(Request $request, $id_layanan)
     {

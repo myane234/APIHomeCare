@@ -21,7 +21,7 @@ class MasterTarif extends Model
         'nama_template',
         'id_layanan',
         'id_kota',
-        'tarif_layanan',
+        'tarif_pasien',
         'transport_base_fare',
         'transport_per_km',
         'total_bhp',
@@ -39,7 +39,7 @@ class MasterTarif extends Model
     ];
 
     protected $casts = [
-        'tarif_layanan' => 'decimal:2',
+        'tarif_pasien' => 'decimal:2',
         'transport_base_fare' => 'decimal:2',
         'transport_per_km' => 'decimal:2',
         'total_bhp' => 'decimal:2',

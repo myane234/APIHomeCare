@@ -5,10 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\MasterTarifTransport;
 use Illuminate\Http\Request;
 
-
 /**
- * @group masterTarif Transport
- *  */
+ * Master Tarif Transport
+ * 
+ * @group Master Data
+ * 
+ * @subgroup Master Tarif Transport
+ * 
+ * @resource Master Tarif Transport
+ */
 class TarifTransportController extends Controller
 {
     /**
@@ -21,8 +26,8 @@ class TarifTransportController extends Controller
      *      {
      *          "id_tarif_transport": 1,
      *          "id_kota": 1,
-     *          "tarif_awal": 10000,
-     *          "tarif_per_kilometer": 2000,
+     *          "tarif_awal": 10000.00,
+     *          "tarif_per_kilometer": 2000.00,
      *          "created_at": "2022-01-01T00:00:00.000000Z",
      *          "updated_at": "2022-01-01T00:00:00.000000Z"
      *      }
@@ -43,24 +48,10 @@ class TarifTransportController extends Controller
     /**
      * Store a new master tarif transport
      * 
-     * @bodyParam id_kota int required ID kota
-     * @bodyParam tarif_awal numeric required Tarif awal
-     * @bodyParam tarif_per_kilometer numeric required Tarif per kilometer
-     * 
-     * @response 201 {
-     *  "success": true,
-     *  "message": "Tarif transport berhasil ditambahkan",
-     *  "data": {
-     *      "id_tarif_transport": 1,
-     *      "id_kota": 1,
-     *      "tarif_awal": 10000,
-     *      "tarif_per_kilometer": 2000,
-     *      "created_at": "2022-01-01T00:00:00.000000Z",
-     *      "updated_at": "2022-01-01T00:00:00.000000Z"
-     *  }
-     * }
+     * @bodyParam id_kota int required ID kota/kabupaten
+     * @bodyParam tarif_awal numeric required Tarif awal/dasar transportasi
+     * @bodyParam tarif_per_kilometer numeric required Tarif per kilometer transportasi
      */
-
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -80,20 +71,7 @@ class TarifTransportController extends Controller
     }
 
     /**
-     * Get master tarif transport by id 
-     * 
-     * @response 200 {
-     *  "success": true,
-     *  "message": "Detail tarif transport",
-     *  "data": {
-     *      "id_tarif_transport": 1,
-     *      "id_kota": 1,
-     *      "tarif_awal": 10000,
-     *      "tarif_per_kilometer": 2000,
-     *      "created_at": "2022-01-01T00:00:00.000000Z",
-     *      "updated_at": "2022-01-01T00:00:00.000000Z"
-     *  }
-     * }
+     * Get master tarif transport by ID
      */
     public function show($id)
     {
@@ -107,26 +85,12 @@ class TarifTransportController extends Controller
     }
 
     /**
-     * Update master tarif transport by id
+     * Update master tarif transport by ID
      * 
-     * @bodyParam id_kota int required ID kota
-     * @bodyParam tarif_awal numeric required Tarif awal
-     * @bodyParam tarif_per_kilometer numeric required Tarif per kilometer
-     * 
-     * @response 200 {
-     *  "success": true,
-     *  "message": "Tarif transport berhasil diperbarui",
-     *  "data": {
-     *      "id_tarif_transport": 1,
-     *      "id_kota": 1,
-     *      "tarif_awal": 10000,
-     *      "tarif_per_kilometer": 2000,
-     *      "created_at": "2022-01-01T00:00:00.000000Z",
-     *      "updated_at": "2022-01-01T00:00:00.000000Z"
-     *  }
-     * }
+     * @bodyParam id_kota int optional ID kota/kabupaten
+     * @bodyParam tarif_awal numeric optional Tarif awal/dasar transportasi
+     * @bodyParam tarif_per_kilometer numeric optional Tarif per kilometer transportasi
      */
-
     public function update(Request $request, $id)
     {
         $transport = MasterTarifTransport::findOrFail($id);
@@ -148,14 +112,8 @@ class TarifTransportController extends Controller
     }
 
     /**
-     * Delete master tarif transport by id
-     * 
-     * @response 200 {
-     *  "success": true,
-     *  "message": "Tarif transport berhasil dihapus"
-     * }
+     * Delete master tarif transport by ID
      */
-
     public function destroy($id)
     {
         $transport = MasterTarifTransport::findOrFail($id);

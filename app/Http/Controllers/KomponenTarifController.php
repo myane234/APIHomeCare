@@ -14,7 +14,6 @@ use Illuminate\Http\Request;
  * 
  * @resource Master Komponen Tarif
  */
-
 class KomponenTarifController extends Controller
 {
     /**
@@ -26,10 +25,10 @@ class KomponenTarifController extends Controller
      *  "data": [
      *      {
      *          "id_komponen": 1,
-     *          "nama_komponen": "Pajak",
+     *          "nama_komponen": "Pajak PPN",
      *          "tipe_komponen": "pajak",
      *          "jenis_nilai": "persen",
-     *          "nilai": 11,
+     *          "nilai": 11.00,
      *          "is_active": true,
      *          "created_at": "2022-01-01T00:00:00.000000Z",
      *          "updated_at": "2022-01-01T00:00:00.000000Z"
@@ -51,26 +50,11 @@ class KomponenTarifController extends Controller
     /**
      * Store a new master komponen tarif
      * 
-     * @bodyParam nama_komponen string required Nama komponen biaya
+     * @bodyParam nama_komponen string required Nama komponen biaya (e.g. PPN, Biaya Aplikasi)
      * @bodyParam tipe_komponen string required Tipe komponen biaya (pajak, admin_aplikasi, asuransi, lainnya)
      * @bodyParam jenis_nilai string required Jenis nilai (nominal, persen)
      * @bodyParam nilai numeric required Nilai komponen biaya
-     * @bodyParam is_active boolean optional Status komponen biaya
-     * 
-     * @response 201 {
-     *  "success": true,
-     *  "message": "Komponen biaya berhasil ditambahkan",
-     *  "data": {
-     *      "id_komponen": 1,
-     *      "nama_komponen": "Pajak",
-     *      "tipe_komponen": "pajak",
-     *      "jenis_nilai": "persen",
-     *      "nilai": 11,
-     *      "is_active": true,
-     *      "created_at": "2022-01-01T00:00:00.000000Z",
-     *      "updated_at": "2022-01-01T00:00:00.000000Z"
-     *  }
-     * }
+     * @bodyParam is_active boolean optional Status keaktifan
      */
     public function store(Request $request)
     {
@@ -92,24 +76,8 @@ class KomponenTarifController extends Controller
     }
 
     /**
-     * Get master komponen tarif by id
-     * 
-     * @response 200 {
-     *  "success": true,
-     *  "message": "Detail komponen biaya",
-     *  "data": {
-     *      "id_komponen": 1,
-     *      "nama_komponen": "Pajak",
-     *      "tipe_komponen": "pajak",
-     *      "jenis_nilai": "persen",
-     *      "nilai": 11,
-     *      "is_active": true,
-     *      "created_at": "2022-01-01T00:00:00.000000Z",
-     *      "updated_at": "2022-01-01T00:00:00.000000Z"
-     *  }
-     * }
+     * Get master komponen tarif by ID
      */
-
     public function show($id)
     {
         $komponen = MasterKomponenBiaya::findOrFail($id);
@@ -122,30 +90,14 @@ class KomponenTarifController extends Controller
     }
 
     /**
-     * Update master komponen tarif by id
+     * Update master komponen tarif by ID
      * 
-     * @bodyParam nama_komponen string required Nama komponen biaya
-     * @bodyParam tipe_komponen string required Tipe komponen biaya (pajak, admin_aplikasi, asuransi, lainnya)
-     * @bodyParam jenis_nilai string required Jenis nilai (nominal, persen)
-     * @bodyParam nilai numeric required Nilai komponen biaya
-     * @bodyParam is_active boolean optional Status komponen biaya
-     * 
-     * @response 200 {
-     *  "success": true,
-     *  "message": "Komponen biaya berhasil diperbarui",
-     *  "data": {
-     *      "id_komponen": 1,
-     *      "nama_komponen": "Pajak",
-     *      "tipe_komponen": "pajak",
-     *      "jenis_nilai": "persen",
-     *      "nilai": 11,
-     *      "is_active": true,
-     *      "created_at": "2022-01-01T00:00:00.000000Z",
-     *      "updated_at": "2022-01-01T00:00:00.000000Z"
-     *  }
-     * }
+     * @bodyParam nama_komponen string optional Nama komponen biaya
+     * @bodyParam tipe_komponen string optional Tipe komponen biaya
+     * @bodyParam jenis_nilai string optional Jenis nilai
+     * @bodyParam nilai numeric optional Nilai komponen biaya
+     * @bodyParam is_active boolean optional Status keaktifan
      */
-
     public function update(Request $request, $id)
     {
         $komponen = MasterKomponenBiaya::findOrFail($id);
@@ -167,15 +119,9 @@ class KomponenTarifController extends Controller
         ], 200);
     }
 
-    /***
-     * Delete master komponen tarif by id
-     * 
-     * @response 200 {
-     *  "success": true,
-     *  "message": "Komponen biaya berhasil dihapus"
-     * }
+    /**
+     * Delete master komponen tarif by ID
      */
-
     public function destroy($id)
     {
         $komponen = MasterKomponenBiaya::findOrFail($id);

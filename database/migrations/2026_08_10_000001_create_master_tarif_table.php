@@ -23,7 +23,7 @@ return new class extends Migration {
             $table->unsignedBigInteger('id_kota')->nullable()->comment('Null = tarif nasional/default');
 
             // --- Harga inti ---
-            $table->decimal('tarif_layanan', 12, 2)->comment('Tarif jasa medis / service fee sebelum komponen lain');
+            $table->decimal('tarif_pasien', 12, 2)->comment('Harga fixed dibayar pasien');
 
             // --- Transport (referensi cepat, dihitung final saat booking) ---
             $table->decimal('transport_base_fare', 10, 2)->default(0);
@@ -34,8 +34,8 @@ return new class extends Migration {
 
             // --- Bagi Hasil Nakes & Platform ---
             $table->unsignedTinyInteger('potongan_persen_nakes')->default(20)->comment('Persentase bagian nakes (e.g. 80%)');
-            $table->decimal('fee_nakes_nominal', 12, 2)->default(0)->comment('tarif_layanan * potongan_persen_nakes / 100');
-            $table->decimal('fee_platform_nominal', 12, 2)->default(0)->comment('tarif_layanan * (100 - potongan_persen_nakes) / 100');
+            $table->decimal('fee_nakes_nominal', 12, 2)->default(0)->comment('tarif_pasien * potongan_persen_nakes / 100');
+            $table->decimal('fee_platform_nominal', 12, 2)->default(0)->comment('tarif_pasien * (100 - potongan_persen_nakes) / 100');
 
             // --- Komponen biaya (hasil kalkulasi dari master_komponen_biaya) ---
             $table->decimal('persen_ppn', 5, 2)->default(0)->comment('% PPN saat blueprint dibuat');
@@ -44,7 +44,7 @@ return new class extends Migration {
             $table->decimal('total_asuransi', 10, 2)->default(0);
 
             // --- Ringkasan ---
-            $table->decimal('subtotal', 12, 2)->default(0)->comment('tarif_layanan + total_bhp + semua komponen');
+            $table->decimal('subtotal', 12, 2)->default(0)->comment('tarif_pasien + total_bhp + semua komponen');
             $table->decimal('total_tarif_final', 12, 2)->default(0)->comment('Belum termasuk transport (dihitung dinamis saat booking)');
 
             // --- Metadata sync ---

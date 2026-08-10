@@ -141,7 +141,7 @@ class BookingController extends Controller
         }
 
         // SL = Tarif Layanan / Jasa (dari kolom harga di master_layanan atau dari masterTarif blueprint)
-        $tarifLayananJasaMedis = $masterTarif ? (float) $masterTarif->tarif_layanan : (float) $layanan->harga;
+        $tarifLayananJasaMedis = $masterTarif ? (float) $masterTarif->tarif_pasien : (float) $layanan->harga;
 
         // SB = Tarif BHP — ambil dari blueprint atau dihitung dari default layanan
         $tarifBahanHabisPakai = 0.0;
