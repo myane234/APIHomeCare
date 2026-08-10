@@ -36,10 +36,9 @@ return new class extends Migration {
             $table->unsignedTinyInteger('potongan_persen_nakes')->default(20);
             $table->decimal('fee_nakes_nominal', 12, 2)->default(0)->comment('tarif_pasien x potongan_persen_nakes / 100');
 
-            // --- Komponen biaya (hasil kalkulasi dari master_komponen_biaya) ---
-            $table->decimal('total_ppn', 10, 2)->default(0);
-            $table->decimal('total_biaya_admin', 10, 2)->default(0);
-            $table->decimal('total_asuransi', 10, 2)->default(0);
+            // --- Komponen biaya dinamis ---
+            $table->decimal('total_komponen_biaya', 10, 2)->default(0)->comment('Gabungan biaya seperti ppn, admin, asuransi, dll');
+            $table->json('detail_komponen_biaya')->nullable()->comment('Simpan snapshot arr [id, nama, nilai]');
 
             // --- Ringkasan ---
             $table->decimal('subtotal', 12, 2)->default(0)->comment('tarif_pasien + total_bhp + semua komponen');

@@ -19,7 +19,7 @@ use App\Http\Controllers\KategoriLayananController;
 use App\Http\Controllers\KategoriArtikelController;
 
 Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
-    
+
     // Auth Admin & Super Admin
     Route::post('/admin/logout', [AdminAuthController::class, 'logout']);
     Route::post('/super-admin/logout', [SuperAdminAuthController::class, 'logout']);
@@ -58,12 +58,12 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
     Route::prefix('admin/nakes')->group(function () {
         Route::get('/requests', [AdminNakesController::class, 'index']);
         Route::get('/requests/{id}', [AdminNakesController::class, 'show']);
-        
+
         // Step Verification Routes
         Route::post('/requests/{id}/pelatihan', [AdminNakesController::class, 'setPelatihan']); // Fixed: setPelatihan
         Route::post('/requests/{id}/approve', [AdminNakesController::class, 'approve']);
         Route::post('/requests/{id}/reject', [AdminNakesController::class, 'reject']);
-        
+
         Route::get('/', [AdminNakesController::class, 'listActiveNakes']);
     });
 

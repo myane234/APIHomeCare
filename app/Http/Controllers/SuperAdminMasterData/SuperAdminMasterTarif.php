@@ -62,32 +62,38 @@ class SuperAdminMasterTarif extends Controller
                 $totalBhp += ($bhp->harga_jual * $bhp->pivot->qty_default);
             }
 
-            // 3. Kalkulasi Fee Nakes
-            $feeNakesNominal = $request->tarif_pasien * ($request->potongan_persen_nakes / 100);
+            // 3. Kalkulasi Fee Nakes (Net = Tarif Pasien - Total BHP)
+            // Menghindari hitungan kotor, Nakes mendapat potongan dari tarif bersih setelah dipotong modal BHP
+            $baseTarifNakes = max(0, $request->tarif_pasien - $totalBhp);
+            $feeNakesNominal = $baseTarifNakes * ($request->potongan_persen_nakes / 100);
 
             // 4. Kalkulasi Komponen Biaya (PPN, Admin, Asuransi)
-            $komponen = MasterKomponenBiaya::where('is_active', true)->get();
+            // Secara dinamis menerima array id komponen dari request, atau terapkan semua yang aktif jika tidak dispesifikkan
+            if ($request->has('komponen_biayas') && is_array($request->komponen_biayas)) {
+                $komponen = MasterKomponenBiaya::whereIn('id_komponen', $request->komponen_biayas)->get();
+            } else {
+                $komponen = MasterKomponenBiaya::where('is_active', true)->get();
+            }
 
-            $totalPpn = 0;
-            $totalAdmin = 0;
-            $totalAsuransi = 0;
+            $totalKomponenBiaya = 0;
+            $detailKomponenBiaya = [];
 
             foreach ($komponen as $komp) {
                 $nilaiPotongan = $komp->jenis_nilai === 'persen'
                     ? ($request->tarif_pasien * ($komp->nilai / 100))
                     : $komp->nilai;
-
-                if ($komp->tipe_komponen === 'pajak') {
-                    $totalPpn += $nilaiPotongan;
-                } elseif ($komp->tipe_komponen === 'admin_aplikasi') {
-                    $totalAdmin += $nilaiPotongan;
-                } elseif ($komp->tipe_komponen === 'asuransi') {
-                    $totalAsuransi += $nilaiPotongan;
-                }
+                
+                $totalKomponenBiaya += $nilaiPotongan;
+                $detailKomponenBiaya[] = [
+                    'id_komponen' => $komp->id_komponen,
+                    'nama_komponen' => $komp->nama_komponen,
+                    'tipe_komponen' => $komp->tipe_komponen,
+                    'nilai_potongan' => $nilaiPotongan,
+                ];
             }
 
             // 5. Total dan Subtotal
-            $subtotal = $request->tarif_pasien + $totalBhp + $totalPpn + $totalAdmin + $totalAsuransi;
+            $subtotal = $request->tarif_pasien + $totalBhp + $totalKomponenBiaya;
             $totalTarifFinal = $subtotal; // Tidak termasuk transport
 
             $masterTarif = MasterTarif::create([
@@ -103,9 +109,8 @@ class SuperAdminMasterTarif extends Controller
                 'potongan_persen_nakes' => $request->potongan_persen_nakes,
                 'fee_nakes_nominal' => $feeNakesNominal,
 
-                'total_ppn' => $totalPpn,
-                'total_biaya_admin' => $totalAdmin,
-                'total_asuransi' => $totalAsuransi,
+                'total_komponen_biaya' => $totalKomponenBiaya,
+                'detail_komponen_biaya' => $detailKomponenBiaya,
 
                 'subtotal' => $subtotal,
                 'total_tarif_final' => $totalTarifFinal,
@@ -192,27 +197,31 @@ class SuperAdminMasterTarif extends Controller
                 $totalBhp += ($bhp->harga_jual * $bhp->pivot->qty_default);
             }
 
-            // Re-kalkulasi Fee Nakes
-            $feeNakesNominal = $masterTarif->tarif_pasien * ($masterTarif->potongan_persen_nakes / 100);
+            // Re-kalkulasi Fee Nakes (Dari Net)
+            $baseTarifNakes = max(0, $masterTarif->tarif_pasien - $totalBhp);
+            $feeNakesNominal = $baseTarifNakes * ($masterTarif->potongan_persen_nakes / 100);
 
             // Re-kalkulasi Komponen Biaya
-            $komponen = MasterKomponenBiaya::where('is_active', true)->get();
-            $totalPpn = 0;
-            $totalAdmin = 0;
-            $totalAsuransi = 0;
+            if ($request->has('komponen_biayas') && is_array($request->komponen_biayas)) {
+                $komponen = MasterKomponenBiaya::whereIn('id_komponen', $request->komponen_biayas)->get();
+            } else {
+                $komponen = MasterKomponenBiaya::where('is_active', true)->get();
+            }
+            $totalKomponenBiaya = 0;
+            $detailKomponenBiaya = [];
 
             foreach ($komponen as $komp) {
                 $nilaiPotongan = $komp->jenis_nilai === 'persen'
                     ? ($masterTarif->tarif_pasien * ($komp->nilai / 100))
                     : $komp->nilai;
 
-                if ($komp->tipe_komponen === 'pajak') {
-                    $totalPpn += $nilaiPotongan;
-                } elseif ($komp->tipe_komponen === 'admin_aplikasi') {
-                    $totalAdmin += $nilaiPotongan;
-                } elseif ($komp->tipe_komponen === 'asuransi') {
-                    $totalAsuransi += $nilaiPotongan;
-                }
+                $totalKomponenBiaya += $nilaiPotongan;
+                $detailKomponenBiaya[] = [
+                    'id_komponen' => $komp->id_komponen,
+                    'nama_komponen' => $komp->nama_komponen,
+                    'tipe_komponen' => $komp->tipe_komponen,
+                    'nilai_potongan' => $nilaiPotongan,
+                ];
             }
 
             // Set final kalkulasi
@@ -220,11 +229,10 @@ class SuperAdminMasterTarif extends Controller
             $masterTarif->transport_per_km = $transportData['per_km'];
             $masterTarif->total_bhp = $totalBhp;
             $masterTarif->fee_nakes_nominal = $feeNakesNominal;
-            $masterTarif->total_ppn = $totalPpn;
-            $masterTarif->total_biaya_admin = $totalAdmin;
-            $masterTarif->total_asuransi = $totalAsuransi;
+            $masterTarif->total_komponen_biaya = $totalKomponenBiaya;
+            $masterTarif->detail_komponen_biaya = $detailKomponenBiaya;
 
-            $masterTarif->subtotal = $masterTarif->tarif_pasien + $totalBhp + $totalPpn + $totalAdmin + $totalAsuransi;
+            $masterTarif->subtotal = $masterTarif->tarif_pasien + $totalBhp + $totalKomponenBiaya;
             $masterTarif->total_tarif_final = $masterTarif->subtotal;
             $masterTarif->synced_at = Carbon::now();
 
