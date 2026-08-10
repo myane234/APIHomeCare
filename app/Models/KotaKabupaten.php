@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class KotaKabupaten extends Model
 {
-    protected $table = 'Master_Kota_Kabupaten';
+    protected $table = 'master_kota_kabupaten';
     protected $primaryKey = 'id_kota';
 
     protected $fillable = [

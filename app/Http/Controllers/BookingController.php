@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Booking;
-use App\Models\Layanan;
+use App\Models\MasterLayanan;
 use App\Models\TenagaMedis;
 use App\Models\Transaksi;
 use Illuminate\Http\Request;
@@ -99,7 +99,7 @@ class BookingController extends Controller
 
         // Pengaman: Ambil nilai tunggal jika dikirim sebagai array oleh frontend
         $idLayanan = is_array($validate['id_layanan']) ? ($validate['id_layanan'][0] ?? null) : $validate['id_layanan'];
-        $layanan = Layanan::with('masterTarif.bhpItems')->findOrFail($idLayanan);
+        $layanan = MasterLayanan::with(['masterTarif', 'bhpItems'])->findOrFail($idLayanan);
         
         $tenagaMedisId = $validate['id_tenaga_medis'] ?? null;
         if (is_array($tenagaMedisId)) {
@@ -120,63 +120,50 @@ class BookingController extends Controller
 
         $tenagaMedis = TenagaMedis::findOrFail($tenagaMedisId);
 
-        // 1. Hitung Jarak (Haversine)
+        // 1. Jarak tidak bisa dihitung dari tenaga_medis (tidak ada kolom lat/long)
+        //    Gunakan jarak 0 sebagai default; dapat diperluas jika kolom ditambahkan.
         $distance = 0;
-        if ($tenagaMedis->latitude && $tenagaMedis->longitude) {
-            $lat1 = (float) $tenagaMedis->latitude;
-            $lon1 = (float) $tenagaMedis->longitude;
-            $lat2 = (float) $validate['latitude_kunjungan'];
-            $lon2 = (float) $validate['longitude_kunjungan'];
 
-            $earthRadius = 6371; // km
-            $dLat = deg2rad($lat2 - $lat1);
-            $dLon = deg2rad($lon2 - $lon1);
-            $a = sin($dLat / 2) * sin($dLat / 2) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) * sin($dLon / 2);
-            $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
-            $distance = $earthRadius * $c; // in km
-        }
-
-        // 2. Load Template Master Tarif
+        // 2. Load Template Master Tarif dari relasi MasterLayanan
         $masterTarif = $layanan->masterTarif;
-        
-        // SL = Tarif Layanan
+
+        // SL = Tarif Layanan / Jasa (dari kolom harga di master_layanan)
         $sl = (float) $layanan->harga;
-        
-        // SB = Tarif BHP
-        $sb = 0;
-        $hppBhp = 0;
-        if ($masterTarif && $masterTarif->bhpItems) {
-            foreach ($masterTarif->bhpItems as $bhpItem) {
-                $itemCost = (float) $bhpItem->harga_satuan * (int) ($bhpItem->pivot->jumlah_pakai ?? 1);
-                $sb += $itemCost;
-                $hppBhp += $itemCost;
-            }
+
+        // SB = Tarif BHP — ambil dari pivot mapping_layanan_bhp
+        $sb      = 0;
+        $hppBhp  = 0;
+        foreach ($layanan->bhpItems as $bhpItem) {
+            $qty      = (int) ($bhpItem->pivot->qty_default ?? 1);
+            $hargaBhp = (float) $bhpItem->harga_jual;
+            $hppBhp   += (float) $bhpItem->harga_modal * $qty;
+            $sb       += $hargaBhp * $qty;
         }
-        
-        // ST = Tarif Transport
+
+        // ST = Tarif Transport (dari template master_tarif)
         $tarifTransportPerKm = $masterTarif ? (float) $masterTarif->tarif_transport_per_km : 0.0;
         $st = 0.0;
         if (!$layanan->include_transport && $distance > 0) {
             $st = $distance * $tarifTransportPerKm;
-        }   
-        
-        // BA = Biaya Admin
+        }
+
+        // BA = Biaya Administrasi (snapshot dari master_tarif)
         $ba = $masterTarif ? (float) $masterTarif->biaya_admin : 0.0;
-        
-        // PPN
+
+        // PPN — dihitung dari (SL + SB + ST)
         $persenPpn = $masterTarif ? (float) $masterTarif->persentase_ppn : 0.0;
-        $ppn = ($sl + $sb + $st) * ($persenPpn / 100);
-        
-        // TOTAL Pasien Bayar (Midtrans)
+        $ppn       = ($sl + $sb + $st) * ($persenPpn / 100);
+
+        // TOTAL yang dibayar pasien
         $total = $sl + $sb + $st + $ba + $ppn;
-        
-        // Bagi Hasil
+
+        // Bagi Hasil — snapshot dari master_tarif
         $persenFeeNakesRaw = $masterTarif ? (float) $masterTarif->fee_nakes_persen : 0.0;
-        $persenFeeNakes = $persenFeeNakesRaw / 100;
-        $hakNakes = ($sl * $persenFeeNakes) + $st;
-        
+        $persenFeeNakes    = $persenFeeNakesRaw / 100;
+        $hakNakes          = ($sl * $persenFeeNakes) + $st;
+
         $feeMidtrans = (float) env('FEE_MIDTRANS', 4000.0);
-        $profitHc = ($sl * (1 - $persenFeeNakes)) + $sb + $ba - $feeMidtrans - $hppBhp;
+        $profitHc    = ($sl * (1 - $persenFeeNakes)) + $sb + $ba - $feeMidtrans - $hppBhp;
 
         $idPromo = $validate['id_promo'] ?? null;
         if (is_array($idPromo)) {

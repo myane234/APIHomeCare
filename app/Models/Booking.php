@@ -33,7 +33,7 @@ class Booking extends Model
 
     public function layanan()
     {
-        return $this->belongsTo(Layanan::class, 'id_layanan', 'id_layanan');
+        return $this->belongsTo(MasterLayanan::class, 'id_layanan', 'id_layanan');
     }
 
     public function tenagaMedis()
