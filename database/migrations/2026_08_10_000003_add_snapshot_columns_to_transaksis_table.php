@@ -4,8 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     /**
      * Tambahkan kolom-kolom snapshot ke tabel transaksis.
      *
@@ -53,10 +52,17 @@ return new class extends Migration
     {
         Schema::table('transaksis', function (Blueprint $table) {
             $table->dropColumn([
-                'sl', 'sb', 'st', 'ba', 'ppn',
-                'persen_ppn', 'persen_fee_nakes',
-                'fee_midtrans', 'hpp_bhp',
-                'hak_nakes', 'profit_hc',
+                'sl',
+                'sb',
+                'st',
+                'ba',
+                'ppn',
+                'persen_ppn',
+                'persen_fee_nakes',
+                'fee_midtrans',
+                'hpp_bhp',
+                'hak_nakes',
+                'profit_hc',
             ]);
         });
     }

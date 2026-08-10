@@ -78,9 +78,8 @@ return new class extends Migration {
                 ->on('master_kota_kabupaten')
                 ->onUpdate('cascade')
                 ->onDelete('cascade');
-            $table->timestamps();
 
-            $table->foreign('id_kota')->references('id_kota')->on('master_kota_kabupaten')->onDelete('cascade');
+            $table->timestamps();
         });
 
         // 4. TABEL MASTER BHP
@@ -148,23 +147,23 @@ return new class extends Migration {
         });
 
         // 9. TABEL MASTER TARIF (BUNDLING / CETAKAN UTAMA)
-        Schema::create('master_tarif', function (Blueprint $table) {
-            $table->id('id_master_tarif');
-            $table->string('nama_tarif')->comment('Contoh: Reguler, VIP, Khusus');
-            $table->unsignedBigInteger('id_tarif_layanan');
-            $table->unsignedBigInteger('id_tarif_transport')->nullable();
+        // Schema::create('master_tarif', function (Blueprint $table) {
+        //     $table->id('id_master_tarif');
+        //     $table->string('nama_tarif')->comment('Contoh: Reguler, VIP, Khusus');
+        //     $table->unsignedBigInteger('id_tarif_layanan');
+        //     $table->unsignedBigInteger('id_tarif_transport')->nullable();
 
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
+        //     $table->boolean('is_active')->default(true);
+        //     $table->timestamps();
 
-            $table->foreign('id_tarif_layanan')->references('id_tarif')->on('master_tarif_layanan')->onDelete('cascade');
-            $table->foreign('id_tarif_transport')->references('id_transport')->on('master_tarif_transport')->onDelete('cascade');
-        });
+        //     $table->foreign('id_tarif_layanan')->references('id_tarif')->on('master_tarif_layanan')->onDelete('cascade');
+        //     $table->foreign('id_tarif_transport')->references('id_transport')->on('master_tarif_transport')->onDelete('cascade');
+        // });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('master_tarif');
+        // Schema::dropIfExists('master_tarif');
         Schema::dropIfExists('master_komponen_biaya');
         Schema::dropIfExists('master_metode_pembayaran');
         Schema::dropIfExists('master_kategori_pembayaran');
