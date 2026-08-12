@@ -6,14 +6,21 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    /**
+     * Run the migrations.
+     */
     public function up(): void
     {
         Schema::create('roles', function (Blueprint $table) {
-            $table->string('nama_role')->primary(); // Nama role langsung jadi primary key
+            $table->bigIncrements('id_role');
+            $table->string('nama_role');
             $table->timestamps();
         });
     }
 
+    /**
+     * Reverse the migrations.
+     */
     public function down(): void
     {
         Schema::dropIfExists('roles');
