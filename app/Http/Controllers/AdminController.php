@@ -62,7 +62,7 @@ class AdminController extends Controller
 
                 $roleName = strtolower($validated['tier_admin']);
                 $role = Role::firstOrCreate(['nama_role' => $roleName]);
-                $user->roles()->sync([$role->id_role]);
+                $user->roles()->sync([$role->nama_role]);
 
                 return $admin;
             });
@@ -112,7 +112,7 @@ class AdminController extends Controller
             if ($user) {
                 $roleName = strtolower($validated['tier_admin']);
                 $role = Role::firstOrCreate(['nama_role' => $roleName]);
-                $user->roles()->sync([$role->id_role]);
+                $user->roles()->sync([$role->nama_role]);
             }
         }
 
