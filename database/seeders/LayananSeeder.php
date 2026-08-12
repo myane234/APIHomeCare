@@ -201,10 +201,8 @@ class LayananSeeder extends Seeder
                     'deskripsi_layanan' => $service['deskripsi_layanan'],
                     'id_kategori_layanan' => $kategori->id_kategori_layanan,
                     'foto_layanan' => $fotoPath,
-                    'harga' => $service['harga'],
                     'tipe_layanan' => $service['tipe_layanan'],
                     'durasi_menit' => $service['durasi_menit'],
-                    'include_transport' => $service['include_transport'],
                 ]
             );
         }

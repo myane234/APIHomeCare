@@ -39,6 +39,6 @@ class Promo extends Model
 
     public function layanans()
     {
-        return $this->belongsToMany(Layanan::class, 'promo_layanan', 'id_promo', 'id_layanan');
+        return $this->belongsToMany(MasterLayanan::class, 'promo_layanan', 'id_promo', 'id_layanan');
     }
 }

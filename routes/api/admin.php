@@ -17,9 +17,15 @@ use App\Http\Controllers\WilayahLayananController;
 use App\Http\Controllers\KotaKabupatenController;
 use App\Http\Controllers\KategoriLayananController;
 use App\Http\Controllers\KategoriArtikelController;
+use App\Http\Controllers\KategoriPembayaranController;
+use App\Http\Controllers\MetodePembayaranController;
+use App\Http\Controllers\TarifTransportController;
+use App\Http\Controllers\KomponenTarifController;
+use App\Http\Controllers\BhpController;
+use App\Http\Controllers\MappingLayananBhpController;
 
 Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
-    
+
     // Auth Admin & Super Admin
     Route::post('/admin/logout', [AdminAuthController::class, 'logout']);
     Route::post('/super-admin/logout', [SuperAdminAuthController::class, 'logout']);
@@ -53,17 +59,29 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
     Route::put('/artikel/kategori/{id}', [KategoriArtikelController::class, 'update']);
     Route::delete('/artikel/kategori/{id}', [KategoriArtikelController::class, 'destroy']);
 
+    // Kategori Pembayaran CRUD
+    Route::post('/pembayaran/kategori', [KategoriPembayaranController::class, 'store']);
+    Route::get('/pembayaran/kategori/{id}', [KategoriPembayaranController::class, 'show']);
+    Route::put('/pembayaran/kategori/{id}', [KategoriPembayaranController::class, 'update']);
+    Route::delete('/pembayaran/kategori/{id}', [KategoriPembayaranController::class, 'destroy']);
+
+    // Metode Pembayaran CRUD
+    Route::post('/pembayaran/metode', [MetodePembayaranController::class, 'store']);
+    Route::get('/pembayaran/metode/{id}', [MetodePembayaranController::class, 'show']);
+    Route::post('/pembayaran/metode/{id}', [MetodePembayaranController::class, 'update']);
+    Route::delete('/pembayaran/metode/{id}', [MetodePembayaranController::class, 'destroy']);
+
     //Super Admin
     // Management Nakes - Admin
     Route::prefix('admin/nakes')->group(function () {
         Route::get('/requests', [AdminNakesController::class, 'index']);
         Route::get('/requests/{id}', [AdminNakesController::class, 'show']);
-        
+
         // Step Verification Routes
         Route::post('/requests/{id}/pelatihan', [AdminNakesController::class, 'setPelatihan']); // Fixed: setPelatihan
         Route::post('/requests/{id}/approve', [AdminNakesController::class, 'approve']);
         Route::post('/requests/{id}/reject', [AdminNakesController::class, 'reject']);
-        
+
         Route::get('/', [AdminNakesController::class, 'listActiveNakes']);
     });
 
@@ -93,6 +111,20 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
     Route::apiResource('/bhp-items', SuperAdminDataBarang::class);
     Route::apiResource('/master-tarif', SuperAdminMasterTarif::class);
 
+    // Tarif Transport CRUD
+    Route::apiResource('/tarif-transport', TarifTransportController::class);
+
+    // Komponen Tarif / Biaya CRUD
+    Route::apiResource('/komponen-biaya', KomponenTarifController::class);
+
+    // BHP Item CRUD
+    Route::apiResource('/bhp', BhpController::class);
+
+    // Mapping Layanan BHP
+    Route::get('/mapping-layanan-bhp', [MappingLayananBhpController::class, 'index']);
+    Route::get('/mapping-layanan-bhp/{id_layanan}', [MappingLayananBhpController::class, 'show']);
+    Route::post('/mapping-layanan-bhp/{id_layanan}/sync', [MappingLayananBhpController::class, 'sync']);
+
     // Master Wilayah - Provinsi
     Route::prefix('wilayah-layanan')->group(function () {
         Route::post('/', [WilayahLayananController::class, 'store']);
@@ -107,5 +139,4 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
         Route::put('/{id}', [KotaKabupatenController::class, 'update']);
         Route::delete('/{id}', [KotaKabupatenController::class, 'destroy']);
     });
-
 });

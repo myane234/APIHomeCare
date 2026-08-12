@@ -9,6 +9,8 @@ use App\Http\Controllers\PasienController;
 use App\Http\Controllers\KategoriLayananController;
 use App\Http\Controllers\WilayahLayananController;
 use App\Http\Controllers\KotaKabupatenController;
+use App\Http\Controllers\KategoriPembayaranController;
+use App\Http\Controllers\MetodePembayaranController;
 
 Route::get('/layanan', [LayananController::class, 'index']);
 Route::get('/layanan/kategori', [KategoriLayananController::class, 'index']);
@@ -33,4 +35,9 @@ Route::get('/wilayah-layanan/{wilayahLayanan}', [WilayahLayananController::class
 Route::get('/kota-kabupaten', [KotaKabupatenController::class, 'index']);
 Route::get('/kota-kabupaten/provinsi/{id_provinsi}', [KotaKabupatenController::class, 'getByProvinsi']);
 Route::get('/kota-kabupaten/{id}', [KotaKabupatenController::class, 'show']);
+
+// Pembayaran
+Route::get('/pembayaran/kategori', [KategoriPembayaranController::class, 'index']);
+Route::get('/pembayaran/metode', [MetodePembayaranController::class, 'index']);
+
 
