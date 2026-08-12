@@ -40,3 +40,4 @@ Route::get('/kota-kabupaten/{id}', [KotaKabupatenController::class, 'show']);
 Route::get('/pembayaran/kategori', [KategoriPembayaranController::class, 'index']);
 Route::get('/pembayaran/metode', [MetodePembayaranController::class, 'index']);
 
+

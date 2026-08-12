@@ -37,9 +37,7 @@ class LayananFactory extends Factory
             // Fotonya bakal beda-beda tiap data dibuat, ngambil acak dari folder!
             'foto_layanan' => $storedPath, 
             
-            'include_transport' => $this->faker->boolean(),
             'id_kategori_layanan' => KategoriLayanan::inRandomOrder()->first()?->id_kategori_layanan ?? 1,
-            'harga' => $this->faker->numberBetween(50000, 500000),
             'tipe_layanan' => $tipeLayanan,
             'durasi_menit' => $tipeLayanan === 'durasi' ? $this->faker->randomElement([30, 60, 90, 120]) : null,
         ];

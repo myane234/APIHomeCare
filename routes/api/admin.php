@@ -144,5 +144,4 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
         Route::put('/{id}', [KotaKabupatenController::class, 'update']);
         Route::delete('/{id}', [KotaKabupatenController::class, 'destroy']);
     });
-
 });

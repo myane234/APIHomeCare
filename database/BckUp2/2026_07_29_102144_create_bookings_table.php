@@ -24,7 +24,6 @@ return new class extends Migration {
             $table->decimal('latitude_kunjungan', 10, 7);
             $table->decimal('longitude_kunjungan', 11, 7);
             $table->enum('status_booking', ['Pending', 'DiPerjalanan', 'Tindakan', 'Selesai', 'Dibatalkan']);
-
             // Kolom Breakdown Transaksi 
             $table->unsignedBigInteger('id_metode_pembayaran')->nullable()->index('bookings_id_metode_pembayaran_foreign');
             $table->decimal('tarif_dasar', 12, 2)->default(0)->comment('Berdasarkan master_tarif_layanan');
