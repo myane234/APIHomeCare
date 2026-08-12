@@ -6,7 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class Role extends Model
 {
-    protected $primaryKey = 'id_role';
+    protected $primaryKey = 'nama_role';
+    public $incrementing = false;
+    protected $keyType = 'string';
 
     protected $fillable = [
         'nama_role'
@@ -16,7 +18,9 @@ class Role extends Model
         return $this->belongsToMany(
             Users::class,
             'user_roles',
-            'id_role',
+            'nama_role',
+            'id_user',
+            'nama_role',
             'id_user'
         );
     }

@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        // 1. TABEL MASTER LAYANAN
+        // 1. TABEL MASTER LAYANAN (Hanya Katalog, Tanpa Harga!)
         Schema::create('master_layanan', function (Blueprint $table) {
             $table->id('id_layanan');
             $table->unsignedBigInteger('id_kategori_layanan');
@@ -24,31 +24,12 @@ return new class extends Migration {
                 ->onDelete('cascade');
         });
 
-
-        // 2. TABEL MASTER TARIF LAYANAN (Core Jasa - Blueprint Pembagian)
-        Schema::create('master_tarif_layanan', function (Blueprint $table) {
-            $table->id('id_tarif');
-            $table->unsignedBigInteger('id_layanan');
-            $table->unsignedBigInteger('id_kota')->nullable()->comment('Null = Nasional');
-            $table->decimal('tarif_dasar', 12, 2)->comment('Harga dasar layanan');
-            $table->integer('persentase_nakes')->default(80)->comment('Porsi pendapatan nakes (%)');
-            $table->integer('persentase_homecare')->default(20)->comment('Porsi margin homecare (%)');
-            $table->boolean('is_active')->default(true);
+        // 2. TABEL MASTER KATEGORI TARIF (BARU! Untuk kondisi: Cito, Malam, VIP)
+        Schema::create('master_kategori_tarif', function (Blueprint $table) {
+            $table->id('id_kategori_tarif');
+            $table->string('nama_kategori')->comment('Ex: Reguler, Malam Hari, VIP');
+            $table->boolean('is_default')->default(false)->comment('1 = Tarif Standar Utama');
             $table->timestamps();
-
-            //     $table->foreign('id_layanan')
-            //         ->references('id_layanan')
-            //         ->on('master_layanan')
-            //         ->onDelete('cascade');
-
-            //     $table->foreign('id_kota')
-            //         ->references('id_kota')
-            //         ->on('master_kota_kabupaten')
-            //         ->onUpdate('cascade')
-            //         ->onDelete('cascade');
-            // });
-            $table->foreign('id_layanan')->references('id_layanan')->on('master_layanan')->onDelete('cascade');
-            $table->foreign('id_kota')->references('id_kota')->on('master_kota_kabupaten')->onDelete('cascade');
         });
 
         // 3. TABEL MASTER TARIF TRANSPORT
@@ -67,7 +48,6 @@ return new class extends Migration {
             $table->id('id_bhp');
             $table->string('nama_bhp');
             $table->enum('tipe_bhp', ['satuan', 'paket']);
-
             $table->decimal('harga_modal', 10, 2);
             $table->decimal('harga_jual', 10, 2);
             $table->boolean('is_active')->default(true);
@@ -79,7 +59,6 @@ return new class extends Migration {
             $table->id();
             $table->unsignedBigInteger('id_layanan');
             $table->unsignedBigInteger('id_bhp');
-
             $table->integer('qty_default')->default(1);
             $table->boolean('is_mandatory')->default(true);
             $table->timestamps();
@@ -88,59 +67,49 @@ return new class extends Migration {
             $table->foreign('id_bhp')->references('id_bhp')->on('master_bhp')->onDelete('cascade');
         });
 
-        // 6. TABEL MASTER KATEGORI PEMBAYARAN (Baru)
+        // 6. TABEL MASTER KATEGORI PEMBAYARAN
         Schema::create('master_kategori_pembayaran', function (Blueprint $table) {
             $table->id('id_kategori_pembayaran');
-            $table->string('nama_kategori')->comment('Ex: Bank Transfer, E-Wallet, QRIS, Paylater, Cash');
+            $table->string('nama_kategori')->comment('Ex: Bank Transfer, E-Wallet, QRIS');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
 
-        // 7. TABEL MASTER METODE PEMBAYARAN (Payment Gateway)
+        // 7. TABEL MASTER METODE PEMBAYARAN
         Schema::create('master_metode_pembayaran', function (Blueprint $table) {
             $table->id('id_metode');
             $table->unsignedBigInteger('id_kategori_pembayaran');
-
-            $table->string('nama_metode')->comment('Ex: BCA VA, ShopeePay, Mandiri VA');
+            $table->string('nama_metode');
             $table->enum('tipe_potongan', ['nominal', 'persen']);
             $table->decimal('nilai_potongan', 10, 2);
-            $table->string('logo')->nullable()->comment('Logo / foto metode pembayaran');
-
+            $table->string('logo')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
 
-            $table->foreign('id_kategori_pembayaran')
-                ->references('id_kategori_pembayaran')
-                ->on('master_kategori_pembayaran')
-                ->onDelete('cascade');
+            $table->foreign('id_kategori_pembayaran')->references('id_kategori_pembayaran')->on('master_kategori_pembayaran')->onDelete('cascade');
         });
 
-        // 8. TABEL MASTER KOMPONEN BIAYA (PPN, Biaya Aplikasi, Asuransi)
+        // 8. TABEL MASTER KOMPONEN BIAYA
         Schema::create('master_komponen_biaya', function (Blueprint $table) {
             $table->id('id_komponen');
-            $table->string('nama_komponen')->comment('Ex: PPN 11%, Biaya Layanan Aplikasi, Asuransi Nakes');
+            $table->string('nama_komponen');
             $table->enum('tipe_komponen', ['pajak', 'admin_aplikasi', 'asuransi', 'lainnya']);
-
             $table->enum('jenis_nilai', ['nominal', 'persen']);
-            $table->decimal('nilai', 10, 2)->comment('Ex: 11 untuk PPN, 2000 untuk admin app');
+            $table->decimal('nilai', 10, 2);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
-
-        // 9. TABEL MASTER TARIF (BUNDLING / CETAKAN UTAMA)
-        // Note: master_tarif table is created in a separate migration (2026_08_10_000001_create_master_tarif_table.php)
     }
 
     public function down(): void
     {
-        // master_tarif dropped in its own migration
         Schema::dropIfExists('master_komponen_biaya');
         Schema::dropIfExists('master_metode_pembayaran');
         Schema::dropIfExists('master_kategori_pembayaran');
         Schema::dropIfExists('mapping_layanan_bhp');
         Schema::dropIfExists('master_bhp');
         Schema::dropIfExists('master_tarif_transport');
-        Schema::dropIfExists('master_tarif_layanan');
+        Schema::dropIfExists('master_kategori_tarif');
         Schema::dropIfExists('master_layanan');
     }
 };

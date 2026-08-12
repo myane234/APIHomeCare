@@ -32,8 +32,8 @@ class AdminSeeder extends Seeder
         );
 
         // Attach role admin ke user
-        if (!$user->roles->contains($adminRole->id_role)) {
-            $user->roles()->attach($adminRole->id_role);
+        if (!$user->roles->contains('nama_role', $adminRole->nama_role)) {
+            $user->roles()->attach($adminRole->nama_role);
         }
 
         // Buat record di tabel admins
