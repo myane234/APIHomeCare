@@ -93,11 +93,4 @@ class MasterLayanan extends Model
         )->withPivot(['qty_default', 'is_mandatory'])->withTimestamps();
     }
 
-    /**
-     * Tarif spesifik per kota (dari tabel master_tarif_layanan).
-     */
-    public function tarifLayanan()
-    {
-        return $this->hasMany(MasterTarifLayanan::class, 'id_layanan', 'id_layanan');
-    }
 }

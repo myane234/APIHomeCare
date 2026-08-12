@@ -13,10 +13,16 @@ return new class extends Migration
     {
         Schema::create('admins', function (Blueprint $table) {
             $table->bigIncrements('id_admin');
-            $table->unsignedBigInteger('id_user')->index('admins_id_user_foreign');
+            $table->unsignedBigInteger('id_user');
             $table->string('nama_lengkap');
-            $table->enum('tier_admin', ['Super Admin', 'Admin']);
+            $table->string('tier_admin');
             $table->timestamps();
+
+            $table->foreign('id_user', 'fk_admins_user_id')
+                  ->references('id_user')
+                  ->on('users')
+                  ->onUpdate('restrict')
+                  ->onDelete('cascade');
         });
     }
 

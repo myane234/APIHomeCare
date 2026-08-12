@@ -41,7 +41,9 @@ class Users extends Authenticatable implements MustVerifyEmail
             Role::class,
             'user_roles',
             'id_user',
-            'id_role'
+            'nama_role',
+            'id_user',
+            'nama_role'
         )->withTimestamps();
     }
 }

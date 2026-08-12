@@ -12,11 +12,17 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('id_user');
             $table->string('nama_role');
-            
-            // Foreign keys
-            $table->foreign('id_user')->references('id_user')->on('users')->cascadeOnDelete();
-            $table->foreign('nama_role')->references('nama_role')->on('roles')->cascadeOnDelete();
             $table->timestamps();
+            
+            $table->foreign('id_user', 'fk_user_roles_user')
+                  ->references('id_user')
+                  ->on('users')
+                  ->cascadeOnDelete();
+
+            $table->foreign('nama_role', 'fk_user_roles_role')
+                  ->references('nama_role')
+                  ->on('roles')
+                  ->cascadeOnDelete();
         });
     }
 
