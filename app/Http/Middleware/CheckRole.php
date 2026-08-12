@@ -25,7 +25,7 @@ class CheckRole
         }
 
 
-        $userRoles = $user->roles()->pluck('nama_role')->toArray();
+        $userRoles = $user->roles()->pluck('roles.nama_role')->toArray();
         $hasRole = false;
 
         foreach ($roles as $role) {

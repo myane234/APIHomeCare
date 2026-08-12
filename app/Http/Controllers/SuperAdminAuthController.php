@@ -30,7 +30,7 @@ class SuperAdminAuthController extends Controller
         }
 
         // Harus punya role admin
-        $roles = $user->roles()->pluck('nama_role')->toArray();
+        $roles = $user->roles()->pluck('roles.nama_role')->toArray();
         if (!in_array('admin', $roles)) {
             return response()->json([
                 'success' => false,
@@ -87,7 +87,7 @@ class SuperAdminAuthController extends Controller
                 'email'      => $user->email,
                 'nama'       => $admin?->nama_lengkap,
                 'tier_admin' => $admin?->tier_admin,
-                'roles'      => $user->roles()->pluck('nama_role'),
+                'roles'      => $user->roles()->pluck('roles.nama_role'),
             ],
         ]);
     }

@@ -33,7 +33,7 @@ class CoreAuthController extends Controller
         }
 
         // Ambil daftar role user
-        $userRoles = $user->roles()->pluck('nama_role')->toArray();
+        $userRoles = $user->roles()->pluck('roles.nama_role')->toArray();
 
         // Ambil data Pasien & Tenaga Medis terkait
         $pasien = Pasien::where('id_user', $user->id_user)->first();
@@ -233,7 +233,7 @@ public function changeUnverifiedEmail(Request $request)
             ], 403);
         }
 
-        $userRoles = $user->roles()->pluck('nama_role')->toArray();
+        $userRoles = $user->roles()->pluck('roles.nama_role')->toArray();
 
         if (!in_array('pasien', $userRoles) && !in_array('nakes', $userRoles)) {
             return response()->json([
