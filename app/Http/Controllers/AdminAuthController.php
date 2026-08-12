@@ -31,7 +31,7 @@ class AdminAuthController extends Controller
         }
 
         // Check if user has admin role
-        $roles = $user->roles()->pluck('nama_role')->toArray();
+        $roles = $user->roles()->pluck('roles.nama_role')->toArray();
         if (!in_array('admin', $roles)) {
             return response()->json([
                 'success' => false,

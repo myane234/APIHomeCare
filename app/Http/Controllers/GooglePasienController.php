@@ -68,7 +68,7 @@ class GooglePasienController extends Controller
       }
 
       $User->load('pasien');
-      $userRoles = $User->roles()->pluck('nama_role')->toArray();
+      $userRoles = $User->roles()->pluck('roles.nama_role')->toArray();
 
       $token = $User->createToken('auth-token')->plainTextToken;
       $pasien = $User->pasien;

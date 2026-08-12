@@ -36,8 +36,8 @@ class SuperAdminSeeder extends Seeder
         }
 
         // Attach role admin
-        if (!$user->roles->contains('id_role', $adminRole->id_role)) {
-            $user->roles()->attach($adminRole->id_role);
+        if (!$user->roles->contains('nama_role', $adminRole->nama_role)) {
+            $user->roles()->attach($adminRole->nama_role);
         }
 
         // Buat atau update record di tabel admins dengan tier Super Admin

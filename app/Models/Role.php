@@ -6,7 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class Role extends Model
 {
-    protected $primaryKey = 'id_role';
+    protected $primaryKey = 'nama_role';
+    public $incrementing = false;
+    protected $keyType = 'string';
 
     protected $fillable = [
         'nama_role'
