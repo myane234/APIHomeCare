@@ -93,13 +93,14 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
         Route::delete('/{id}', [SuperAdminNakesController::class, 'destroy']);
     });
 
-    // Admin & Bookings
-    Route::get('/admin', [AdminController::class, 'index']);
-    Route::post('/admin', [AdminController::class, 'store']);
-    Route::get('/admin/{id}', [AdminController::class, 'show']);
-    Route::put('/admin/{id}', [AdminController::class, 'update']);
-    Route::delete('/admin/{id}', [AdminController::class, 'destroy']);
-    Route::get('/admin/bookings', [BookingController::class, 'adminIndex']);
+    // Admin Account Management
+    Route::get('/manage-admin', [AdminController::class, 'index']);
+    Route::post('/manage-admin', [AdminController::class, 'store']);
+    Route::get('/manage-admin/tiers', [AdminController::class, 'getTiers']);
+    Route::get('/manage-admin/{id}', [AdminController::class, 'show']);
+    Route::put('/manage-admin/{id}', [AdminController::class, 'update']);
+    Route::delete('/manage-admin/{id}', [AdminController::class, 'destroy']);
+    Route::get('/manage-admin/bookings', [BookingController::class, 'adminIndex']);
 
     // Management Pasien
     Route::prefix('admin/pasien')->group(function () {

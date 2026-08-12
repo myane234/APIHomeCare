@@ -123,6 +123,26 @@ class AdminController extends Controller
         ], 200);
     }
 
+    public function getTiers()
+    {
+        try {
+            $roles = Role::whereNotIn(DB::raw('LOWER(nama_role)'), ['super admin', 'super_admin'])
+                ->pluck('nama_role');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Berhasil mengambil daftar tier',
+                'data' => $roles
+            ], 200);
+        } catch (Exception $e) {
+            Log::error($e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil daftar tier'
+            ], 500);
+        }
+    }
+
     public function destroy($id)
     {
 
