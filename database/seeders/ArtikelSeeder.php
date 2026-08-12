@@ -69,10 +69,15 @@ class ArtikelSeeder extends Seeder
                 $gambarPath = $destPath;
             }
 
+            // Get id_kategori_artikel
+            $idKategori = \Illuminate\Support\Facades\DB::table('kategori_artikels')
+                ->where('nama_kategori', $article['kategori_artikel'])
+                ->value('id_kategori_artikel');
+
             Artikel::updateOrCreate(
                 ['judul_artikel' => $article['judul_artikel']],
                 [
-                    'kategori_artikel' => $article['kategori_artikel'],
+                    'id_kategori_artikel' => $idKategori,
                     'isi_artikel' => $article['isi_artikel'],
                     'gambar_artikel' => $gambarPath,
                 ]

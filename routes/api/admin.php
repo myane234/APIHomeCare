@@ -23,8 +23,9 @@ use App\Http\Controllers\TarifTransportController;
 use App\Http\Controllers\KomponenTarifController;
 use App\Http\Controllers\BhpController;
 use App\Http\Controllers\MappingLayananBhpController;
-
-Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
+use App\Http\Controllers\KecamatanController;
+use App\Http\Controllers\KelurahanController;
+Route::middleware([])->group(function () {
 
     // Auth Admin & Super Admin
     Route::post('/admin/logout', [AdminAuthController::class, 'logout']);
@@ -144,5 +145,11 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
         Route::put('/{id}', [KotaKabupatenController::class, 'update']);
         Route::delete('/{id}', [KotaKabupatenController::class, 'destroy']);
     });
+
+    // Master Wilayah - Kecamatan
+    Route::apiResource('/kecamatan', KecamatanController::class);
+
+    // Master Wilayah - Kelurahan
+    Route::apiResource('/kelurahan', KelurahanController::class);
 
 });

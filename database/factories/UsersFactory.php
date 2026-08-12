@@ -37,8 +37,8 @@ class UsersFactory extends Factory
     public function configure(): static
     {
         return $this->afterCreating(function (Users $user) {
-            // Otomatis menempelkan role ID 2 (Pasien) ke user yang baru dibuat
-            $user->roles()->attach(2); 
+            // Otomatis menempelkan role 'pasien' ke user yang baru dibuat
+            $user->roles()->attach('pasien'); 
         });
     }
 }
