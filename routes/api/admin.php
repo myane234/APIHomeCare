@@ -120,6 +120,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
 
     // Komponen Tarif / Biaya CRUD
     Route::apiResource('/komponen-biaya', KomponenTarifController::class);
+    Route::get('/komponen-tarif/kategori', [KomponenTarifController::class, 'KategoriKomponenTarif']);
 
     // BHP Item CRUD
     Route::apiResource('/bhp', BhpController::class);

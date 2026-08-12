@@ -139,7 +139,7 @@ return new class extends Migration {
         Schema::create('master_komponen_biaya', function (Blueprint $table) {
             $table->id('id_komponen');
             $table->string('nama_komponen')->comment('Ex: PPN 11%, Biaya Layanan Aplikasi, Asuransi Nakes');
-            $table->enum('tipe_komponen', ['pajak', 'admin_aplikasi', 'asuransi', 'lainnya']);
+            $table->enum('tipe_komponen', ['pajak', 'admin_aplikasi', 'lainnya']);
 
             $table->enum('jenis_nilai', ['nominal', 'persen']);
             $table->decimal('nilai', 10, 2)->comment('Ex: 11 untuk PPN, 2000 untuk admin app');

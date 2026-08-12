@@ -44,9 +44,8 @@ class SuperAdminMasterTarif extends Controller
      *          "persen_ppn": 11.00,
      *          "total_ppn": 16500.00,
      *          "total_biaya_admin": 5000.00,
-     *          "total_asuransi": 2000.00,
-     *          "subtotal": 198500.00,
-     *          "total_tarif_final": 198500.00,
+     *          "subtotal": 196500.00,
+     *          "total_tarif_final": 196500.00,
      *          "is_active": true
      *      }
      *  ]
@@ -101,8 +100,10 @@ class SuperAdminMasterTarif extends Controller
 
             // 2. Kalkulasi Total BHP (Bahan Habis Pakai)
             $totalBiayaBahanHabisPakai = 0;
-            foreach ($layanan->bhpItems as $bhpItem) {
-                $totalBiayaBahanHabisPakai += ($bhpItem->harga_jual * $bhpItem->pivot->qty_default);
+            if ($layanan->bhpItems) {
+                foreach ($layanan->bhpItems as $bhpItem) {
+                    $totalBiayaBahanHabisPakai += ($bhpItem->harga_jual * $bhpItem->pivot->qty_default);
+                }
             }
 
             // 3. Kalkulasi Pembagian Jasa (Nakes vs Platform)
@@ -113,13 +114,12 @@ class SuperAdminMasterTarif extends Controller
             $nominalFeeNakesJasa = $nominalTarifLayananJasa * ($persentaseBagianNakes / 100);
             $nominalFeePlatformJasa = $nominalTarifLayananJasa * ($persentaseBagianPlatform / 100);
 
-            // 4. Kalkulasi Komponen Biaya Eksternal (PPN, Admin Aplikasi, Asuransi)
+            // 4. Kalkulasi Komponen Biaya Eksternal (PPN & Admin Aplikasi)
             $daftarKomponenBiayaAktif = MasterKomponenBiaya::where('is_active', true)->get();
 
             $nominalTotalPpnPajak = 0;
             $persentasePpnPajak = 0;
             $nominalTotalBiayaAdminAplikasi = 0;
-            $nominalTotalBiayaAsuransiNakes = 0;
 
             foreach ($daftarKomponenBiayaAktif as $komponenBiaya) {
                 $nilaiPotonganDihitung = $komponenBiaya->jenis_nilai === 'persen'
@@ -133,8 +133,6 @@ class SuperAdminMasterTarif extends Controller
                     }
                 } elseif ($komponenBiaya->tipe_komponen === 'admin_aplikasi') {
                     $nominalTotalBiayaAdminAplikasi += $nilaiPotonganDihitung;
-                } elseif ($komponenBiaya->tipe_komponen === 'asuransi') {
-                    $nominalTotalBiayaAsuransiNakes += $nilaiPotonganDihitung;
                 }
             }
 
@@ -142,8 +140,7 @@ class SuperAdminMasterTarif extends Controller
             $subtotalTarifPasien = $nominalTarifLayananJasa 
                 + $totalBiayaBahanHabisPakai 
                 + $nominalTotalPpnPajak 
-                + $nominalTotalBiayaAdminAplikasi 
-                + $nominalTotalBiayaAsuransiNakes;
+                + $nominalTotalBiayaAdminAplikasi;
 
             $totalTarifFinalPasien = $subtotalTarifPasien; // Eksklusi transport dinamis
 
@@ -164,7 +161,6 @@ class SuperAdminMasterTarif extends Controller
                 'persen_ppn' => $persentasePpnPajak,
                 'total_ppn' => $nominalTotalPpnPajak,
                 'total_biaya_admin' => $nominalTotalBiayaAdminAplikasi,
-                'total_asuransi' => $nominalTotalBiayaAsuransiNakes,
 
                 'subtotal' => $subtotalTarifPasien,
                 'total_tarif_final' => $totalTarifFinalPasien,
@@ -253,8 +249,10 @@ class SuperAdminMasterTarif extends Controller
 
             // Re-kalkulasi BHP
             $totalBiayaBahanHabisPakai = 0;
-            foreach ($layanan->bhpItems as $bhpItem) {
-                $totalBiayaBahanHabisPakai += ($bhpItem->harga_jual * $bhpItem->pivot->qty_default);
+            if ($layanan->bhpItems) {
+                foreach ($layanan->bhpItems as $bhpItem) {
+                    $totalBiayaBahanHabisPakai += ($bhpItem->harga_jual * $bhpItem->pivot->qty_default);
+                }
             }
 
             // Re-kalkulasi Pembagian Jasa
@@ -271,7 +269,6 @@ class SuperAdminMasterTarif extends Controller
             $nominalTotalPpnPajak = 0;
             $persentasePpnPajak = 0;
             $nominalTotalBiayaAdminAplikasi = 0;
-            $nominalTotalBiayaAsuransiNakes = 0;
 
             foreach ($daftarKomponenBiayaAktif as $komponenBiaya) {
                 $nilaiPotonganDihitung = $komponenBiaya->jenis_nilai === 'persen'
@@ -285,8 +282,6 @@ class SuperAdminMasterTarif extends Controller
                     }
                 } elseif ($komponenBiaya->tipe_komponen === 'admin_aplikasi') {
                     $nominalTotalBiayaAdminAplikasi += $nilaiPotonganDihitung;
-                } elseif ($komponenBiaya->tipe_komponen === 'asuransi') {
-                    $nominalTotalBiayaAsuransiNakes += $nilaiPotonganDihitung;
                 }
             }
 
@@ -300,13 +295,11 @@ class SuperAdminMasterTarif extends Controller
             $masterTarif->persen_ppn = $persentasePpnPajak;
             $masterTarif->total_ppn = $nominalTotalPpnPajak;
             $masterTarif->total_biaya_admin = $nominalTotalBiayaAdminAplikasi;
-            $masterTarif->total_asuransi = $nominalTotalBiayaAsuransiNakes;
 
             $masterTarif->subtotal = $nominalTarifLayananJasa 
                 + $totalBiayaBahanHabisPakai 
                 + $nominalTotalPpnPajak 
-                + $nominalTotalBiayaAdminAplikasi 
-                + $nominalTotalBiayaAsuransiNakes;
+                + $nominalTotalBiayaAdminAplikasi;
 
             $masterTarif->total_tarif_final = $masterTarif->subtotal;
             $masterTarif->synced_at = Carbon::now();
