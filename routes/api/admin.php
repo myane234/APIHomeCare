@@ -95,6 +95,9 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
 
     // Admin & Bookings
     Route::get('/admin', [AdminController::class, 'index']);
+    Route::post('/admin', [AdminController::class, 'store']);
+    Route::get('/admin/{id}', [AdminController::class, 'show']);
+    Route::put('/admin/{id}', [AdminController::class, 'update']);
     Route::delete('/admin/{id}', [AdminController::class, 'destroy']);
     Route::get('/admin/bookings', [BookingController::class, 'adminIndex']);
 
