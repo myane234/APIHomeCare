@@ -54,12 +54,6 @@ Route::middleware([])->group(function () {
     Route::put('/layanan/kategori/{id}', [KategoriLayananController::class, 'update']);
     Route::delete('/layanan/kategori/{id}', [KategoriLayananController::class, 'destroy']);
 
-    // Kategori Artikel CRUD
-    Route::post('/artikel/kategori', [KategoriArtikelController::class, 'store']);
-    Route::get('/artikel/kategori/{id}', [KategoriArtikelController::class, 'show']);
-    Route::put('/artikel/kategori/{id}', [KategoriArtikelController::class, 'update']);
-    Route::delete('/artikel/kategori/{id}', [KategoriArtikelController::class, 'destroy']);
-
     // Kategori Pembayaran CRUD
     Route::post('/pembayaran/kategori', [KategoriPembayaranController::class, 'store']);
     Route::get('/pembayaran/kategori/{id}', [KategoriPembayaranController::class, 'show']);
