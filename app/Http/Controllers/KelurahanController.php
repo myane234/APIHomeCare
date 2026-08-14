@@ -15,6 +15,8 @@ class KelurahanController extends Controller
 {
     public function index(Request $request)
     {
+        $perPage = (int) $request->query('per_page', 50);
+
         $query = Kelurahan::query();
 
         // Optional filter by id_kecamatan
@@ -22,12 +24,18 @@ class KelurahanController extends Controller
             $query->where('id_kecamatan', $request->input('id_kecamatan'));
         }
 
-        $data = $query->with('kecamatan')->get();
+        $data = $query->with('kecamatan')->paginate($perPage);
+
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengambil daftar Kelurahan',
-            'data' => $data,
-            'total' => count($data)
+            'data'    => $data->items(),
+            'meta'    => [
+                'total'        => $data->total(),
+                'per_page'     => $data->perPage(),
+                'current_page' => $data->currentPage(),
+                'last_page'    => $data->lastPage(),
+            ],
         ], 200);
     }
 
@@ -44,7 +52,7 @@ class KelurahanController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Berhasil menambahkan Kelurahan',
-                'data' => $kelurahan
+                'data' => $kelurahan->load('kecamatan')
             ], 201);
         } catch (Exception $e) {
             Log::error($e->getMessage());
@@ -94,7 +102,7 @@ class KelurahanController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Berhasil memperbarui Kelurahan',
-                'data' => $kelurahan
+                'data' => $kelurahan->load('kecamatan')
             ], 200);
         } catch (Exception $e) {
             Log::error($e->getMessage());

@@ -67,8 +67,11 @@ class WilayahSeeder extends Seeder
                 foreach ($cities as $city) {
                     // Simpan ke Database (Kota)
                     $kotaModel = KotaKabupaten::updateOrCreate(
-                        ['nama_kota' => $city['name']],
-                        ['id_provinsi' => $provinsiModel->id_provinsi]
+                        ['id_kota' => $city['id']],
+                        [
+                            'nama_kota' => $city['name'],
+                            'id_provinsi' => $provinsiModel->id_provinsi
+                        ]
                     );
 
                     $cityData = [
