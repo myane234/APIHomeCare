@@ -21,7 +21,6 @@ Route::get('/promo/active', [PromoController::class, 'getActivePromos']);
 Route::get('/promo/{promo}', [PromoController::class, 'show']);
 
 Route::get('/artikel', [ArtikelController::class, 'index']);
-Route::get('/artikel/kategori', [KategoriArtikelController::class, 'index']);
 Route::get('/artikel/{artikel}', [ArtikelController::class, 'show']);
 
 Route::get('/pasien', [PasienController::class, 'index']);

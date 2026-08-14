@@ -15,10 +15,50 @@ class ContentManagementController extends Controller
     {
         $content = ContentManagement::firstOrCreate([]);
 
+        // Fetch active promos
+        $promos = \App\Models\Promo::with('layanans')
+            ->where('status_promo', 'Aktif')
+            ->whereDate('tanggal_mulai', '<=', now()->toDateString())
+            ->whereDate('tanggal_berakhir', '>=', now()->toDateString())
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Fetch articles
+        $artikels = \App\Models\Artikel::with('kategori')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Fetch article categories
+        $kategoriArtikel = \App\Models\KategoriArtikel::all();
+
+        // Fetch services
+        $layanans = \App\Models\MasterLayanan::with('kategori')
+            ->get()
+            ->map(function ($item) {
+                if ($item->foto_layanan && !str_starts_with($item->foto_layanan, 'http')) {
+                    $item->foto_layanan = url(Storage::url($item->foto_layanan));
+                }
+                $item->kategori_layanan = $item->kategori ? $item->kategori->nama_kategori : null;
+                return $item;
+            });
+
         return response()->json([
             'home_banner' => $content->home_banner_url,
             'home_text_banner' => $content->home_text_banner,
             'home_description' => $content->home_description,
+            
+            'promo_heading' => $content->promo_heading,
+            'promo_text' => $content->promo_text,
+            'promos' => $promos,
+
+            'artikel_heading' => $content->artikel_heading,
+            'artikel_text' => $content->artikel_text,
+            'artikels' => $artikels,
+            'kategori_artikel' => $kategoriArtikel,
+
+            'layanan_heading' => $content->layanan_heading,
+            'layanan_text' => $content->layanan_text,
+            'layanans' => $layanans,
         ], 200);
     }
 
@@ -52,6 +92,12 @@ class ContentManagementController extends Controller
             'home_banner' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:2048'],
             'home_text_banner' => ['nullable', 'string'],
             'home_description' => ['nullable', 'string'],
+            'promo_heading' => ['nullable', 'string', 'max:255'],
+            'promo_text' => ['nullable', 'string'],
+            'artikel_heading' => ['nullable', 'string', 'max:255'],
+            'artikel_text' => ['nullable', 'string'],
+            'layanan_heading' => ['nullable', 'string', 'max:255'],
+            'layanan_text' => ['nullable', 'string'],
         ]);
 
         if ($request->hasFile('home_banner')) {
@@ -71,6 +117,12 @@ class ContentManagementController extends Controller
                 'home_banner' => $content->home_banner_url,
                 'home_text_banner' => $content->home_text_banner,
                 'home_description' => $content->home_description,
+                'promo_heading' => $content->promo_heading,
+                'promo_text' => $content->promo_text,
+                'artikel_heading' => $content->artikel_heading,
+                'artikel_text' => $content->artikel_text,
+                'layanan_heading' => $content->layanan_heading,
+                'layanan_text' => $content->layanan_text,
             ]
         ], 200);
     }
