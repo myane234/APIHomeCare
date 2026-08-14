@@ -28,10 +28,10 @@ class DatabaseSeeder extends Seeder
             KategoriLayananSeeder::class,
                 //LayananSeeder::class,
                 //PromoSeeder::class,
+            MasterBankSeeder::class,
             ProvinsiSeeder::class,
             KotaKabupatenSeeder::class,
-            WilayahSeeder::class,
-            MasterBankSeeder::class,
+            WilayahSeeder::class
             // ArtikelSeeder::class,
             // TenagaMedisSeeder::class
         ]);
