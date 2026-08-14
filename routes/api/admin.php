@@ -101,6 +101,7 @@ Route::middleware([])->group(function () {
     Route::get('/manage-admin/{id}', [AdminController::class, 'show']);
     Route::put('/manage-admin/{id}', [AdminController::class, 'update']);
     Route::delete('/manage-admin/{id}', [AdminController::class, 'destroy']);
+    
     Route::get('/manage-admin/bookings', [BookingController::class, 'adminIndex']);
 
     // Management Pasien

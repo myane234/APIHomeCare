@@ -7,6 +7,10 @@ use Illuminate\Http\Request;
 use Exception;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * @group API Master Kecamatan
+ */
+
 class KecamatanController extends Controller
 {
     public function index()

@@ -7,6 +7,10 @@ use Illuminate\Http\Request;
 use Exception;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * @group API Master Kelurahan
+ */
+
 class KelurahanController extends Controller
 {
     public function index(Request $request)

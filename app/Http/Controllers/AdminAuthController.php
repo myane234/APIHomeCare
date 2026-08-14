@@ -7,11 +7,6 @@ use App\Models\Users;
 use App\Models\Admin;
 use Illuminate\Support\Facades\Hash;
 
-/**
- * @group Admin Authentication
- *
- * APIs for logging in and managing Admin CMS authentication
- */
 class AdminAuthController extends Controller
 {
     public function login(Request $request)
@@ -30,23 +25,24 @@ class AdminAuthController extends Controller
             ], 401);
         }
 
-        // Check if user has admin role
-        $roles = $user->roles()->pluck('roles.nama_role')->toArray();
-        if (!in_array('admin', $roles)) {
+        if (!$user->is_active) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akun Anda telah dinonaktifkan.'
+            ], 403);
+        }
+
+        // 3. Cek Apakah Memang Admin
+        $admin = Admin::where('id_user', $user->id_user)->first();
+
+        if (!$admin) {
             return response()->json([
                 'success' => false,
                 'message' => 'Anda tidak memiliki akses admin'
             ], 403);
         }
 
-        $admin = Admin::where('id_user', $user->id_user)->first();
-
-        // Inject super_admin to roles if tier_admin is Super Admin
-        if ($admin && $admin->tier_admin === 'Super Admin') {
-            $roles[] = 'super_admin';
-        }
-
-        // Use Sanctum for token generation
+        // 4. Generate Token & Response Data
         $token = $user->createToken('admin-token')->plainTextToken;
 
         return response()->json([
@@ -54,20 +50,19 @@ class AdminAuthController extends Controller
             'message' => 'Berhasil Login sebagai Admin',
             'data' => [
                 'token' => $token,
-                'roles' => $roles,
-                'nama' => $admin ? $admin->nama_lengkap : 'Admin',
+                'nama' => $admin->nama_lengkap,
+                'tier_admin' => $admin->tier_admin,
             ]
-        ]);
+        ], 200);
     }
 
     public function logout(Request $request)
     {
-        // Revoke the token that was used to authenticate the current request...
         $request->user()->currentAccessToken()->delete();
 
         return response()->json([
             'success' => true,
             'message' => 'Berhasil Logout'
-        ]);
+        ], 200);
     }
 }
