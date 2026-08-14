@@ -102,7 +102,6 @@ class AdminNakesController extends Controller
     {
         $tenagaMedis = TenagaMedis::findOrFail($id);
 
-        // Validasi Ketat: Harus sudah berada di tahap 'pelatihan'
         if ($tenagaMedis->status !== 'pelatihan') {
             return response()->json([
                 'success' => false,
@@ -111,17 +110,16 @@ class AdminNakesController extends Controller
         }
 
         $result = DB::transaction(function () use ($tenagaMedis) {
-            // 1. Update status nakes di tabel tenaga_medis menjadi 'approved'
             $tenagaMedis->update([
                 'status'      => 'approved',
                 'admin_notes' => null
             ]);
 
-            // 2. Aktifkan/Attach Role Nakes (id_role = 3) ke User
+
             $user = $tenagaMedis->user;
-            if ($user && !$user->roles()->where('user_roles.id_role', 3)->exists()) {
-                $user->roles()->attach(3);
-            }
+            if ($user && !$user->roles()->where('user_roles.nama_role', 'nakes')->exists()) {
+    $user->roles()->attach('nakes');
+    }
 
             return $tenagaMedis->fresh(['user', 'pasien', 'wilayahLayanan', 'kategoriLayanan']);
         });
