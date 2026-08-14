@@ -19,22 +19,33 @@ class KelurahanController extends Controller
 
         $query = Kelurahan::query();
 
-        // Optional filter by id_kecamatan
-        if ($request->has('id_kecamatan')) {
+        if ($request->filled('id_kecamatan')) {
             $query->where('id_kecamatan', $request->input('id_kecamatan'));
         }
 
-        $data = $query->with('kecamatan')->paginate($perPage);
+      
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('nama_kelurahan', 'LIKE', "%{$search}%")
+                  ->orWhereHas('kecamatan', function ($qKec) use ($search) {
+                      $qKec->where('nama_kecamatan', 'LIKE', "%{$search}%");
+                  });
+            });
+        }
+
+        // Eager load kecamatan + kotaKabupaten
+        $data = $query->with('kecamatan.kotaKabupaten')->paginate($perPage);
 
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengambil daftar Kelurahan',
-            'data' => $data->items(),
-            'meta' => [
-                'total' => $data->total(),
-                'per_page' => $data->perPage(),
+            'data'    => $data->items(),
+            'meta'    => [
+                'total'        => $data->total(),
+                'per_page'     => $data->perPage(),
                 'current_page' => $data->currentPage(),
-                'last_page' => $data->lastPage(),
+                'last_page'    => $data->lastPage(),
             ],
         ], 200);
     }
