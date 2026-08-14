@@ -10,17 +10,40 @@ use Illuminate\Support\Facades\Log;
 /**
  * @group API Master Kecamatan
  */
-
 class KecamatanController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $data = Kecamatan::with('kelurahans')->get();
+        $perPage    = (int) $request->query('per_page', 50);
+        $withKelurahan = $request->boolean('include_kelurahans', false);
+
+        // Selalu load kotaKabupaten agar nama_regency tersedia
+        $relations = $withKelurahan
+            ? ['kelurahans', 'kotaKabupaten']
+            : ['kotaKabupaten'];
+
+        $query = Kecamatan::with($relations);
+
+        if ($request->has('regency_id')) {
+            $query->where('regency_id', $request->query('regency_id'));
+            // Otomatis sertakan kelurahans bila filter per kota
+            if (!$withKelurahan) {
+                $query->with('kelurahans');
+            }
+        }
+
+        $data = $query->paginate($perPage);
+
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengambil daftar Kecamatan',
-            'data' => $data,
-            'total' => count($data)
+            'data'    => $data->items(),
+            'meta'    => [
+                'total'        => $data->total(),
+                'per_page'     => $data->perPage(),
+                'current_page' => $data->currentPage(),
+                'last_page'    => $data->lastPage(),
+            ],
         ], 200);
     }
 
@@ -28,16 +51,18 @@ class KecamatanController extends Controller
     {
         $validated = $request->validate([
             'id_kecamatan' => ['required', 'string', 'unique:master_kecamatan,id_kecamatan'],
-            'regency_id' => ['nullable', 'string'],
+            // Validasi foreign key ke master_kota_kabupaten.id_kota
+            'regency_id' => ['nullable', 'exists:master_kota_kabupaten,id_kota'],
             'nama_kecamatan' => ['required', 'string', 'max:255'],
         ]);
 
         try {
             $kecamatan = Kecamatan::create($validated);
+            
             return response()->json([
                 'success' => true,
                 'message' => 'Berhasil menambahkan Kecamatan',
-                'data' => $kecamatan
+                'data' => $kecamatan->load(['kelurahans', 'kotaKabupaten'])
             ], 201);
         } catch (Exception $e) {
             Log::error($e->getMessage());
@@ -50,7 +75,8 @@ class KecamatanController extends Controller
 
     public function show($id)
     {
-        $kecamatan = Kecamatan::with('kelurahans')->find($id);
+        // Load relasi kelurahans dan kotaKabupaten sekaligus
+        $kecamatan = Kecamatan::with(['kelurahans', 'kotaKabupaten'])->find($id);
 
         if (!$kecamatan) {
             return response()->json([
@@ -78,16 +104,17 @@ class KecamatanController extends Controller
         }
 
         $validated = $request->validate([
-            'regency_id' => ['nullable', 'string'],
+            'regency_id' => ['nullable', 'exists:master_kota_kabupaten,id_kota'],
             'nama_kecamatan' => ['sometimes', 'required', 'string', 'max:255'],
         ]);
 
         try {
             $kecamatan->update($validated);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Berhasil memperbarui Kecamatan',
-                'data' => $kecamatan
+                'data' => $kecamatan->load(['kelurahans', 'kotaKabupaten'])
             ], 200);
         } catch (Exception $e) {
             Log::error($e->getMessage());
@@ -111,6 +138,7 @@ class KecamatanController extends Controller
 
         try {
             $kecamatan->delete();
+
             return response()->json([
                 'success' => true,
                 'message' => 'Berhasil menghapus Kecamatan'
@@ -122,5 +150,21 @@ class KecamatanController extends Controller
                 'message' => 'Gagal menghapus Kecamatan'
             ], 500);
         }
+    }
+
+    /**
+     * Endpoint khusus untuk ambil kecamatan berdasarkan ID Kota/Kabupaten
+     */
+    public function getByKota($regency_id)
+    {
+        $kecamatan = Kecamatan::where('regency_id', $regency_id)
+            ->with(['kelurahans', 'kotaKabupaten'])
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Berhasil mengambil data kecamatan berdasarkan kota/kabupaten',
+            'data' => $kecamatan,
+        ], 200);
     }
 }

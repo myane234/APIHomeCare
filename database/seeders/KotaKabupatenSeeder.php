@@ -35,8 +35,11 @@ class KotaKabupatenSeeder extends Seeder
 
                 foreach ($cities as $city) {
                     KotaKabupaten::updateOrCreate(
-                        ['nama_kota' => $city['name']],
-                        ['id_provinsi' => $localProvinsiId]
+                        ['id_kota' => $city['id']],
+                        [
+                            'nama_kota' => $city['name'],
+                            'id_provinsi' => $localProvinsiId
+                        ]
                     );
                 }
 
