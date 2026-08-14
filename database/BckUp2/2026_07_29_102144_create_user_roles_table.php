@@ -14,10 +14,13 @@ return new class extends Migration
         Schema::create('user_roles', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->unsignedBigInteger('id_user');
-            $table->unsignedBigInteger('id_role')->index('user_roles_id_role_foreign');
+            $table->string('nama_role');
             $table->timestamps();
 
-            $table->unique(['id_user', 'id_role']);
+            $table->unique(['id_user', 'nama_role']);
+
+            $table->foreign('id_user')->references('id_user')->on('users')->cascadeOnDelete();
+            $table->foreign('nama_role')->references('nama_role')->on('roles')->cascadeOnDelete();
         });
     }
 
