@@ -29,36 +29,52 @@ class KelurahanController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengambil daftar Kelurahan',
-            'data'    => $data->items(),
-            'meta'    => [
-                'total'        => $data->total(),
-                'per_page'     => $data->perPage(),
+            'data' => $data->items(),
+            'meta' => [
+                'total' => $data->total(),
+                'per_page' => $data->perPage(),
                 'current_page' => $data->currentPage(),
-                'last_page'    => $data->lastPage(),
+                'last_page' => $data->lastPage(),
             ],
         ], 200);
     }
 
     public function store(Request $request)
     {
+
         $validated = $request->validate([
-            'id_kelurahan' => ['required', 'string', 'unique:master_kelurahan,id_kelurahan'],
-            'id_kecamatan' => ['required', 'string', 'exists:master_kecamatan,id_kecamatan'],
-            'nama_kelurahan' => ['required', 'string', 'max:255'],
+            'id_kecamatan' => ['required', 'string', 'unique:master_kecamatan,id_kecamatan'],
+            'nama_kota' => ['required', 'string'],
+            'nama_kecamatan' => ['required', 'string', 'max:255'],
         ]);
 
+        $kota = KotaKabupaten::where('nama_kota', $request->nama_kota)->first();
+
+        if (!$kota) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kota/Kabupaten "' . $request->nama_kota . '" tidak ditemukan di database!'
+            ], 404);
+        }
+
         try {
-            $kelurahan = Kelurahan::create($validated);
+            $kecamatan = Kecamatan::create([
+                'id_kecamatan' => $request->id_kecamatan,
+                'regency_id' => $kota->id_kota,
+                'nama_kecamatan' => $request->nama_kecamatan,
+            ]);
+
             return response()->json([
                 'success' => true,
-                'message' => 'Berhasil menambahkan Kelurahan',
-                'data' => $kelurahan->load('kecamatan')
+                'message' => 'Berhasil menambahkan Kecamatan',
+                'data' => $kecamatan->load('kotaKabupaten')
             ], 201);
+
         } catch (Exception $e) {
             Log::error($e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal menambahkan Kelurahan'
+                'message' => 'Gagal menambahkan Kecamatan'
             ], 500);
         }
     }
