@@ -7,6 +7,10 @@ use App\Models\Users;
 use App\Models\Admin;
 use Illuminate\Support\Facades\Hash;
 
+/**
+ * @group Auth untuk Admin
+ */
+
 class AdminAuthController extends Controller
 {
     public function login(Request $request)
