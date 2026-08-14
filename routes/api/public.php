@@ -39,4 +39,5 @@ Route::get('/kota-kabupaten/{id}', [KotaKabupatenController::class, 'show']);
 Route::get('/pembayaran/kategori', [KategoriPembayaranController::class, 'index']);
 Route::get('/pembayaran/metode', [MetodePembayaranController::class, 'index']);
 
-
+// Master Bank (Public - untuk dropdown pemilihan bank)
+Route::get('/banks', [\App\Http\Controllers\MasterBankController::class, 'index']);

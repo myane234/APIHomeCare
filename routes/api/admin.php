@@ -147,4 +147,13 @@ Route::middleware([])->group(function () {
     // Master Wilayah - Kelurahan
     Route::apiResource('/kelurahan', KelurahanController::class);
 
+    // Master Bank - Admin CRUD
+    Route::prefix('banks')->group(function () {
+        Route::get('/', [\App\Http\Controllers\MasterBankController::class, 'adminIndex']);
+        Route::post('/', [\App\Http\Controllers\MasterBankController::class, 'store']);
+        Route::put('/{id}', [\App\Http\Controllers\MasterBankController::class, 'update']);
+        Route::patch('/{id}/toggle-status', [\App\Http\Controllers\MasterBankController::class, 'toggleStatus']);
+        Route::delete('/{id}', [\App\Http\Controllers\MasterBankController::class, 'destroy']);
+    });
+
 });
