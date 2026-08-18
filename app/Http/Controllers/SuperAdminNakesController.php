@@ -13,14 +13,18 @@ class SuperAdminNakesController extends Controller
     private function authorizeSuperAdmin(Request $request)
     {
         $user = $request->user();
-        
+
         if ($user instanceof Admin) {
             $admin = $user;
+        } elseif ($user && isset($user->id_admin)) {
+            $admin = Admin::find($user->id_admin);
         } else {
-            $admin = Admin::where('id_user', $user?->id_user)->first();
+            $admin = null;
         }
 
-        if (!$admin || $admin->tier_admin !== 'Super Admin') {
+        $tier = strtolower(str_replace(['_', '-'], ' ', trim((string) $admin->tier_admin ?? '')));
+
+        if (!$admin || !in_array($tier, ['super admin', 'superadmin'], true)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses ditolak. Hanya Super Admin yang dapat mengelola data Nakes.'

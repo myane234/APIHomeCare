@@ -7,19 +7,26 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 /**
- * @group Admin Nakes Management
- *
- * APIs for managing nakes registration requests and active health workers
+ * @group Super Admin Nakes Management
  */
-class AdminNakesController extends Controller
+class SuperAdminNakesController extends Controller
 {
     /**
-     * List semua pendaftaran nakes (Bisa filter status: pending, pelatihan, approved, rejected)
+     * List semua pendaftaran nakes
      */
     public function index(Request $request)
     {
+        $admin = $request->user();
+
+        if (!$admin) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Silakan login terlebih dahulu.'
+            ], 401);
+        }
+
         $status = $request->query('status');
-        
+
         $query = TenagaMedis::with(['user', 'pasien', 'wilayahLayanan', 'kategoriLayanan'])
             ->orderBy('created_at', 'desc');
 
@@ -32,15 +39,24 @@ class AdminNakesController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengambil daftar pendaftaran Nakes.',
-            'data'    => $nakesRequests
-        ]);
+            'data' => $nakesRequests
+        ], 200);
     }
 
     /**
      * List khusus tenaga medis yang sudah aktif / approved
      */
-    public function listActiveNakes()
+    public function listActiveNakes(Request $request)
     {
+        $admin = $request->user();
+
+        if (!$admin) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Silakan login terlebih dahulu.'
+            ], 401);
+        }
+
         $tenagaMedis = TenagaMedis::with(['user', 'pasien', 'wilayahLayanan', 'kategoriLayanan'])
             ->where('status', 'approved')
             ->orderBy('created_at', 'desc')
@@ -49,33 +65,50 @@ class AdminNakesController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengambil daftar Nakes aktif.',
-            'data'    => $tenagaMedis
-        ]);
+            'data' => $tenagaMedis
+        ], 200);
     }
 
     /**
-     * Detail lengkap nakes beserta berkas, wilayah, dan kategori layanannya
+     * Detail lengkap nakes
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
+        $admin = $request->user();
+
+        if (!$admin) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Silakan login terlebih dahulu.'
+            ], 401);
+        }
+
         $tenagaMedis = TenagaMedis::with(['user', 'pasien', 'wilayahLayanan', 'kategoriLayanan'])
             ->findOrFail($id);
 
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengambil detail Nakes.',
-            'data'    => $tenagaMedis
-        ]);
+            'data' => $tenagaMedis
+        ], 200);
     }
 
     /**
-     * STEP 1: Ajukan Pendaftaran ke Tahap Pelatihan (Harus dari status 'pending')
+     * STEP 1: Ajukan Pendaftaran ke Tahap Pelatihan
      */
     public function setPelatihan(Request $request, $id)
     {
+        $admin = $request->user();
+
+        if (!$admin) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Silakan login terlebih dahulu.'
+            ], 401);
+        }
+
         $tenagaMedis = TenagaMedis::findOrFail($id);
 
-        // Validasi Ketat: Hanya boleh dari 'pending'
         if ($tenagaMedis->status !== 'pending') {
             return response()->json([
                 'success' => false,
@@ -84,22 +117,31 @@ class AdminNakesController extends Controller
         }
 
         $tenagaMedis->update([
-            'status'      => 'pelatihan',
+            'status' => 'pelatihan',
             'admin_notes' => null
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Pendaftaran Nakes berhasil diajukan ke tahap pelatihan.',
-            'data'    => $tenagaMedis->fresh(['user', 'pasien', 'wilayahLayanan', 'kategoriLayanan'])
-        ]);
+            'data' => $tenagaMedis->fresh(['user', 'pasien', 'wilayahLayanan', 'kategoriLayanan'])
+        ], 200);
     }
 
     /**
-     * STEP 2: Approve Pelatihan & Aktifkan Akun (Harus dari status 'pelatihan')
+     * STEP 2: Approve Pelatihan & Aktifkan Akun
      */
     public function approve(Request $request, $id)
     {
+        $admin = $request->user();
+
+        if (!$admin) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Silakan login terlebih dahulu.'
+            ], 401);
+        }
+
         $tenagaMedis = TenagaMedis::findOrFail($id);
 
         if ($tenagaMedis->status !== 'pelatihan') {
@@ -111,15 +153,14 @@ class AdminNakesController extends Controller
 
         $result = DB::transaction(function () use ($tenagaMedis) {
             $tenagaMedis->update([
-                'status'      => 'approved',
+                'status' => 'approved',
                 'admin_notes' => null
             ]);
 
-
             $user = $tenagaMedis->user;
             if ($user && !$user->roles()->where('user_roles.nama_role', 'nakes')->exists()) {
-    $user->roles()->attach('nakes');
-    }
+                $user->roles()->attach('nakes');
+            }
 
             return $tenagaMedis->fresh(['user', 'pasien', 'wilayahLayanan', 'kategoriLayanan']);
         });
@@ -127,15 +168,24 @@ class AdminNakesController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Nakes dinyatakan lulus pelatihan dan akun/role Nakes berhasil diaktifkan.',
-            'data'    => $result
-        ]);
+            'data' => $result
+        ], 200);
     }
 
     /**
-     * REJECT: Tolak Pendaftaran (Dapat dilakukan saat status 'pending' maupun 'pelatihan')
+     * REJECT: Tolak Pendaftaran
      */
     public function reject(Request $request, $id)
     {
+        $admin = $request->user();
+
+        if (!$admin) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Silakan login terlebih dahulu.'
+            ], 401);
+        }
+
         $tenagaMedis = TenagaMedis::findOrFail($id);
 
         if ($tenagaMedis->status === 'approved') {
@@ -159,14 +209,14 @@ class AdminNakesController extends Controller
         ]);
 
         $tenagaMedis->update([
-            'status'      => 'rejected',
+            'status' => 'rejected',
             'admin_notes' => $validate['admin_notes']
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Pendaftaran Nakes berhasil ditolak.',
-            'data'    => $tenagaMedis->fresh(['user', 'pasien', 'wilayahLayanan', 'kategoriLayanan'])
-        ]);
+            'data' => $tenagaMedis->fresh(['user', 'pasien', 'wilayahLayanan', 'kategoriLayanan'])
+        ], 200);
     }
 }
