@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * @group Super Admin Nakes Management
  */
-class SuperAdminNakesController extends Controller
+class AdminNakesController extends Controller
 {
     /**
      * List semua pendaftaran nakes
