@@ -20,34 +20,24 @@ class AdminAuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        $user = Users::whereEmail($validate['email'])->first();
+        $admin = Admin::where('email', $validate['email'])->first();
 
-        if (!$user || !Hash::check($validate['password'], $user->password)) {
+        if (!$admin || !Hash::check($validate['password'], $admin->password)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Data login salah'
             ], 401);
         }
 
-        if (!$user->is_active) {
+        if (!$admin->is_active) {
             return response()->json([
                 'success' => false,
                 'message' => 'Akun Anda telah dinonaktifkan.'
             ], 403);
         }
 
-        // 3. Cek Apakah Memang Admin
-        $admin = Admin::where('id_user', $user->id_user)->first();
-
-        if (!$admin) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Anda tidak memiliki akses admin'
-            ], 403);
-        }
-
-        // 4. Generate Token & Response Data
-        $token = $user->createToken('admin-token')->plainTextToken;
+        // Generate Token & Response Data
+        $token = $admin->createToken('admin-token')->plainTextToken;
 
         return response()->json([
             'success' => true,

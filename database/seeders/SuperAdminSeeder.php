@@ -17,37 +17,22 @@ class SuperAdminSeeder extends Seeder
      */
     public function run(): void
     {
-        // Pastikan role admin sudah ada
-        $adminRole = Role::firstOrCreate(['nama_role' => 'admin']);
-
-        // Buat atau update user
-        $user = Users::firstOrCreate(
+        // Buat atau update record di tabel admins dengan tier Super Admin
+        $admin = Admin::updateOrCreate(
             ['email' => 'admin@gmail.com'],
             [
-                'password'  => Hash::make('faruqganteng'),
-                'is_active' => true,
-            ]
-        );
-
-        // Pastikan password selalu sinkron (jika user sudah ada)
-        if (!Hash::check('faruqganteng', $user->password)) {
-            $user->password = Hash::make('faruqganteng');
-            $user->save();
-        }
-
-        // Attach role admin
-        if (!$user->roles->contains('nama_role', $adminRole->nama_role)) {
-            $user->roles()->attach($adminRole->nama_role);
-        }
-
-        // Buat atau update record di tabel admins dengan tier Super Admin
-        Admin::updateOrCreate(
-            ['id_user' => $user->id_user],
-            [
+                'password'     => Hash::make('faruqganteng'),
                 'nama_lengkap' => 'Super Admin',
                 'tier_admin'   => 'Super Admin',
+                'is_active'    => true,
             ]
         );
+
+        // Pastikan password selalu sinkron (jika admin sudah ada)
+        if (!Hash::check('faruqganteng', $admin->password)) {
+            $admin->password = Hash::make('faruqganteng');
+            $admin->save();
+        }
 
         $this->command->info('✅ Super Admin seeded: admin@gmail.com / faruqganteng');
     }

@@ -12,8 +12,11 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('admin_tiers', function (Blueprint $table) {
-            $table->id();
+            $table->id('id_admin_tier');
             $table->string('nama_tier')->unique(); 
+            $table->string('slug')->unique();
+            $table->string('deskripsi')->nullable();
+            $table->boolean('is_protected')->default(false);
             $table->timestamps();
         });
     }

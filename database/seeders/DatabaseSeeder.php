@@ -23,6 +23,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             roleSeeder::class,
+            AdminTierSeeder::class,
             AdminSeeder::class,
             SuperAdminSeeder::class,
             KategoriLayananSeeder::class,
