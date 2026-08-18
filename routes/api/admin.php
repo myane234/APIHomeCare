@@ -25,6 +25,7 @@ use App\Http\Controllers\BhpController;
 use App\Http\Controllers\MappingLayananBhpController;
 use App\Http\Controllers\KecamatanController;
 use App\Http\Controllers\KelurahanController;
+use App\Http\Controllers\NotificationTemplateController;
 Route::middleware([])->group(function () {
 
     // Auth Admin & Super Admin
@@ -145,5 +146,8 @@ Route::middleware([])->group(function () {
 
     // Master Wilayah - Kelurahan
     Route::apiResource('/kelurahan', KelurahanController::class);
+
+    // Template Notifikasi CRUD
+    Route::apiResource('/notification-templates', NotificationTemplateController::class);
 
 });

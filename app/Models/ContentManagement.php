@@ -30,6 +30,22 @@ class ContentManagement extends Model
         'cara_kerja',
         'wilayah_layanan',
         'komitmen',
+        
+        // Gabung Mitra
+        'mitra_banner',
+        'mitra_text_banner',
+        'mitra_description',
+
+        // Footer
+        'footer_description',
+        'footer_phone',
+        'footer_email',
+        'footer_address',
+        'footer_socials',
+    ];
+
+    protected $casts = [
+        'footer_socials' => 'array',
     ];
 
     public function getHomeBannerUrlAttribute()
@@ -45,5 +61,10 @@ class ContentManagement extends Model
     public function getAboutDescriptionImageUrlAttribute()
     {
         return $this->about_description_image ? url(Storage::url($this->about_description_image)) : null;
+    }
+
+    public function getMitraBannerUrlAttribute()
+    {
+        return $this->mitra_banner ? url(Storage::url($this->mitra_banner)) : null;
     }
 }
