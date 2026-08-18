@@ -3,35 +3,31 @@
 namespace App\Http\Controllers;
 
 use App\Models\Admin;
-use App\Models\Users;
-use App\Models\Role;
+use App\Models\AdminTier;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\DB;
-
-/**
- * @group Kelola admin
- */
 
 class AdminController extends Controller
 {
     public function index()
     {
-        $data = Admin::query()->get();
+        // Ambil data admin langsung dari tabel admins
+        $data = Admin::all();
 
         return response()->json([
             'success' => true,
-            'message' => 'Berhasil Mengambil Data user Admin',
+            'message' => 'Berhasil Mengambil Data Admin',
             'data' => $data,
-            'total' => count($data)
+            'total' => $data->count()
         ]);
     }
 
     public function store(Request $request)
     {
+        // Validasi wajib unique:admins,email karena akun admin terpisah total
         $validated = $request->validate([
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:admins,email'],
             'password' => ['required', 'string', 'min:8'],
             'nama_lengkap' => ['required', 'string', 'max:255'],
             'tier_admin' => ['required', 'string', 'exists:admin_tiers,nama_tier'],
@@ -45,39 +41,26 @@ class AdminController extends Controller
         }
 
         try {
-            $admin = DB::transaction(function () use ($validated) {
-                // 1. Buat User
-                $user = Users::create([
-                    'email' => $validated['email'],
-                    'password' => bcrypt($validated['password']),
-                    'is_active' => true,
-                ]);
-
-                // 2. Buat Admin Detail
-                $admin = Admin::create([
-                    'id_user' => $user->id_user,
-                    'nama_lengkap' => $validated['nama_lengkap'],
-                    'tier_admin' => $validated['tier_admin'],
-                ]);
-
-                // 3. Set Role Global 'admin' ke user_roles
-                $role = Role::firstOrCreate(['nama_role' => 'admin']);
-                $user->roles()->sync([$role->nama_role]);
-
-                return $admin;
-            });
+            // Buat Record Admin secara langsung
+            $admin = Admin::create([
+                'email' => $validated['email'],
+                'password' => bcrypt($validated['password']),
+                'nama_lengkap' => $validated['nama_lengkap'],
+                'tier_admin' => $validated['tier_admin'],
+                'is_active' => true,
+            ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Berhasil Create Admin',
+                'message' => 'Berhasil Membuat Admin Baru',
                 'data' => $admin
             ], 201);
 
         } catch (Exception $e) {
-            Log::error($e->getMessage());
+            Log::error('Error Store Admin: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal Create Admin'
+                'message' => 'Gagal Membuat Admin'
             ], 500);
         }
     }
@@ -94,7 +77,10 @@ class AdminController extends Controller
 
         $validated = $request->validate([
             'nama_lengkap' => ['sometimes', 'required', 'string', 'max:255'],
+            'email' => ['sometimes', 'required', 'string', 'email', 'max:255', 'unique:admins,email,' . $id . ',id_admin'],
+            'password' => ['sometimes', 'required', 'string', 'min:8'],
             'tier_admin' => ['sometimes', 'required', 'string', 'exists:admin_tiers,nama_tier'],
+            'is_active' => ['sometimes', 'boolean'],
         ]);
 
         if (isset($validated['tier_admin']) && in_array(strtolower($validated['tier_admin']), ['super admin', 'super_admin'])) {
@@ -102,6 +88,10 @@ class AdminController extends Controller
                 'success' => false,
                 'message' => 'Tidak dapat mengubah tier menjadi Super Admin.'
             ], 403);
+        }
+
+        if (isset($validated['password'])) {
+            $validated['password'] = bcrypt($validated['password']);
         }
 
         $admin->update($validated);
@@ -113,27 +103,6 @@ class AdminController extends Controller
         ], 200);
     }
 
-    public function getTiers()
-    {
-        try {
-            $tiers = DB::table('admin_tiers')
-                ->whereNotIn(DB::raw('LOWER(nama_tier)'), ['super admin', 'super_admin'])
-                ->pluck('nama_tier');
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Berhasil mengambil daftar tier',
-                'data' => $tiers
-            ], 200);
-        } catch (Exception $e) {
-            Log::error($e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal mengambil daftar tier'
-            ], 500);
-        }
-    }
-
     public function destroy($id)
     {
         try {
@@ -142,15 +111,26 @@ class AdminController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => "Berhasil Hapus User"
+                'message' => 'Berhasil Menghapus Akun Admin'
             ], 200);
 
         } catch (Exception $e) {
-            Log::error($e->getMessage());
+            Log::error('Error Destroy Admin: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal Hapus User'
+                'message' => 'Gagal Menghapus Admin'
             ], 500);
         }
+    }
+
+    public function getTiers()
+    {
+        $tiers = AdminTier::all();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Berhasil Mengambil Data Tier Admin',
+            'data' => $tiers
+        ]);
     }
 }

@@ -13,7 +13,12 @@ class SuperAdminNakesController extends Controller
     private function authorizeSuperAdmin(Request $request)
     {
         $user = $request->user();
-        $admin = Admin::where('id_user', $user?->id_user)->first();
+        
+        if ($user instanceof Admin) {
+            $admin = $user;
+        } else {
+            $admin = Admin::where('id_user', $user?->id_user)->first();
+        }
 
         if (!$admin || $admin->tier_admin !== 'Super Admin') {
             return response()->json([
