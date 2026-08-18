@@ -7,14 +7,33 @@ use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
 
 class AdminTierController extends Controller
 {
+    /**
+     * Ensure permissions column exists in admin_tiers table dynamically
+     */
+    private function ensurePermissionsColumnExists()
+    {
+        try {
+            if (Schema::hasTable('admin_tiers') && !Schema::hasColumn('admin_tiers', 'permissions')) {
+                Schema::table('admin_tiers', function (Blueprint $table) {
+                    $table->json('permissions')->nullable()->after('deskripsi');
+                });
+            }
+        } catch (Exception $e) {
+            Log::warning('Could not automatically create permissions column on admin_tiers: ' . $e->getMessage());
+        }
+    }
+
     /**
      * Get all admin tiers
      */
     public function index()
     {
+        $this->ensurePermissionsColumnExists();
         $tiers = AdminTier::all();
 
         return response()->json([
@@ -29,6 +48,8 @@ class AdminTierController extends Controller
      */
     public function store(Request $request)
     {
+        $this->ensurePermissionsColumnExists();
+
         $validated = $request->validate([
             'nama_tier' => ['required', 'string', 'max:255', 'unique:admin_tiers,nama_tier'],
             'slug' => ['nullable', 'string', 'max:255', 'unique:admin_tiers,slug'],
@@ -45,13 +66,18 @@ class AdminTierController extends Controller
             $deskripsi = $validated['deskripsi'] ?? $validated['description'] ?? null;
             $permissions = $validated['permissions'] ?? [];
 
-            $tier = AdminTier::create([
+            $data = [
                 'nama_tier' => $validated['nama_tier'],
                 'slug' => $slug,
                 'deskripsi' => $deskripsi,
-                'permissions' => $permissions,
                 'is_protected' => false,
-            ]);
+            ];
+
+            if (Schema::hasColumn('admin_tiers', 'permissions')) {
+                $data['permissions'] = $permissions;
+            }
+
+            $tier = AdminTier::create($data);
 
             return response()->json([
                 'success' => true,
@@ -72,6 +98,8 @@ class AdminTierController extends Controller
      */
     public function show($id)
     {
+        $this->ensurePermissionsColumnExists();
+
         $tier = is_numeric($id)
             ? AdminTier::find($id)
             : AdminTier::where('slug', $id)->orWhere('nama_tier', $id)->first();
@@ -95,6 +123,8 @@ class AdminTierController extends Controller
      */
     public function update(Request $request, $id)
     {
+        $this->ensurePermissionsColumnExists();
+
         $tier = is_numeric($id)
             ? AdminTier::find($id)
             : AdminTier::where('slug', $id)->orWhere('nama_tier', $id)->first();
@@ -127,7 +157,7 @@ class AdminTierController extends Controller
                 $tier->deskripsi = $validated['deskripsi'] ?? $validated['description'] ?? $tier->deskripsi;
             }
 
-            if (array_key_exists('permissions', $validated)) {
+            if (array_key_exists('permissions', $validated) && Schema::hasColumn('admin_tiers', 'permissions')) {
                 $tier->permissions = $validated['permissions'] ?? [];
             }
 
@@ -152,6 +182,8 @@ class AdminTierController extends Controller
      */
     public function destroy($id)
     {
+        $this->ensurePermissionsColumnExists();
+
         $tier = is_numeric($id)
             ? AdminTier::find($id)
             : AdminTier::where('slug', $id)->orWhere('nama_tier', $id)->first();
