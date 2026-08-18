@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\AdminTierController;
 use App\Http\Controllers\AdminNakesController;
 use App\Http\Controllers\SuperAdminNakesController;
 use App\Http\Controllers\LayananController;
@@ -86,10 +87,15 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::delete('/{id}', [SuperAdminNakesController::class, 'destroy']);
     });
 
-    // Admin Account Management
+    // Admin Account & Tier Management
+    Route::get('/manage-admin/tiers', [AdminTierController::class, 'index']);
+    Route::post('/manage-admin/tiers', [AdminTierController::class, 'store']);
+    Route::get('/manage-admin/tiers/{id}', [AdminTierController::class, 'show']);
+    Route::put('/manage-admin/tiers/{id}', [AdminTierController::class, 'update']);
+    Route::delete('/manage-admin/tiers/{id}', [AdminTierController::class, 'destroy']);
+
     Route::get('/manage-admin', [AdminController::class, 'index']);
     Route::post('/manage-admin', [AdminController::class, 'store']);
-    Route::get('/manage-admin/tiers', [AdminController::class, 'getTiers']);
     Route::get('/manage-admin/{id}', [AdminController::class, 'show']);
     Route::put('/manage-admin/{id}', [AdminController::class, 'update']);
     Route::delete('/manage-admin/{id}', [AdminController::class, 'destroy']);

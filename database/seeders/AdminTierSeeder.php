@@ -12,31 +12,43 @@ class AdminTierSeeder extends Seeder
      */
     public function run(): void
     {
-        AdminTier::firstOrCreate(
-            ['nama_tier' => 'Super Admin'],
+        AdminTier::updateOrCreate(
+            ['slug' => 'super-admin'],
             [
-                'slug' => 'super-admin',
+                'nama_tier' => 'Super Admin',
                 'deskripsi' => 'Super Admin dengan akses penuh ke sistem',
                 'is_protected' => true,
+                'permissions' => ['*'],
             ]
         );
 
-        AdminTier::firstOrCreate(
-            ['nama_tier' => 'Admin'],
+        AdminTier::updateOrCreate(
+            ['slug' => 'admin'],
             [
-                'slug' => 'admin',
-                'deskripsi' => 'Admin standar untuk manajemen data',
+                'nama_tier' => 'Admin',
+                'deskripsi' => 'Admin standar untuk manajemen konten dan data',
                 'is_protected' => true,
+                'permissions' => ['dashboard', 'kelola-konten', 'kelola-konten-home', 'kelola-konten-about', 'layanan', 'promo', 'artikel'],
             ]
         );
 
-        // Contoh tier tambahan fleksibel lainnya
-        AdminTier::firstOrCreate(
-            ['nama_tier' => 'Finance'],
+        AdminTier::updateOrCreate(
+            ['slug' => 'editor'],
             [
-                'slug' => 'finance',
+                'nama_tier' => 'Editor',
+                'deskripsi' => 'Admin khusus publikasi artikel dan layanan',
+                'is_protected' => false,
+                'permissions' => ['dashboard', 'layanan', 'promo', 'artikel', 'master-kategori'],
+            ]
+        );
+
+        AdminTier::updateOrCreate(
+            ['slug' => 'finance'],
+            [
+                'nama_tier' => 'Finance',
                 'deskripsi' => 'Admin khusus untuk manajemen pembayaran dan keuangan',
                 'is_protected' => false,
+                'permissions' => ['dashboard', 'master-tarif', 'master-komponen-tarif', 'master-tarif-transport', 'master-kategori-pembayaran', 'master-metode-pembayaran', 'booking'],
             ]
         );
     }

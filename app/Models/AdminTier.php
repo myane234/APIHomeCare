@@ -17,5 +17,11 @@ class AdminTier extends Model
         'slug',
         'deskripsi',
         'is_protected',
+        'permissions',
+    ];
+
+    protected $casts = [
+        'permissions' => 'array',
+        'is_protected' => 'boolean',
     ];
 }

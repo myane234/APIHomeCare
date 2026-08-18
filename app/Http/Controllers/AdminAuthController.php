@@ -39,6 +39,11 @@ class AdminAuthController extends Controller
         // Generate Token & Response Data
         $token = $admin->createToken('admin-token')->plainTextToken;
 
+        // Fetch Tier details (permissions & slug)
+        $tier = \App\Models\AdminTier::where('nama_tier', $admin->tier_admin)
+            ->orWhere('slug', \Illuminate\Support\Str::slug($admin->tier_admin))
+            ->first();
+
         return response()->json([
             'success' => true,
             'message' => 'Berhasil Login sebagai Admin',
@@ -46,6 +51,8 @@ class AdminAuthController extends Controller
                 'token' => $token,
                 'nama' => $admin->nama_lengkap,
                 'tier_admin' => $admin->tier_admin,
+                'tier_slug' => $tier ? $tier->slug : \Illuminate\Support\Str::slug($admin->tier_admin),
+                'permissions' => $tier ? ($tier->permissions ?? []) : [],
             ]
         ], 200);
     }
