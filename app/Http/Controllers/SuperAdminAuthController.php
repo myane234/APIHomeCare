@@ -36,25 +36,18 @@ class SuperAdminAuthController extends Controller
             ], 403);
         }
 
-        // Harus berstatus Super Admin
-        if ($admin->tier_admin !== 'Super Admin') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Akses ditolak. Hanya Super Admin yang diizinkan.',
-            ], 403);
-        }
-
-        // Revoke token lama (opsional, bersihkan sesi sebelumnya)
+        // Samakan flow login dengan admin login agar super admin bisa login lewat
+        // mekanisme admin yang sama, lalu authorize berdasarkan tier_admin di endpoint.
         $admin->tokens()->where('name', 'super-admin-token')->delete();
 
         $token = $admin->createToken('super-admin-token')->plainTextToken;
 
         return response()->json([
             'success' => true,
-            'message' => 'Berhasil login sebagai Super Admin',
+            'message' => 'Berhasil login sebagai Admin / Super Admin',
             'data'    => [
                 'token'      => $token,
-                'roles'      => ['admin', 'superadmin'],
+                'roles'      => ['admin', strtolower(str_replace(' ', '', $admin->tier_admin ?? ''))],
                 'tier_admin' => $admin->tier_admin,
                 'nama'       => $admin->nama_lengkap,
                 'email'      => $admin->email,

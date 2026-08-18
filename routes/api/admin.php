@@ -9,7 +9,6 @@ use App\Http\Controllers\LayananController;
 use App\Http\Controllers\PromoController;
 use App\Http\Controllers\ArtikelController;
 use App\Http\Controllers\BookingController;
-use App\Http\Controllers\SuperAdminAuthController;
 use App\Http\Controllers\SuperAdminMasterData\SuperAdminPasien;
 use App\Http\Controllers\SuperAdminMasterData\SuperAdminDataBarang;
 use App\Http\Controllers\SuperAdminMasterData\SuperAdminMasterTarif;
@@ -25,12 +24,11 @@ use App\Http\Controllers\BhpController;
 use App\Http\Controllers\MappingLayananBhpController;
 use App\Http\Controllers\KecamatanController;
 use App\Http\Controllers\KelurahanController;
-Route::middleware([])->group(function () {
+Route::middleware(['auth:sanctum'])->group(function () {
 
     // Auth Admin & Super Admin
     Route::post('/admin/logout', [AdminAuthController::class, 'logout']);
-    Route::post('/super-admin/logout', [SuperAdminAuthController::class, 'logout']);
-    Route::get('/super-admin/me', [SuperAdminAuthController::class, 'me']);
+    Route::get('/admin/me', [AdminAuthController::class, 'me']);
 
     // Management Layanan
     Route::post('/layanan', [LayananController::class, 'store']);
