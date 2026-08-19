@@ -29,7 +29,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Auth Admin & Super Admin
     Route::post('/admin/logout', [AdminAuthController::class, 'logout']);
-    Route::get('/admin/me', [AdminAuthController::class, 'me']);
+    Route::get('/admin/me', [AdminController::class, 'me']);
 
     // Management Layanan
     Route::post('/layanan', [LayananController::class, 'store']);
@@ -98,9 +98,17 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/manage-admin', [AdminController::class, 'store']);
     Route::get('/manage-admin/{id}', [AdminController::class, 'show']);
     Route::put('/manage-admin/{id}', [AdminController::class, 'update']);
+    
     Route::delete('/manage-admin/{id}', [AdminController::class, 'destroy']);
     
     Route::get('/manage-admin/bookings', [BookingController::class, 'adminIndex']);
+
+    //Profile admin
+    Route::prefix('admin/profile')->group(function () {
+        Route::put('admin/profile/ubah-password', [AdminController::class, 'changePassword']);
+        Route::post('/', [AdminController::class, 'updateProfile']);
+    });
+    
 
     // Management Pasien
     Route::prefix('admin/pasien')->group(function () {
@@ -113,6 +121,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Master Data (BHP & Tarif)
     Route::apiResource('/bhp-items', SuperAdminDataBarang::class);
+    Route::put('/bhp-items/global-margin', [SuperAdminDataBarang::class, 'updateGlobalMargin']);
     Route::apiResource('/master-tarif', SuperAdminMasterTarif::class);
 
     // Tarif Transport CRUD

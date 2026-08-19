@@ -74991,7 +74991,149 @@
                 "id": "1375",
                 "province_id": "13",
                 "name": "KOTA BUKITTINGGI",
-                "districts": []
+                "districts": [
+                    {
+                        "id": "1375010",
+                        "regency_id": "1375",
+                        "name": "GUGUK PANJANG",
+                        "villages": [
+                            {
+                                "id": "1375010001",
+                                "district_id": "1375010",
+                                "name": "BUKIT CANGANG KAYU RAMANG"
+                            },
+                            {
+                                "id": "1375010002",
+                                "district_id": "1375010",
+                                "name": "TAROK DIPO"
+                            },
+                            {
+                                "id": "1375010003",
+                                "district_id": "1375010",
+                                "name": "PAKAN KURAI"
+                            },
+                            {
+                                "id": "1375010004",
+                                "district_id": "1375010",
+                                "name": "AUR TAJUNGKANG TENGAH SAWAH"
+                            },
+                            {
+                                "id": "1375010005",
+                                "district_id": "1375010",
+                                "name": "BENTENG PASAR ATAS"
+                            },
+                            {
+                                "id": "1375010006",
+                                "district_id": "1375010",
+                                "name": "KAYU KUBU"
+                            },
+                            {
+                                "id": "1375010007",
+                                "district_id": "1375010",
+                                "name": "BUKIT APIT PUHUN"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "1375020",
+                        "regency_id": "1375",
+                        "name": "MANDIANGIN KOTO SELAYAN",
+                        "villages": [
+                            {
+                                "id": "1375020001",
+                                "district_id": "1375020",
+                                "name": "PULAI ANAK AIR"
+                            },
+                            {
+                                "id": "1375020002",
+                                "district_id": "1375020",
+                                "name": "KOTO SELAYAN"
+                            },
+                            {
+                                "id": "1375020003",
+                                "district_id": "1375020",
+                                "name": "GAREGEH"
+                            },
+                            {
+                                "id": "1375020004",
+                                "district_id": "1375020",
+                                "name": "MANGGIS GANTING"
+                            },
+                            {
+                                "id": "1375020005",
+                                "district_id": "1375020",
+                                "name": "CAMPAGO IPUH"
+                            },
+                            {
+                                "id": "1375020006",
+                                "district_id": "1375020",
+                                "name": "PUHUN TEMBOK"
+                            },
+                            {
+                                "id": "1375020007",
+                                "district_id": "1375020",
+                                "name": "PUHUN PINTU KABUN"
+                            },
+                            {
+                                "id": "1375020008",
+                                "district_id": "1375020",
+                                "name": "KUBU GULAI BANCAH"
+                            },
+                            {
+                                "id": "1375020009",
+                                "district_id": "1375020",
+                                "name": "CAMPAGO GUGUK BULEK"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "1375030",
+                        "regency_id": "1375",
+                        "name": "AUR BIRUGO TIGO BALEH",
+                        "villages": [
+                            {
+                                "id": "1375030001",
+                                "district_id": "1375030",
+                                "name": "BELAKANG BALOK"
+                            },
+                            {
+                                "id": "1375030002",
+                                "district_id": "1375030",
+                                "name": "SAPIRAN"
+                            },
+                            {
+                                "id": "1375030003",
+                                "district_id": "1375030",
+                                "name": "BIRUGO"
+                            },
+                            {
+                                "id": "1375030004",
+                                "district_id": "1375030",
+                                "name": "AUR KUNING"
+                            },
+                            {
+                                "id": "1375030005",
+                                "district_id": "1375030",
+                                "name": "PAKAN LABUH"
+                            },
+                            {
+                                "id": "1375030006",
+                                "district_id": "1375030",
+                                "name": "KUBU TANJUNG"
+                            },
+                            {
+                                "id": "1375030007",
+                                "district_id": "1375030",
+                                "name": "LADANG CAKIAH"
+                            },
+                            {
+                                "id": "1375030008",
+                                "district_id": "1375030",
+                                "name": "PARIT ANTANG"
+                            }
+                        ]
+                    }
+                ]
             },
             {
                 "id": "1376",
@@ -325055,7 +325197,53 @@
                         "id": "6213050",
                         "regency_id": "6213",
                         "name": "SUMBER BARITO",
-                        "villages": []
+                        "villages": [
+                            {
+                                "id": "6213050001",
+                                "district_id": "6213050",
+                                "name": "KALAPEH BARU"
+                            },
+                            {
+                                "id": "6213050002",
+                                "district_id": "6213050",
+                                "name": "TUMBANG MASAO"
+                            },
+                            {
+                                "id": "6213050003",
+                                "district_id": "6213050",
+                                "name": "BATU MAKAP"
+                            },
+                            {
+                                "id": "6213050004",
+                                "district_id": "6213050",
+                                "name": "TUMBANG KUNYI"
+                            },
+                            {
+                                "id": "6213050005",
+                                "district_id": "6213050",
+                                "name": "OLONG LIKO"
+                            },
+                            {
+                                "id": "6213050006",
+                                "district_id": "6213050",
+                                "name": "TELUK JOLO"
+                            },
+                            {
+                                "id": "6213050007",
+                                "district_id": "6213050",
+                                "name": "LAAS BARU"
+                            },
+                            {
+                                "id": "6213050008",
+                                "district_id": "6213050",
+                                "name": "TUMBANG TUAN"
+                            },
+                            {
+                                "id": "6213050019",
+                                "district_id": "6213050",
+                                "name": "TUMBANG MULUT"
+                            }
+                        ]
                     },
                     {
                         "id": "6213051",
@@ -444444,7 +444632,63 @@
                         "id": "9417050",
                         "regency_id": "9417",
                         "name": "KIWIROK",
-                        "villages": []
+                        "villages": [
+                            {
+                                "id": "9417050008",
+                                "district_id": "9417050",
+                                "name": "BERUSAHA"
+                            },
+                            {
+                                "id": "9417050009",
+                                "district_id": "9417050",
+                                "name": "OKNANGGUL"
+                            },
+                            {
+                                "id": "9417050015",
+                                "district_id": "9417050",
+                                "name": "PELEBIB"
+                            },
+                            {
+                                "id": "9417050016",
+                                "district_id": "9417050",
+                                "name": "KIWI"
+                            },
+                            {
+                                "id": "9417050017",
+                                "district_id": "9417050",
+                                "name": "KUKIHIL"
+                            },
+                            {
+                                "id": "9417050020",
+                                "district_id": "9417050",
+                                "name": "SOPAMIKMA"
+                            },
+                            {
+                                "id": "9417050021",
+                                "district_id": "9417050",
+                                "name": "LOLIM"
+                            },
+                            {
+                                "id": "9417050022",
+                                "district_id": "9417050",
+                                "name": "ASUA"
+                            },
+                            {
+                                "id": "9417050023",
+                                "district_id": "9417050",
+                                "name": "MANGOLDOKI"
+                            },
+                            {
+                                "id": "9417050025",
+                                "district_id": "9417050",
+                                "name": "POMDING"
+                            },
+                            {
+                                "id": "9417050026",
+                                "district_id": "9417050",
+                                "name": "DIIP"
+                            }
+                        ]
                     },
                     {
                         "id": "9417051",

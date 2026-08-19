@@ -16,6 +16,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $tipe_bhp     — 'satuan' | 'paket'
  * @property float  $harga_modal
  * @property float  $harga_jual
+ * @property string $tipe_margin  — 'persen' | 'nominal'
+ * @property float  $nilai_margin
  * @property bool   $is_active
  */
 class BhpItem extends Model
@@ -30,14 +32,33 @@ class BhpItem extends Model
         'tipe_bhp',
         'harga_modal',
         'harga_jual',
+        'tipe_margin',
+        'nilai_margin',
         'is_active',
     ];
 
     protected $casts = [
-        'harga_modal' => 'decimal:2',
-        'harga_jual'  => 'decimal:2',
-        'is_active'   => 'boolean',
+        'harga_modal'  => 'decimal:2',
+        'harga_jual'   => 'decimal:2',
+        'nilai_margin' => 'decimal:2',
+        'is_active'    => 'boolean',
     ];
+
+    /**
+     * Hitung otomatis harga_jual saat data dibuat / diubah
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::saving(function ($item) {
+            if ($item->tipe_margin === 'persen') {
+                $item->harga_jual = $item->harga_modal + ($item->harga_modal * ($item->nilai_margin / 100));
+            } else {
+                $item->harga_jual = $item->harga_modal + $item->nilai_margin;
+            }
+        });
+    }
 
     // ---------------------------------------------------------------
     // Relations
