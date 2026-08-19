@@ -44,8 +44,10 @@ class MasterBankSeeder extends Seeder
             DB::table('master_bank')->insertOrIgnore([
                 'nama_bank'  => $bank['nama_bank'],
                 'kode_bank'  => $bank['kode_bank'],
-                'logo_bank'  => null,
+                'gambar'     => null,
                 'is_active'  => $bank['is_active'],
+                'created_by' => null,
+                'deleted_by' => null,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

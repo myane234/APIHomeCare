@@ -6,6 +6,9 @@ use App\Models\MasterBank;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
+/**
+ * Master Bank(Payout Mitra)
+ */
 class MasterBankController extends Controller
 {
     /**
@@ -44,17 +47,18 @@ class MasterBankController extends Controller
         $validated = $request->validate([
             'nama_bank' => ['required', 'string', 'max:100', 'unique:master_bank,nama_bank'],
             'kode_bank' => ['nullable', 'string', 'max:10'],
-            'logo_bank' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp,svg', 'max:1024'],
+            'gambar' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp,svg', 'max:1024'],
             'is_active' => ['boolean'],
         ]);
 
-        if ($request->hasFile('logo_bank')) {
-            $file = $request->file('logo_bank');
+        if ($request->hasFile('gambar')) {
+            $file = $request->file('gambar');
             $filename = 'bank_logo_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
             $path = $file->storeAs('uploads/bank/logos', $filename, 'public');
-            $validated['logo_bank'] = '/storage/' . $path;
+            $validated['gambar'] = '/storage/' . $path;
         }
 
+        $validated['created_by'] = $request->user()->id_admin;
         $bank = MasterBank::create($validated);
 
         return response()->json([
@@ -74,22 +78,22 @@ class MasterBankController extends Controller
         $validated = $request->validate([
             'nama_bank' => ['sometimes', 'required', 'string', 'max:100', 'unique:master_bank,nama_bank,' . $id . ',id_bank'],
             'kode_bank' => ['nullable', 'string', 'max:10'],
-            'logo_bank' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp,svg', 'max:1024'],
+            'gambar' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp,svg', 'max:1024'],
             'is_active' => ['sometimes', 'boolean'],
         ]);
 
-        if ($request->hasFile('logo_bank')) {
+        if ($request->hasFile('gambar')) {
             // Hapus logo lama
-            if ($bank->logo_bank) {
-                $oldPath = str_replace('/storage/', '', $bank->logo_bank);
+            if ($bank->gambar) {
+                $oldPath = str_replace('/storage/', '', $bank->gambar);
                 if (Storage::disk('public')->exists($oldPath)) {
                     Storage::disk('public')->delete($oldPath);
                 }
             }
-            $file = $request->file('logo_bank');
+            $file = $request->file('gambar');
             $filename = 'bank_logo_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
             $path = $file->storeAs('uploads/bank/logos', $filename, 'public');
-            $validated['logo_bank'] = '/storage/' . $path;
+            $validated['gambar'] = '/storage/' . $path;
         }
 
         $bank->update($validated);
@@ -119,12 +123,16 @@ class MasterBankController extends Controller
     /**
      * Hapus bank (admin)
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $bank = MasterBank::findOrFail($id);
 
-        if ($bank->logo_bank) {
-            $oldPath = str_replace('/storage/', '', $bank->logo_bank);
+        $bank->update([
+            'deleted_by' => $request->user()->id_admin,
+        ]);
+
+        if ($bank->gambar) {
+            $oldPath = str_replace('/storage/', '', $bank->gambar);
             if (Storage::disk('public')->exists($oldPath)) {
                 Storage::disk('public')->delete($oldPath);
             }
