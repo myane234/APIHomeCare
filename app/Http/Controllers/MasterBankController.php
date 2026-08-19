@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * Master Bank(Payout Mitra)
+ * @group master banks(payout Mitra)
  */
 class MasterBankController extends Controller
 {
