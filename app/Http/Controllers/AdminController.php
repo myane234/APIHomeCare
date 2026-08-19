@@ -20,7 +20,8 @@ class AdminController extends Controller
      * 
      * Mengambil data profil admin yang sedang login / terautentikasi.
      * 
-     * @group Profil Admin
+     * @group CMS Admin
+     * @subgroup Profil
      */
     public function me(Request $request)
     {
@@ -34,11 +35,12 @@ class AdminController extends Controller
     /**
      * Update Profile Saya
      * 
-     * Memperbarui profil akun admin yang sedang login (nama, email, deskripsi, foto profile).
+     * Memperbarui profil akun admin yang sedang login.
      * 
-     * @group Profil Admin
+     * @group CMS Admin
+     * @subgroup Profil
      * 
-     * @bodyParam nama_lengkap string string Nama lengkap admin. Example: John Doe
+     * @bodyParam nama_lengkap string Nama lengkap admin. Example: John Doe
      * @bodyParam email string email Email admin (harus unik). Example: john@example.com
      * @bodyParam deskripsi string Deskripsi/bio admin. Example: Admin Operasional
      * @bodyParam foto_profile file File foto profil (jpeg, png, jpg, webp, ico - max 2MB).
@@ -76,12 +78,13 @@ class AdminController extends Controller
      * 
      * Mengubah password akun admin yang sedang login.
      * 
-     * @group Profil Admin
+     * @group CMS Admin
+     * @subgroup Profil
      * 
-     * @urlParam id required ID Admin yang sedang login (Opsional/Ignored jika memakai token). Example: 1
+     * @urlParam id required ID Admin yang sedang login. Example: 1
      * @bodyParam password_lama string required Password lama pengguna saat ini. Example: secret123
      * @bodyParam password_baru string required Password baru minimal 8 karakter. Example: newsecret123
-     * @bodyParam password_baru_confirmation string required Konfirmasi password baru harus cocok. Example: newsecret123
+     * @bodyParam password_baru_confirmation string required Konfirmasi password baru. Example: newsecret123
      * 
      * @response 200 {
      *   "success": true,
@@ -123,7 +126,8 @@ class AdminController extends Controller
      * 
      * Mengambil seluruh data akun admin yang terdaftar.
      * 
-     * @group Manajemen Admin
+     * @group CMS Admin
+     * @subgroup Kelola Admin
      */
     public function index()
     {
@@ -142,7 +146,8 @@ class AdminController extends Controller
      * 
      * Membuat data akun admin baru. Catatan: Tidak diperbolehkan membuat admin dengan tier "Super Admin".
      * 
-     * @group Manajemen Admin
+     * @group CMS Admin
+     * @subgroup Kelola Admin
      * 
      * @bodyParam email string required Email unik admin. Example: admin2@example.com
      * @bodyParam password string required Password minimal 8 karakter. Example: password123
@@ -222,7 +227,8 @@ class AdminController extends Controller
      * 
      * Mengambil detail 1 data admin berdasarkan ID.
      * 
-     * @group Manajemen Admin
+     * @group CMS Admin
+     * @subgroup Kelola Admin
      * 
      * @urlParam id required ID dari Admin. Example: 1
      */
@@ -237,7 +243,8 @@ class AdminController extends Controller
      * 
      * Memperbarui data spesifik admin berdasarkan ID.
      * 
-     * @group Manajemen Admin
+     * @group CMS Admin
+     * @subgroup Kelola Admin
      * 
      * @urlParam id required ID Admin yang akan diubah. Example: 1
      * @bodyParam nama_lengkap string Nama lengkap admin. Example: John Doe Updated
@@ -300,7 +307,8 @@ class AdminController extends Controller
      * 
      * Menghapus data akun admin beserta berkas foto profilnya dari storage.
      * 
-     * @group Manajemen Admin
+     * @group CMS Admin
+     * @subgroup Kelola Admin
      * 
      * @urlParam id required ID Admin yang akan dihapus. Example: 1
      */
@@ -334,7 +342,8 @@ class AdminController extends Controller
      * 
      * Mengambil seluruh data referensi Tier Admin yang tersedia.
      * 
-     * @group Manajemen Admin
+     * @group CMS Admin
+     * @subgroup Kelola Admin
      */
     public function getTiers()
     {
