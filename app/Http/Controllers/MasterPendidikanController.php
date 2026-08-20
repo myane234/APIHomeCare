@@ -6,6 +6,9 @@ use App\Models\MasterPendidikan;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
+/**
+ * @group Master Pendidikan
+ */
 class MasterPendidikanController extends Controller
 {
     public function index()
