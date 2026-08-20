@@ -12,9 +12,12 @@ return new class extends Migration
             $table->bigIncrements('id_bank');
             $table->string('nama_bank');
             $table->string('kode_bank', 10)->nullable();
-            $table->string('logo_bank')->nullable();
+            $table->string('gambar')->nullable();
             $table->boolean('is_active')->default(true);
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 

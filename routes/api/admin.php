@@ -27,6 +27,7 @@ use App\Http\Controllers\KecamatanController;
 use App\Http\Controllers\KelurahanController;
 use App\Http\Controllers\MasterAgamaController;
 use App\Http\Controllers\MasterPendidikanController;
+use App\Http\Controllers\AdminSeederController;
 Route::middleware(['auth:sanctum'])->group(function () {
 
     // Auth Admin & Super Admin
@@ -104,6 +105,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::delete('/manage-admin/{id}', [AdminController::class, 'destroy']);
     
     Route::get('/manage-admin/bookings', [BookingController::class, 'adminIndex']);
+
+    // Seeder Management
+    Route::get('/admin/seeders', [AdminSeederController::class, 'index']);
+    Route::post('/admin/seeders/run', [AdminSeederController::class, 'run']);
+    Route::get('/admin/seeders/wilayah-source', [AdminSeederController::class, 'wilayahSource']);
+    Route::put('/admin/seeders/wilayah-source/api', [AdminSeederController::class, 'saveWilayahApi']);
+    Route::post('/admin/seeders/wilayah-source/file', [AdminSeederController::class, 'saveWilayahFile']);
 
     //Profile admin
     Route::prefix('admin/profile')->group(function () {

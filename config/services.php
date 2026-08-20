@@ -2,6 +2,10 @@
 
 return [
 
+    'wilayah' => [
+        'base_url' => env('WILAYAH_API_BASE_URL'),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Third Party Services
