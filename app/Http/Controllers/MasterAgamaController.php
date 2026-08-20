@@ -6,6 +6,9 @@ use App\Models\MasterAgama;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
+/**
+ * @group master agama controller
+ */
 class MasterAgamaController extends Controller
 {
     public function index()
