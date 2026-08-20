@@ -32,7 +32,7 @@ class DatabaseSeeder extends Seeder
             MasterBankSeeder::class,
             ProvinsiSeeder::class,
             KotaKabupatenSeeder::class,
-            WilayahSeeder::class
+            // WilayahSeeder::class
             // ArtikelSeeder::class,
             // TenagaMedisSeeder::class
         ]);

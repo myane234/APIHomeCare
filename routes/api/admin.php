@@ -25,6 +25,8 @@ use App\Http\Controllers\BhpController;
 use App\Http\Controllers\MappingLayananBhpController;
 use App\Http\Controllers\KecamatanController;
 use App\Http\Controllers\KelurahanController;
+use App\Http\Controllers\MasterAgamaController;
+use App\Http\Controllers\MasterPendidikanController;
 Route::middleware(['auth:sanctum'])->group(function () {
 
     // Auth Admin & Super Admin
@@ -168,5 +170,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::patch('/{id}/toggle-status', [\App\Http\Controllers\MasterBankController::class, 'toggleStatus']);
         Route::delete('/{id}', [\App\Http\Controllers\MasterBankController::class, 'destroy']);
     });
+
+    // Master Agama dan Pendidikan - Admin CRUD
+    Route::apiResource('/master-agama', MasterAgamaController::class)
+        ->parameters(['master-agama' => 'agama']);
+    Route::apiResource('/master-pendidikan', MasterPendidikanController::class)
+        ->parameters(['master-pendidikan' => 'pendidikan']);
 
 });
