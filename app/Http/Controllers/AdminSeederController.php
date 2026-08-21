@@ -215,6 +215,30 @@ class AdminSeederController extends Controller
         ]);
     }
 
+    public function cancelWilayahImport(string $runId)
+    {
+        $run = WilayahImportRun::findOrFail($runId);
+
+        if (!in_array($run->status, ['queued', 'running'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Import wilayah sudah tidak dapat dibatalkan.',
+                'data' => $run,
+            ], 409);
+        }
+
+        $run->update([
+            'status' => 'cancelled',
+            'finished_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Pembatalan import wilayah berhasil diminta.',
+            'data' => $run->fresh('logs'),
+        ]);
+    }
+
     public function latestWilayahImportStatus()
     {
         $run = WilayahImportRun::with('logs')->latest()->first();
