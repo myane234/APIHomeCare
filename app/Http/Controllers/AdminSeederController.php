@@ -184,14 +184,25 @@ class AdminSeederController extends Controller
 
     public function saveWilayahApi(Request $request, WilayahImportService $service)
     {
+        $endpointUrlRule = function (string $attribute, mixed $value, \Closure $fail): void {
+            $urlWithoutPlaceholder = preg_replace('/\{[^}]+\}/', 'placeholder', $value);
+
+            if (!filter_var($urlWithoutPlaceholder, FILTER_VALIDATE_URL)) {
+                $fail("{$attribute} harus berupa URL yang valid.");
+            }
+        };
+
         $validated = $request->validate([
-            'base_url' => ['required', 'url', 'max:2000'],
+            'provinces_url' => ['required', 'max:2000', $endpointUrlRule],
+            'regencies_url' => ['required', 'max:2000', $endpointUrlRule],
+            'districts_url' => ['required', 'max:2000', $endpointUrlRule],
+            'villages_url' => ['required', 'max:2000', $endpointUrlRule],
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Sumber API wilayah berhasil disimpan.',
-            'data' => $service->saveApi($validated['base_url']),
+            'data' => $service->saveApi($validated),
         ]);
     }
 
