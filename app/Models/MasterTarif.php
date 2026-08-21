@@ -7,8 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Model MasterTarif
- *
- * Blueprint utama semua komponen tarif yang dihitung secara dinamis.
  */
 class MasterTarif extends Model
 {
@@ -22,38 +20,18 @@ class MasterTarif extends Model
         'id_layanan',
         'id_kota',
         'id_provinsi',
-        'tarif_pasien',
         'fee_nakes_tipe',
         'fee_nakes_nilai',
-        'transport_base_fare',
-        'transport_per_km',
         'fee_nakes_nominal',
         'fee_platform_nominal',
-        'persen_ppn',
-        'total_ppn',
-        'total_biaya_admin',
-        'total_biaya_lainnya',
-        'subtotal',
-        'total_tarif_final',
         'is_active',
-        'synced_at',
     ];
 
     protected $casts = [
-        'tarif_pasien' => 'decimal:2',
         'fee_nakes_nilai' => 'decimal:2',
-        'transport_base_fare' => 'decimal:2',
-        'transport_per_km' => 'decimal:2',
         'fee_nakes_nominal' => 'decimal:2',
         'fee_platform_nominal' => 'decimal:2',
-        'persen_ppn' => 'decimal:2',
-        'total_ppn' => 'decimal:2',
-        'total_biaya_admin' => 'decimal:2',
-        'total_biaya_lainnya' => 'decimal:2',
-        'subtotal' => 'decimal:2',
-        'total_tarif_final' => 'decimal:2',
         'is_active' => 'boolean',
-        'synced_at' => 'datetime',
     ];
 
     public function layanan()

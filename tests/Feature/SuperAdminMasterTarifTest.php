@@ -51,7 +51,7 @@ class SuperAdminMasterTarifTest extends TestCase
 
         $layanan = MasterLayanan::create([
             'nama_layanan' => 'Layanan Test 1',
-            'harga' => 150000,
+            'harga' => 100000,
             'is_active' => true,
         ]);
 
@@ -75,7 +75,6 @@ class SuperAdminMasterTarifTest extends TestCase
             'layanan_ids' => [$layanan->id_layanan, $layanan2->id_layanan],
             'komponen_tarif_ids' => [$komponen->id_komponen],
             'id_provinsi' => $prov->id_provinsi,
-            'tarif_pasien' => 100000,
             'fee_nakes_tipe' => 'persen',
             'fee_nakes_nilai' => 80,
             'is_active' => true,
@@ -94,7 +93,6 @@ class SuperAdminMasterTarifTest extends TestCase
             'id_provinsi' => $prov->id_provinsi,
             'fee_nakes_nominal' => 80000,
             'fee_platform_nominal' => 20000,
-            'total_biaya_admin' => 5000,
         ]);
 
         $this->assertDatabaseHas('master_tarif', [
@@ -118,7 +116,6 @@ class SuperAdminMasterTarifTest extends TestCase
         $payload = [
             'nama_template' => 'Tarif Nominal Nakes',
             'id_layanan' => $layanan->id_layanan,
-            'tarif_pasien' => 200000,
             'fee_nakes_tipe' => 'nominal',
             'fee_nakes_nilai' => 150000,
             'is_active' => true,

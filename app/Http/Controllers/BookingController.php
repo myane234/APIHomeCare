@@ -140,10 +140,10 @@ class BookingController extends Controller
                 ->first();
         }
 
-        // SL = Tarif Layanan / Jasa (dari kolom harga di master_layanan atau dari masterTarif blueprint)
-        $tarifLayananJasaMedis = $masterTarif ? (float) $masterTarif->tarif_pasien : (float) $layanan->harga;
+        // SL = Tarif Layanan / Jasa (dari kolom harga di master_layanan atau dari masterTarif)
+        $tarifLayananJasaMedis = $masterTarif && isset($masterTarif->tarif_pasien) ? (float) $masterTarif->tarif_pasien : (float) $layanan->harga;
 
-        // SB = Tarif BHP — ambil dari blueprint atau dihitung dari default layanan
+        // SB = Tarif BHP — hitung dari default layanan
         $tarifBahanHabisPakai = 0.0;
         $hppBhp = 0.0;
         $totalBhpDihitungManual = 0.0;
@@ -154,33 +154,33 @@ class BookingController extends Controller
             $totalBhpDihitungManual += $hargaBhp * $qty;
         }
 
-        if ($masterTarif) {
-            $tarifBahanHabisPakai = (float) $masterTarif->total_bhp;
-        } else {
-            $tarifBahanHabisPakai = $totalBhpDihitungManual;
-        }
+        $tarifBahanHabisPakai = $masterTarif && isset($masterTarif->total_bhp) ? (float) $masterTarif->total_bhp : $totalBhpDihitungManual;
 
-        // ST = Tarif Transport (dari template master_tarif)
-        $tarifTransportBaseFare = $masterTarif ? (float) $masterTarif->transport_base_fare : 0.0;
-        $tarifTransportPerKm = $masterTarif ? (float) $masterTarif->transport_per_km : 0.0;
+        // ST = Tarif Transport
+        $tarifTransportBaseFare = $masterTarif ? (float) ($masterTarif->transport_base_fare ?? 0.0) : 0.0;
+        $tarifTransportPerKm = $masterTarif ? (float) ($masterTarif->transport_per_km ?? 0.0) : 0.0;
         $tarifTransportasiFinal = 0.0;
         if (!$layanan->include_transport && $distance > 0) {
             $tarifTransportasiFinal = $tarifTransportBaseFare + ($distance * $tarifTransportPerKm);
         }
 
-        // BA = Biaya Administrasi (snapshot dari master_tarif)
-        $biayaAdministrasiAplikasi = $masterTarif ? (float) $masterTarif->total_biaya_admin : 0.0;
+        // BA = Biaya Administrasi
+        $biayaAdministrasiAplikasi = $masterTarif ? (float) ($masterTarif->total_biaya_admin ?? 0.0) : 0.0;
 
         // PPN — dihitung dari (SL + SB + ST)
-        $persentasePpnPajak = $masterTarif ? (float) $masterTarif->persen_ppn : 0.0;
+        $persentasePpnPajak = $masterTarif ? (float) ($masterTarif->persen_ppn ?? 0.0) : 0.0;
         $nominalPpnPajak = ($tarifLayananJasaMedis + $tarifBahanHabisPakai + $tarifTransportasiFinal) * ($persentasePpnPajak / 100);
 
         // TOTAL yang dibayar pasien
         $totalTagihanPasien = $tarifLayananJasaMedis + $tarifBahanHabisPakai + $tarifTransportasiFinal + $biayaAdministrasiAplikasi + $nominalPpnPajak;
 
         // Bagi Hasil — snapshot dari master_tarif
-        $persentaseBagianNakes = $masterTarif ? (float) $masterTarif->potongan_persen_nakes : 0.0;
-        $nominalHakNakes = ($tarifLayananJasaMedis * ($persentaseBagianNakes / 100)) + $tarifTransportasiFinal;
+        if ($masterTarif && isset($masterTarif->fee_nakes_nominal) && $masterTarif->fee_nakes_nominal > 0) {
+            $nominalHakNakes = (float) $masterTarif->fee_nakes_nominal + $tarifTransportasiFinal;
+        } else {
+            $persentaseBagianNakes = $masterTarif ? (float) ($masterTarif->potongan_persen_nakes ?? 80.0) : 80.0;
+            $nominalHakNakes = ($tarifLayananJasaMedis * ($persentaseBagianNakes / 100)) + $tarifTransportasiFinal;
+        }
 
         $feeMidtrans = (float) env('FEE_MIDTRANS', 4000.0);
         $estimasiProfitHomeCare = ($tarifLayananJasaMedis * ((100 - $persentaseBagianNakes) / 100)) + $tarifBahanHabisPakai + $biayaAdministrasiAplikasi - $feeMidtrans - $hppBhp;

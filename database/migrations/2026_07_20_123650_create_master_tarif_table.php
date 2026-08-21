@@ -14,21 +14,12 @@ return new class extends Migration {
             $table->unsignedBigInteger('id_provinsi')->nullable();
             $table->unsignedBigInteger('id_kota')->nullable()->comment('Null = Berlaku Nasional');
 
-            $table->decimal('tarif_pasien', 12, 2)->default(0);
-            $table->decimal('transport_base_fare', 10, 2)->default(0);
-            $table->decimal('transport_per_km', 10, 2)->default(0);
             $table->enum('fee_nakes_tipe', ['nominal', 'persen'])->default('persen');
-            $table->decimal('fee_nakes_nilai', 12, 2)->default(80);
+            $table->decimal('fee_nakes_nilai', 12, 2)->default(0);
             $table->decimal('fee_nakes_nominal', 12, 2)->default(0);
             $table->decimal('fee_platform_nominal', 12, 2)->default(0);
-            $table->decimal('persen_ppn', 5, 2)->default(0);
-            $table->decimal('total_ppn', 10, 2)->default(0);
-            $table->decimal('total_biaya_admin', 10, 2)->default(0);
-            $table->decimal('total_biaya_lainnya', 10, 2)->default(0);
-            $table->decimal('subtotal', 12, 2)->default(0);
-            $table->decimal('total_tarif_final', 12, 2)->default(0);
+
             $table->boolean('is_active')->default(true);
-            $table->timestamp('synced_at')->nullable();
             $table->timestamps();
 
             $table->unique(['nama_template', 'id_layanan', 'id_kota'], 'master_tarif_template_layanan_kota_unique');

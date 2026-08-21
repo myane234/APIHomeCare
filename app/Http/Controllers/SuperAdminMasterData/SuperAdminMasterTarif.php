@@ -4,52 +4,21 @@ namespace App\Http\Controllers\SuperAdminMasterData;
 
 use App\Http\Controllers\Controller;
 use App\Models\MasterTarif;
-use App\Models\MasterKomponenBiaya;
-use App\Models\MasterTarifTransport;
+use App\Models\MasterLayanan;
 use App\Models\KotaKabupaten;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
 
 /**
- * Master Tarif Blueprint
+ * Master Tarif System
  * 
  * @group Master Data
- * 
- * @subgroup Master Tarif Blueprint
- * 
- * @resource Master Tarif Blueprint
+ * @subgroup Master Tarif
  */
 class SuperAdminMasterTarif extends Controller
 {
     /**
-     * Tampilkan semua daftar template Master Tarif
-     * 
-     * @response 200 {
-     *  "success": true,
-     *  "message": "Berhasil mengambil data Master Tarif Blueprint",
-     *  "data": [
-     *      {
-     *          "id_master_tarif": 1,
-     *          "nama_template": "Reguler",
-     *          "id_layanan": 1,
-     *          "id_kota": null,
-     *          "tarif_pasien": 150000.00,
-     *          "transport_base_fare": 0.00,
-     *          "transport_per_km": 0.00,
-    *          "fee_nakes_tipe": "persen",
-    *          "fee_nakes_nilai": 80,
-     *          "fee_nakes_nominal": 120000.00,
-     *          "fee_platform_nominal": 30000.00,
-     *          "persen_ppn": 11.00,
-     *          "total_ppn": 16500.00,
-     *          "total_biaya_admin": 5000.00,
-     *          "subtotal": 196500.00,
-     *          "total_tarif_final": 196500.00,
-     *          "is_active": true
-     *      }
-     *  ]
-     * }
+     * Tampilkan semua daftar Master Tarif
      */
     public function index()
     {
@@ -57,21 +26,15 @@ class SuperAdminMasterTarif extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Berhasil mengambil data Master Tarif Blueprint',
+            'message' => 'Berhasil mengambil data Master Tarif',
             'data' => $masterTarifs
         ], 200);
     }
 
     /**
-     * Simpan template Master Tarif baru (Blueprint) dan kalkulasi komponennya
+     * Simpan Master Tarif baru
      * 
-     * @bodyParam nama_template string required Nama template tarif (e.g. Reguler, Weekend, Lansia)
-     * @bodyParam id_layanan int required ID layanan yang bersangkutan
-     * @bodyParam id_kota int optional ID kota/kabupaten (null untuk default nasional)
-     * @bodyParam tarif_pasien numeric required Tarif dasar layanan medis yang dibayar pasien sebelum komponen lain
-    * @bodyParam fee_nakes_tipe string optional Jenis fee nakes: nominal atau persen
-    * @bodyParam fee_nakes_nilai numeric optional Nilai fee sesuai fee_nakes_tipe
-     * @bodyParam is_active boolean optional Status keaktifan template tarif ini
+     * Jika id_provinsi diisi tanpa id_kota, maka tarif akan dibuat otomatis untuk seluruh kota di provinsi tersebut.
      */
     public function store(Request $request)
     {
@@ -84,19 +47,18 @@ class SuperAdminMasterTarif extends Controller
             'komponen_tarif_ids.*' => ['integer', 'exists:master_komponen_biaya,id_komponen'],
             'id_provinsi' => ['nullable', 'exists:master_provinsi,id_provinsi'],
             'id_kota' => ['nullable', 'exists:master_kota_kabupaten,id_kota'],
-            'tarif_pasien' => ['required', 'numeric', 'min:0'],
             'fee_nakes_tipe' => ['sometimes', 'in:nominal,persen'],
-            'fee_nakes_nilai' => ['sometimes', 'numeric', 'min:0'],
+            'fee_nakes_nilai' => ['required', 'numeric', 'min:0'],
             'is_active' => ['boolean'],
         ]);
 
         $feeType = $request->input('fee_nakes_tipe', 'persen');
-        $feeValue = (float) $request->input('fee_nakes_nilai', $request->input('potongan_persen_nakes', 80));
+        $feeValue = (float) $request->input('fee_nakes_nilai', 0);
         if ($feeType === 'persen' && $feeValue > 100) {
             return response()->json(['message' => 'Fee nakes dalam persen tidak boleh lebih dari 100'], 422);
         }
 
-        // Tentukan daftar target kota/kabupaten yang akan dibuatkan/diupdate tarifnya
+        // Tentukan daftar target kota/kabupaten
         $targetKotas = [];
         if ($request->filled('id_kota')) {
             $kota = KotaKabupaten::findOrFail($request->id_kota);
@@ -118,7 +80,6 @@ class SuperAdminMasterTarif extends Controller
                     ];
                 }
             } else {
-                // Fallback jika belum ada data kota di provinsi ini
                 $targetKotas[] = [
                     'id_kota' => null,
                     'id_provinsi' => $request->id_provinsi,
@@ -132,107 +93,39 @@ class SuperAdminMasterTarif extends Controller
             ];
         }
 
+        // Ambil harga dasar dari layanan untuk kalkulasi fee nominal jika tipe persen
+        $layananUtama = MasterLayanan::find($request->id_layanan);
+        $hargaLayanan = $layananUtama ? (float) $layananUtama->harga : 0;
+
+        $nominalFeeNakes = $feeType === 'nominal'
+            ? $feeValue
+            : ($hargaLayanan * ($feeValue / 100));
+        $nominalFeePlatform = max(0, $hargaLayanan - $nominalFeeNakes);
+
         DB::beginTransaction();
         try {
             $createdTarifs = [];
 
-            // Layanan & Komponen yang akan disinkronkan
             $layananIds = array_unique(array_merge(
                 [(int) $request->id_layanan],
                 array_map('intval', $request->input('layanan_ids', []))
             ));
             $komponenIds = $request->input('komponen_tarif_ids', []);
 
-            // 1. Kalkulasi Pembagian Jasa (Nakes vs Platform)
-            $nominalTarifLayananJasa = (float) $request->tarif_pasien;
-            $persentaseBagianNakes = $feeType === 'persen'
-                ? $feeValue
-                : ($nominalTarifLayananJasa > 0 ? ($feeValue / $nominalTarifLayananJasa) * 100 : 0);
-            $nominalFeeNakesJasa = $feeType === 'nominal'
-                ? min($feeValue, $nominalTarifLayananJasa)
-                : $nominalTarifLayananJasa * ($persentaseBagianNakes / 100);
-            $nominalFeePlatformJasa = $nominalTarifLayananJasa - $nominalFeeNakesJasa;
-
-            // 2. Kalkulasi Komponen Tarif (PPN, admin aplikasi, dan lainnya)
-            $komponenQuery = MasterKomponenBiaya::where('is_active', true);
-            if ($request->has('komponen_tarif_ids')) {
-                $komponenQuery->whereIn('id_komponen', $komponenIds);
-            }
-            $daftarKomponenBiayaAktif = $komponenQuery->get();
-
-            $nominalTotalPpnPajak = 0;
-            $persentasePpnPajak = 0;
-            $nominalTotalBiayaAdminAplikasi = 0;
-            $nominalTotalBiayaLainnya = 0;
-
-            foreach ($daftarKomponenBiayaAktif as $komponenBiaya) {
-                $nilaiPotonganDihitung = $komponenBiaya->jenis_nilai === 'persen'
-                    ? ($nominalTarifLayananJasa * ($komponenBiaya->nilai / 100))
-                    : $komponenBiaya->nilai;
-
-                if ($komponenBiaya->tipe_komponen === 'pajak') {
-                    $nominalTotalPpnPajak += $nilaiPotonganDihitung;
-                    if ($komponenBiaya->jenis_nilai === 'persen') {
-                        $persentasePpnPajak = $komponenBiaya->nilai;
-                    }
-                } elseif ($komponenBiaya->tipe_komponen === 'admin_aplikasi') {
-                    $nominalTotalBiayaAdminAplikasi += $nilaiPotonganDihitung;
-                } elseif ($komponenBiaya->tipe_komponen === 'lainnya') {
-                    $nominalTotalBiayaLainnya += $nilaiPotonganDihitung;
-                }
-            }
-
-            // 3. Kalkulasi Ringkasan Akhir
-            $subtotalTarifPasien = $nominalTarifLayananJasa 
-                + $nominalTotalPpnPajak 
-                + $nominalTotalBiayaAdminAplikasi
-                + $nominalTotalBiayaLainnya;
-
-            $totalTarifFinalPasien = $subtotalTarifPasien;
-
             foreach ($targetKotas as $target) {
-                $idKotaItem = $target['id_kota'];
-                $idProvinsiItem = $target['id_provinsi'];
-
-                // Kalkulasi Tarif Transportasi per Kota
-                $tarifTransportBaseFare = 0;
-                $tarifTransportPerKilometer = 0;
-                if ($idKotaItem) {
-                    $transportBlueprint = MasterTarifTransport::where('id_kota', $idKotaItem)->first();
-                    if ($transportBlueprint) {
-                        $tarifTransportBaseFare = $transportBlueprint->tarif_awal;
-                        $tarifTransportPerKilometer = $transportBlueprint->tarif_per_kilometer;
-                    }
-                }
-
                 $masterTarif = MasterTarif::updateOrCreate(
                     [
                         'nama_template' => $request->nama_template,
                         'id_layanan' => $request->id_layanan,
-                        'id_kota' => $idKotaItem,
+                        'id_kota' => $target['id_kota'],
                     ],
                     [
-                        'id_provinsi' => $idProvinsiItem,
-                        'tarif_pasien' => $nominalTarifLayananJasa,
+                        'id_provinsi' => $target['id_provinsi'],
                         'fee_nakes_tipe' => $feeType,
                         'fee_nakes_nilai' => $feeValue,
-
-                        'transport_base_fare' => $tarifTransportBaseFare,
-                        'transport_per_km' => $tarifTransportPerKilometer,
-
-                        'fee_nakes_nominal' => $nominalFeeNakesJasa,
-                        'fee_platform_nominal' => $nominalFeePlatformJasa,
-
-                        'persen_ppn' => $persentasePpnPajak,
-                        'total_ppn' => $nominalTotalPpnPajak,
-                        'total_biaya_admin' => $nominalTotalBiayaAdminAplikasi,
-                        'total_biaya_lainnya' => $nominalTotalBiayaLainnya,
-
-                        'subtotal' => $subtotalTarifPasien,
-                        'total_tarif_final' => $totalTarifFinalPasien,
-
+                        'fee_nakes_nominal' => $nominalFeeNakes,
+                        'fee_platform_nominal' => $nominalFeePlatform,
                         'is_active' => $request->is_active ?? true,
-                        'synced_at' => Carbon::now(),
                     ]
                 );
 
@@ -249,7 +142,7 @@ class SuperAdminMasterTarif extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Blueprint Tarif berhasil dikalkulasi dan disimpan',
+                'message' => 'Master Tarif berhasil disimpan',
                 'data' => count($createdTarifs) === 1 ? $createdTarifs[0] : $createdTarifs
             ], 201);
 
@@ -257,13 +150,13 @@ class SuperAdminMasterTarif extends Controller
             DB::rollBack();
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal menyimpan blueprint tarif: ' . $e->getMessage()
+                'message' => 'Gagal menyimpan master tarif: ' . $e->getMessage()
             ], 500);
         }
     }
 
     /**
-     * Tampilkan detail blueprint tarif berdasarkan ID
+     * Tampilkan detail Master Tarif berdasarkan ID
      */
     public function show($id)
     {
@@ -271,24 +164,13 @@ class SuperAdminMasterTarif extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Detail Master Tarif Blueprint',
+            'message' => 'Detail Master Tarif',
             'data' => $masterTarif
         ], 200);
     }
 
     /**
-     * Merubah dan re-kalkulasi template Master Tarif Blueprint
-     * 
-     * @bodyParam nama_template string optional Nama template tarif
-     * @bodyParam id_layanan int optional ID layanan
-     * @bodyParam layanan_ids array optional List ID layanan yang masuk dalam tarif ini
-     * @bodyParam komponen_tarif_ids array optional List ID komponen biaya/tarif
-     * @bodyParam id_provinsi int optional ID provinsi (jika diset tanpa id_kota, semua kota di provinsi tersebut akan masuk)
-     * @bodyParam id_kota int optional ID kota/kabupaten
-     * @bodyParam tarif_pasien numeric optional Tarif dasar layanan
-     * @bodyParam fee_nakes_tipe string optional Jenis fee nakes: nominal atau persen
-     * @bodyParam fee_nakes_nilai numeric optional Nilai fee sesuai fee_nakes_tipe
-     * @bodyParam is_active boolean optional Status keaktifan
+     * Update Master Tarif
      */
     public function update(Request $request, $id)
     {
@@ -303,7 +185,6 @@ class SuperAdminMasterTarif extends Controller
             'komponen_tarif_ids.*' => ['integer', 'exists:master_komponen_biaya,id_komponen'],
             'id_provinsi' => ['nullable', 'exists:master_provinsi,id_provinsi'],
             'id_kota' => ['nullable', 'exists:master_kota_kabupaten,id_kota'],
-            'tarif_pasien' => ['sometimes', 'required', 'numeric', 'min:0'],
             'fee_nakes_tipe' => ['sometimes', 'in:nominal,persen'],
             'fee_nakes_nilai' => ['sometimes', 'numeric', 'min:0'],
             'is_active' => ['boolean'],
@@ -311,7 +192,6 @@ class SuperAdminMasterTarif extends Controller
 
         DB::beginTransaction();
         try {
-            // Tentukan kota/provinsi
             if ($request->filled('id_kota')) {
                 $kota = KotaKabupaten::findOrFail($request->id_kota);
                 $provinsiId = $request->has('id_provinsi') ? $request->id_provinsi : $masterTarif->id_provinsi;
@@ -334,101 +214,31 @@ class SuperAdminMasterTarif extends Controller
                 }
             }
 
-            // Update data input
             if ($request->has('nama_template')) $masterTarif->nama_template = $request->nama_template;
             if ($request->has('id_layanan')) $masterTarif->id_layanan = $request->id_layanan;
-            if ($request->has('tarif_pasien')) $masterTarif->tarif_pasien = $request->tarif_pasien;
             if ($request->has('fee_nakes_tipe')) $masterTarif->fee_nakes_tipe = $request->fee_nakes_tipe;
             if ($request->has('fee_nakes_nilai')) $masterTarif->fee_nakes_nilai = $request->fee_nakes_nilai;
             if ($request->has('is_active')) $masterTarif->is_active = $request->is_active;
 
-            // Re-kalkulasi Transport
-            $tarifTransportBaseFare = 0;
-            $tarifTransportPerKilometer = 0;
-            if ($masterTarif->id_kota) {
-                $transportBlueprint = MasterTarifTransport::where('id_kota', $masterTarif->id_kota)->first();
-                if ($transportBlueprint) {
-                    $tarifTransportBaseFare = $transportBlueprint->tarif_awal;
-                    $tarifTransportPerKilometer = $transportBlueprint->tarif_per_kilometer;
-                }
-            }
-
-            // Re-kalkulasi Pembagian Jasa
-            $nominalTarifLayananJasa = (float) $masterTarif->tarif_pasien;
+            $layananUtama = MasterLayanan::find($masterTarif->id_layanan);
+            $hargaLayanan = $layananUtama ? (float) $layananUtama->harga : 0;
             $feeType = $masterTarif->fee_nakes_tipe ?: 'persen';
             $feeValue = (float) $masterTarif->fee_nakes_nilai;
+
             if ($feeType === 'persen' && $feeValue > 100) {
                 throw new \InvalidArgumentException('Fee nakes dalam persen tidak boleh lebih dari 100');
             }
-            $persentaseBagianNakes = $feeType === 'persen'
-                ? $feeValue
-                : ($nominalTarifLayananJasa > 0 ? ($feeValue / $nominalTarifLayananJasa) * 100 : 0);
-            $nominalFeeNakesJasa = $feeType === 'nominal'
-                ? min($feeValue, $nominalTarifLayananJasa)
-                : $nominalTarifLayananJasa * ($persentaseBagianNakes / 100);
-            $nominalFeePlatformJasa = $nominalTarifLayananJasa - $nominalFeeNakesJasa;
 
-            // Re-kalkulasi Komponen Tarif
-            $komponenQuery = MasterKomponenBiaya::where('is_active', true);
-            if ($request->has('komponen_tarif_ids')) {
-                $komponenQuery->whereIn('id_komponen', $request->input('komponen_tarif_ids', []));
-            }
-            $daftarKomponenBiayaAktif = $komponenQuery->get();
-
-            $nominalTotalPpnPajak = 0;
-            $persentasePpnPajak = 0;
-            $nominalTotalBiayaAdminAplikasi = 0;
-            $nominalTotalBiayaLainnya = 0;
-
-            foreach ($daftarKomponenBiayaAktif as $komponenBiaya) {
-                $nilaiPotonganDihitung = $komponenBiaya->jenis_nilai === 'persen'
-                    ? ($nominalTarifLayananJasa * ($komponenBiaya->nilai / 100))
-                    : $komponenBiaya->nilai;
-
-                if ($komponenBiaya->tipe_komponen === 'pajak') {
-                    $nominalTotalPpnPajak += $nilaiPotonganDihitung;
-                    if ($komponenBiaya->jenis_nilai === 'persen') {
-                        $persentasePpnPajak = $komponenBiaya->nilai;
-                    }
-                } elseif ($komponenBiaya->tipe_komponen === 'admin_aplikasi') {
-                    $nominalTotalBiayaAdminAplikasi += $nilaiPotonganDihitung;
-                } elseif ($komponenBiaya->tipe_komponen === 'lainnya') {
-                    $nominalTotalBiayaLainnya += $nilaiPotonganDihitung;
-                }
-            }
-
-            // Set final properties
-            $masterTarif->transport_base_fare = $tarifTransportBaseFare;
-            $masterTarif->transport_per_km = $tarifTransportPerKilometer;
-            $masterTarif->fee_nakes_nominal = $nominalFeeNakesJasa;
-            $masterTarif->fee_platform_nominal = $nominalFeePlatformJasa;
-            $masterTarif->fee_nakes_tipe = $feeType;
-            $masterTarif->fee_nakes_nilai = $feeValue;
-
-            $masterTarif->persen_ppn = $persentasePpnPajak;
-            $masterTarif->total_ppn = $nominalTotalPpnPajak;
-            $masterTarif->total_biaya_admin = $nominalTotalBiayaAdminAplikasi;
-            $masterTarif->total_biaya_lainnya = $nominalTotalBiayaLainnya;
-
-            $masterTarif->subtotal = $nominalTarifLayananJasa 
-                + $nominalTotalPpnPajak 
-                + $nominalTotalBiayaAdminAplikasi
-                + $nominalTotalBiayaLainnya;
-
-            $masterTarif->total_tarif_final = $masterTarif->subtotal;
-            $masterTarif->synced_at = Carbon::now();
+            $masterTarif->fee_nakes_nominal = $feeType === 'nominal' ? $feeValue : ($hargaLayanan * ($feeValue / 100));
+            $masterTarif->fee_platform_nominal = max(0, $hargaLayanan - $masterTarif->fee_nakes_nominal);
 
             $masterTarif->save();
 
-            // Jika update menyangkut provinsi tanpa spesifik kota, sinkronkan juga untuk kota-kota lain dalam provinsi tersebut
+            // Jika update provinsi tanpa kota, propagasikan ke kota-kota dalam provinsi tersebut
             if ($request->has('id_provinsi') && $request->id_provinsi !== null && !$request->filled('id_kota')) {
                 $kotasInProv = KotaKabupaten::where('id_provinsi', $request->id_provinsi)->get();
                 foreach ($kotasInProv as $k) {
                     if ((string)$k->id_kota === (string)$masterTarif->id_kota) continue;
-                    
-                    $tBase = 0; $tKm = 0;
-                    $tb = MasterTarifTransport::where('id_kota', $k->id_kota)->first();
-                    if ($tb) { $tBase = $tb->tarif_awal; $tKm = $tb->tarif_per_kilometer; }
 
                     $otherTarif = MasterTarif::updateOrCreate(
                         [
@@ -438,21 +248,11 @@ class SuperAdminMasterTarif extends Controller
                         ],
                         [
                             'id_provinsi' => $request->id_provinsi,
-                            'tarif_pasien' => $masterTarif->tarif_pasien,
                             'fee_nakes_tipe' => $feeType,
                             'fee_nakes_nilai' => $feeValue,
-                            'transport_base_fare' => $tBase,
-                            'transport_per_km' => $tKm,
-                            'fee_nakes_nominal' => $nominalFeeNakesJasa,
-                            'fee_platform_nominal' => $nominalFeePlatformJasa,
-                            'persen_ppn' => $persentasePpnPajak,
-                            'total_ppn' => $nominalTotalPpnPajak,
-                            'total_biaya_admin' => $nominalTotalBiayaAdminAplikasi,
-                            'total_biaya_lainnya' => $nominalTotalBiayaLainnya,
-                            'subtotal' => $masterTarif->subtotal,
-                            'total_tarif_final' => $masterTarif->total_tarif_final,
+                            'fee_nakes_nominal' => $masterTarif->fee_nakes_nominal,
+                            'fee_platform_nominal' => $masterTarif->fee_platform_nominal,
                             'is_active' => $masterTarif->is_active,
-                            'synced_at' => Carbon::now(),
                         ]
                     );
 
@@ -468,8 +268,6 @@ class SuperAdminMasterTarif extends Controller
                 }
             }
 
-            DB::commit();
-
             if ($request->has('layanan_ids') || $request->has('id_layanan')) {
                 $masterTarif->layananTermasuk()->sync(array_unique(array_merge(
                     [$masterTarif->id_layanan],
@@ -480,11 +278,13 @@ class SuperAdminMasterTarif extends Controller
                 $masterTarif->komponenTarif()->sync($request->input('komponen_tarif_ids', []));
             }
 
+            DB::commit();
+
             $masterTarif->load(['layanan', 'kota.provinsi', 'provinsi', 'layananTermasuk', 'komponenTarif']);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Blueprint Tarif berhasil diupdate dan dikalkulasi ulang',
+                'message' => 'Master Tarif berhasil diupdate',
                 'data' => $masterTarif
             ], 200);
 
@@ -492,13 +292,13 @@ class SuperAdminMasterTarif extends Controller
             DB::rollBack();
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal mengupdate blueprint tarif: ' . $e->getMessage()
+                'message' => 'Gagal mengupdate master tarif: ' . $e->getMessage()
             ], 500);
         }
     }
 
     /**
-     * Hapus template blueprint tarif
+     * Hapus Master Tarif
      */
     public function destroy($id)
     {
@@ -507,7 +307,7 @@ class SuperAdminMasterTarif extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Blueprint tarif berhasil dihapus'
+            'message' => 'Master tarif berhasil dihapus'
         ], 200);
     }
 }
