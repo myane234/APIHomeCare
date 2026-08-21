@@ -6,6 +6,9 @@ use App\Models\MasterUniversitas;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
+/**
+ * @group Master Universitas
+ */
 class MasterUniversitasController extends Controller
 {
     public function index()
