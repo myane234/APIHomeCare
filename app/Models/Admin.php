@@ -2,22 +2,35 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
-class Admin extends Model
+class Admin extends Authenticatable
 {
+    use HasApiTokens, HasFactory, Notifiable;
+
     protected $table = 'admins';
     protected $primaryKey = 'id_admin';
 
     protected $fillable = [
-        'id_user',
         'nama_lengkap',
+        'foto_profile',
+        'deskripsi',
+        'email',
+        'password',
+        'is_active',
         'tier_admin',
     ];
 
-    public function user()
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    public function tier()
     {
-        return $this->belongsTo(Users::class, 'id_user', 'id_user');
+        return $this->belongsTo(AdminTier::class, 'tier_admin', 'nama_tier');
     }
 }
-

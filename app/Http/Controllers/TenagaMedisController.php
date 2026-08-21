@@ -390,4 +390,117 @@ class TenagaMedisController extends Controller
             'message' => 'Data Nakes dan seluruh berkas berhasil dihapus.'
         ], 200);
     }
+
+    /**
+     * Lengkapi Data Nakes Setelah Approved (Pas Foto, NPWP, Bank, Pakta Integritas)
+     */
+    public function completeData(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json(['success' => false, 'message' => 'User tidak ditemukan.'], 401);
+        }
+
+        $tenagaMedis = TenagaMedis::where('id_user', $user->id_user)->first();
+
+        if (!$tenagaMedis) {
+            return response()->json(['success' => false, 'message' => 'Data Tenaga Medis tidak ditemukan.'], 404);
+        }
+
+        if ($tenagaMedis->status !== 'approved') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hanya Nakes dengan status approved yang dapat mengisi kelengkapan data.'
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'pas_foto'               => ['required', 'image', 'mimes:jpeg,png,jpg,webp', 'max:3072'],
+            'no_npwp'                => ['required', 'string', 'max:20'],
+            'foto_npwp'              => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:3072'],
+            'id_bank'                => ['required', 'integer', 'exists:master_bank,id_bank'],
+            'nama_pemilik_rekening'  => ['required', 'string', 'max:255'],
+            'no_rekening'            => ['required', 'string', 'max:30'],
+            'file_pakta_integritas'  => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+        ], [
+            'pas_foto.required'              => 'Pas foto wajib diunggah.',
+            'no_npwp.required'               => 'Nomor NPWP wajib diisi.',
+            'foto_npwp.required'             => 'Foto/scan NPWP wajib diunggah.',
+            'id_bank.required'               => 'Nama bank wajib dipilih.',
+            'id_bank.exists'                 => 'Bank yang dipilih tidak valid.',
+            'nama_pemilik_rekening.required' => 'Nama pemilik rekening wajib diisi.',
+            'no_rekening.required'           => 'Nomor rekening wajib diisi.',
+            'file_pakta_integritas.required' => 'File pakta integritas wajib diunggah.',
+        ]);
+
+        $uploadedPaths = [];
+
+        $uploadFile = function ($fieldName, $folder) use ($request, &$uploadedPaths) {
+            if ($request->hasFile($fieldName)) {
+                $file = $request->file($fieldName);
+                $filename = $fieldName . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                $path = $file->storeAs($folder, $filename, 'public');
+                $uploadedPaths[] = $path;
+                return '/storage/' . $path;
+            }
+            return null;
+        };
+
+        try {
+            $pasFoto              = $uploadFile('pas_foto', 'uploads/nakes/pas_foto');
+            $fotoNpwp             = $uploadFile('foto_npwp', 'uploads/nakes/npwp');
+            $filePaktaIntegritas  = $uploadFile('file_pakta_integritas', 'uploads/nakes/pakta_integritas');
+
+            $tenagaMedis->update([
+                'pas_foto'              => $pasFoto,
+                'no_npwp'               => $validated['no_npwp'],
+                'foto_npwp'             => $fotoNpwp,
+                'id_bank'               => $validated['id_bank'],
+                'nama_pemilik_rekening' => $validated['nama_pemilik_rekening'],
+                'no_rekening'           => $validated['no_rekening'],
+                'file_pakta_integritas' => $filePaktaIntegritas,
+                'is_data_complete'      => true,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Kelengkapan data berhasil disimpan. Anda sekarang dapat mengakses dashboard Nakes.',
+                'data'    => $tenagaMedis->fresh(['bank'])
+            ]);
+
+        } catch (\Throwable $e) {
+            foreach ($uploadedPaths as $path) {
+                if (Storage::disk('public')->exists($path)) {
+                    Storage::disk('public')->delete($path);
+                }
+            }
+
+            Log::error('Gagal simpan kelengkapan data Nakes: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menyimpan data. Silakan coba lagi.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Download Template Pakta Integritas
+     */
+    public function downloadPaktaIntegritas()
+    {
+        $filePath = storage_path('app/public/templates/pakta_integritas.pdf');
+
+        if (!file_exists($filePath)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'File pakta integritas belum tersedia. Silakan hubungi admin.'
+            ], 404);
+        }
+
+        return response()->download($filePath, 'Pakta_Integritas_SmartHomeCare.pdf', [
+            'Content-Type' => 'application/pdf',
+        ]);
+    }
 }

@@ -15,33 +15,14 @@ class AdminSeeder extends Seeder
      */
     public function run(): void
     {
-        // Pastikan role admin sudah ada (dari roleSeeder)
-        $adminRole = Role::where('nama_role', 'admin')->first();
-
-        if (!$adminRole) {
-            $adminRole = Role::create(['nama_role' => 'admin']);
-        }
-
-        // Buat user faruq
-        $user = Users::firstOrCreate(
+        // Buat record di tabel admins secara langsung
+        Admin::firstOrCreate(
             ['email' => 'faruq@homecare.com'],
             [
                 'password' => Hash::make('faruqganteng'),
-                'is_active' => true,
-            ]
-        );
-
-        // Attach role admin ke user
-        if (!$user->roles->contains('nama_role', $adminRole->nama_role)) {
-            $user->roles()->attach($adminRole->nama_role);
-        }
-
-        // Buat record di tabel admins
-        Admin::firstOrCreate(
-            ['id_user' => $user->id_user],
-            [
                 'nama_lengkap' => 'Faruq Admin',
-                'tier_admin' => 'Admin', // assuming this field is required based on model
+                'tier_admin' => 'Admin',
+                'is_active' => true,
             ]
         );
     }

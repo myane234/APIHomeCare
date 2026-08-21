@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use App\Models\TenagaMedis;
 use Laravel\Sanctum\HasApiTokens;
 
 class Users extends Authenticatable implements MustVerifyEmail 
@@ -31,6 +32,11 @@ class Users extends Authenticatable implements MustVerifyEmail
     protected $casts = [
         'email_verified_at' => 'datetime',
     ];
+
+    public function tenagaMedis() 
+    {
+    return $this->hasOne(TenagaMedis::class, 'id_user', 'id_user');
+    }
 
     public function pasien() {
         return $this->hasOne(Pasien::class, 'id_user', 'id_user');

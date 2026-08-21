@@ -10,12 +10,14 @@ return new class extends Migration
     {
         Schema::create('admins', function (Blueprint $table) {
             $table->bigIncrements('id_admin');
-            $table->unsignedBigInteger('id_user');
+            $table->string('foto_profile')->nullable();
             $table->string('nama_lengkap');
-            $table->string('tier_admin'); // Diubah jadi string biar dinamis & gak hardcoded
+            $table->string('email')->unique();
+            $table->text('deskripsi')->nullable();
+            $table->string('password');
+            $table->boolean('is_active')->default(true);
+            $table->string('tier_admin');
             $table->timestamps();
-
-            $table->foreign('id_user')->references('id_user')->on('users')->cascadeOnDelete();
         });
     }
 

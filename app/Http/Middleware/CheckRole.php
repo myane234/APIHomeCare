@@ -25,7 +25,21 @@ class CheckRole
         }
 
 
-        $userRoles = $user->roles()->pluck('roles.nama_role')->toArray();
+        if ($user instanceof \App\Models\Admin) {
+            $userRoles = ['admin'];
+            if ($user->tier_admin) {
+                $userRoles[] = strtolower($user->tier_admin);
+                
+                $tier = $user->tier;
+                if ($tier && $tier->slug) {
+                    $userRoles[] = strtolower($tier->slug);
+                } else {
+                    $userRoles[] = \Illuminate\Support\Str::slug($user->tier_admin);
+                }
+            }
+        } else {
+            $userRoles = $user->roles()->pluck('roles.nama_role')->toArray();
+        }
         $hasRole = false;
 
         foreach ($roles as $role) {

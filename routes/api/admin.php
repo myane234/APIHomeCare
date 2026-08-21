@@ -3,13 +3,13 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\AdminTierController;
 use App\Http\Controllers\AdminNakesController;
 use App\Http\Controllers\SuperAdminNakesController;
 use App\Http\Controllers\LayananController;
 use App\Http\Controllers\PromoController;
 use App\Http\Controllers\ArtikelController;
 use App\Http\Controllers\BookingController;
-use App\Http\Controllers\SuperAdminAuthController;
 use App\Http\Controllers\SuperAdminMasterData\SuperAdminPasien;
 use App\Http\Controllers\SuperAdminMasterData\SuperAdminDataBarang;
 use App\Http\Controllers\SuperAdminMasterData\SuperAdminMasterTarif;
@@ -25,13 +25,14 @@ use App\Http\Controllers\BhpController;
 use App\Http\Controllers\MappingLayananBhpController;
 use App\Http\Controllers\KecamatanController;
 use App\Http\Controllers\KelurahanController;
-use App\Http\Controllers\NotificationTemplateController;
-Route::middleware([])->group(function () {
+use App\Http\Controllers\MasterAgamaController;
+use App\Http\Controllers\MasterPendidikanController;
+use App\Http\Controllers\AdminSeederController;
+Route::middleware(['auth:sanctum'])->group(function () {
 
     // Auth Admin & Super Admin
     Route::post('/admin/logout', [AdminAuthController::class, 'logout']);
-    Route::post('/super-admin/logout', [SuperAdminAuthController::class, 'logout']);
-    Route::get('/super-admin/me', [SuperAdminAuthController::class, 'me']);
+    Route::get('/admin/me', [AdminController::class, 'me']);
 
     // Management Layanan
     Route::post('/layanan', [LayananController::class, 'store']);
@@ -89,14 +90,39 @@ Route::middleware([])->group(function () {
         Route::delete('/{id}', [SuperAdminNakesController::class, 'destroy']);
     });
 
-    // Admin Account Management
+    // Admin Account & Tier Management
+    Route::get('/manage-admin/tiers', [AdminTierController::class, 'index']);
+    Route::post('/manage-admin/tiers', [AdminTierController::class, 'store']);
+    Route::get('/manage-admin/tiers/{id}', [AdminTierController::class, 'show']);
+    Route::put('/manage-admin/tiers/{id}', [AdminTierController::class, 'update']);
+    Route::delete('/manage-admin/tiers/{id}', [AdminTierController::class, 'destroy']);
+
     Route::get('/manage-admin', [AdminController::class, 'index']);
     Route::post('/manage-admin', [AdminController::class, 'store']);
-    Route::get('/manage-admin/tiers', [AdminController::class, 'getTiers']);
     Route::get('/manage-admin/{id}', [AdminController::class, 'show']);
     Route::put('/manage-admin/{id}', [AdminController::class, 'update']);
+    
     Route::delete('/manage-admin/{id}', [AdminController::class, 'destroy']);
+    
     Route::get('/manage-admin/bookings', [BookingController::class, 'adminIndex']);
+
+    // Seeder Management
+    Route::get('/admin/seeders', [AdminSeederController::class, 'index']);
+    Route::post('/admin/seeders/run', [AdminSeederController::class, 'run']);
+    Route::post('/admin/seeders/wilayah/run', [AdminSeederController::class, 'startWilayahImport']);
+    Route::get('/admin/seeders/wilayah/runs/latest', [AdminSeederController::class, 'latestWilayahImportStatus']);
+    Route::get('/admin/seeders/wilayah/runs/{runId}', [AdminSeederController::class, 'wilayahImportStatus'])
+        ->whereUuid('runId');
+    Route::get('/admin/seeders/wilayah-source', [AdminSeederController::class, 'wilayahSource']);
+    Route::put('/admin/seeders/wilayah-source/api', [AdminSeederController::class, 'saveWilayahApi']);
+    Route::post('/admin/seeders/wilayah-source/file', [AdminSeederController::class, 'saveWilayahFile']);
+
+    //Profile admin
+    Route::prefix('admin/profile')->group(function () {
+        Route::put('admin/profile/ubah-password', [AdminController::class, 'changePassword']);
+        Route::post('/', [AdminController::class, 'updateProfile']);
+    });
+    
 
     // Management Pasien
     Route::prefix('admin/pasien')->group(function () {
@@ -109,6 +135,7 @@ Route::middleware([])->group(function () {
 
     // Master Data (BHP & Tarif)
     Route::apiResource('/bhp-items', SuperAdminDataBarang::class);
+    Route::put('/bhp-items/global-margin', [SuperAdminDataBarang::class, 'updateGlobalMargin']);
     Route::apiResource('/master-tarif', SuperAdminMasterTarif::class);
 
     // Tarif Transport CRUD
@@ -149,5 +176,19 @@ Route::middleware([])->group(function () {
 
     // Template Notifikasi CRUD
     Route::apiResource('/notification-templates', NotificationTemplateController::class);
+    // Master Bank - Admin CRUD
+    Route::prefix('banks')->group(function () {
+        Route::get('/', [\App\Http\Controllers\MasterBankController::class, 'adminIndex']);
+        Route::post('/', [\App\Http\Controllers\MasterBankController::class, 'store']);
+        Route::put('/{id}', [\App\Http\Controllers\MasterBankController::class, 'update']);
+        Route::patch('/{id}/toggle-status', [\App\Http\Controllers\MasterBankController::class, 'toggleStatus']);
+        Route::delete('/{id}', [\App\Http\Controllers\MasterBankController::class, 'destroy']);
+    });
+
+    // Master Agama dan Pendidikan - Admin CRUD
+    Route::apiResource('/master-agama', MasterAgamaController::class)
+        ->parameters(['master-agama' => 'agama']);
+    Route::apiResource('/master-pendidikan', MasterPendidikanController::class)
+        ->parameters(['master-pendidikan' => 'pendidikan']);
 
 });

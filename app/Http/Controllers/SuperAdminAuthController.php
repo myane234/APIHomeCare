@@ -20,48 +20,37 @@ class SuperAdminAuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        $user = Users::whereEmail($validate['email'])->first();
+        $admin = Admin::where('email', $validate['email'])->first();
 
-        if (!$user || !Hash::check($validate['password'], $user->password)) {
+        if (!$admin || !Hash::check($validate['password'], $admin->password)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Email atau password salah',
             ], 401);
         }
 
-        // Harus punya role admin
-        $roles = $user->roles()->pluck('roles.nama_role')->toArray();
-        if (!in_array('admin', $roles)) {
+        if (!$admin->is_active) {
             return response()->json([
                 'success' => false,
-                'message' => 'Anda tidak memiliki akses',
+                'message' => 'Akun Anda telah dinonaktifkan.',
             ], 403);
         }
 
-        // Harus berstatus Super Admin
-        $admin = Admin::where('id_user', $user->id_user)->first();
+        // Samakan flow login dengan admin login agar super admin bisa login lewat
+        // mekanisme admin yang sama, lalu authorize berdasarkan tier_admin di endpoint.
+        $admin->tokens()->where('name', 'super-admin-token')->delete();
 
-        if (!$admin || $admin->tier_admin !== 'Super Admin') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Akses ditolak. Hanya Super Admin yang diizinkan.',
-            ], 403);
-        }
-
-        // Revoke token lama (opsional, bersihkan sesi sebelumnya)
-        $user->tokens()->where('name', 'super-admin-token')->delete();
-
-        $token = $user->createToken('super-admin-token')->plainTextToken;
+        $token = $admin->createToken('super-admin-token')->plainTextToken;
 
         return response()->json([
             'success' => true,
-            'message' => 'Berhasil login sebagai Super Admin',
+            'message' => 'Berhasil login sebagai Admin / Super Admin',
             'data'    => [
                 'token'      => $token,
-                'roles'      => $roles,
+                'roles'      => ['admin', strtolower(str_replace(' ', '', $admin->tier_admin ?? ''))],
                 'tier_admin' => $admin->tier_admin,
                 'nama'       => $admin->nama_lengkap,
-                'email'      => $user->email,
+                'email'      => $admin->email,
             ],
         ]);
     }
@@ -78,16 +67,15 @@ class SuperAdminAuthController extends Controller
 
     public function me(Request $request)
     {
-        $user  = $request->user();
-        $admin = Admin::where('id_user', $user->id_user)->first();
+        $admin = $request->user();
 
         return response()->json([
             'success' => true,
             'data'    => [
-                'email'      => $user->email,
-                'nama'       => $admin?->nama_lengkap,
-                'tier_admin' => $admin?->tier_admin,
-                'roles'      => $user->roles()->pluck('roles.nama_role'),
+                'email'      => $admin->email,
+                'nama'       => $admin->nama_lengkap,
+                'tier_admin' => $admin->tier_admin,
+                'roles'      => ['admin', strtolower(str_replace(' ', '', $admin->tier_admin))],
             ],
         ]);
     }

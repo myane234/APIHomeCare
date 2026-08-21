@@ -46,12 +46,14 @@ return new class extends Migration {
         // 4. TABEL MASTER BHP
         Schema::create('master_bhp', function (Blueprint $table) {
             $table->id('id_bhp');
-            $table->string('nama_bhp');
-            $table->enum('tipe_bhp', ['satuan', 'paket']);
-            $table->decimal('harga_modal', 10, 2);
-            $table->decimal('harga_jual', 10, 2);
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
+    $table->string('nama_bhp');
+    $table->enum('tipe_bhp', ['satuan', 'paket'])->default('satuan');
+    $table->decimal('harga_modal', 10, 2);
+    $table->decimal('harga_jual', 10, 2)->default(0);
+    $table->enum('tipe_margin', ['persen', 'nominal'])->default('persen');
+    $table->decimal('nilai_margin', 10, 2)->default(0);
+    $table->boolean('is_active')->default(true);
+    $table->timestamps();
         });
 
         // 5. TABEL MAPPING LAYANAN BHP
