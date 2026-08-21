@@ -53,6 +53,25 @@ return new class extends Migration
             $table->enum('status', ['pending', 'pelatihan', 'approved', 'rejected'])->default('pending');
             $table->text('admin_notes')->nullable();
 
+            // ===== KELENGKAPAN DATA SETELAH APPROVED =====
+            // Pas Foto (beda dari foto_profile yg untuk avatar profil)
+            $table->string('pas_foto')->nullable();
+
+            // NPWP
+            $table->string('no_npwp', 20)->nullable();
+            $table->string('foto_npwp')->nullable();
+
+            // Data Bank
+            $table->unsignedBigInteger('id_bank')->nullable()->index();
+            $table->string('nama_pemilik_rekening')->nullable();
+            $table->string('no_rekening', 30)->nullable();
+
+            // Pakta Integritas (file yang sudah ditandatangani nakes)
+            $table->string('file_pakta_integritas')->nullable();
+
+            // Flag kelengkapan data setelah approved
+            $table->boolean('is_data_complete')->default(false);
+
             $table->timestamps();
         });
     }

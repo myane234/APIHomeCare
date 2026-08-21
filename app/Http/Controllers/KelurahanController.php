@@ -7,46 +7,85 @@ use Illuminate\Http\Request;
 use Exception;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * @group API Master Kelurahan
+ */
+
 class KelurahanController extends Controller
 {
     public function index(Request $request)
     {
+        $perPage = (int) $request->query('per_page', 50);
+
         $query = Kelurahan::query();
 
-        // Optional filter by id_kecamatan
-        if ($request->has('id_kecamatan')) {
+        if ($request->filled('id_kecamatan')) {
             $query->where('id_kecamatan', $request->input('id_kecamatan'));
         }
 
-        $data = $query->with('kecamatan')->get();
+      
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('nama_kelurahan', 'LIKE', "%{$search}%")
+                  ->orWhereHas('kecamatan', function ($qKec) use ($search) {
+                      $qKec->where('nama_kecamatan', 'LIKE', "%{$search}%");
+                  });
+            });
+        }
+
+        // Eager load kecamatan + kotaKabupaten
+        $data = $query->with('kecamatan.kotaKabupaten')->paginate($perPage);
+
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengambil daftar Kelurahan',
-            'data' => $data,
-            'total' => count($data)
+            'data'    => $data->items(),
+            'meta'    => [
+                'total'        => $data->total(),
+                'per_page'     => $data->perPage(),
+                'current_page' => $data->currentPage(),
+                'last_page'    => $data->lastPage(),
+            ],
         ], 200);
     }
 
     public function store(Request $request)
     {
+
         $validated = $request->validate([
-            'id_kelurahan' => ['required', 'string', 'unique:master_kelurahan,id_kelurahan'],
-            'id_kecamatan' => ['required', 'string', 'exists:master_kecamatan,id_kecamatan'],
-            'nama_kelurahan' => ['required', 'string', 'max:255'],
+            'id_kecamatan' => ['required', 'string', 'unique:master_kecamatan,id_kecamatan'],
+            'nama_kota' => ['required', 'string'],
+            'nama_kecamatan' => ['required', 'string', 'max:255'],
         ]);
 
+        $kota = KotaKabupaten::where('nama_kota', $request->nama_kota)->first();
+
+        if (!$kota) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kota/Kabupaten "' . $request->nama_kota . '" tidak ditemukan di database!'
+            ], 404);
+        }
+
         try {
-            $kelurahan = Kelurahan::create($validated);
+            $kecamatan = Kecamatan::create([
+                'id_kecamatan' => $request->id_kecamatan,
+                'regency_id' => $kota->id_kota,
+                'nama_kecamatan' => $request->nama_kecamatan,
+            ]);
+
             return response()->json([
                 'success' => true,
-                'message' => 'Berhasil menambahkan Kelurahan',
-                'data' => $kelurahan
+                'message' => 'Berhasil menambahkan Kecamatan',
+                'data' => $kecamatan->load('kotaKabupaten')
             ], 201);
+
         } catch (Exception $e) {
             Log::error($e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal menambahkan Kelurahan'
+                'message' => 'Gagal menambahkan Kecamatan'
             ], 500);
         }
     }
@@ -90,7 +129,7 @@ class KelurahanController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Berhasil memperbarui Kelurahan',
-                'data' => $kelurahan
+                'data' => $kelurahan->load('kecamatan')
             ], 200);
         } catch (Exception $e) {
             Log::error($e->getMessage());

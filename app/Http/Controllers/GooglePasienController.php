@@ -14,9 +14,8 @@ use Illuminate\Support\Facades\Log;
 /**
  * @group User Authentication
  * 
- * Endpoint Login Pasien Dengan Google (rencana pasien dan nakes sih)
+ * Endpoint Login Google Pasien / Nakes
  */
-
 class GooglePasienController extends Controller
 {
   public function handleGoogleCallback(Request $request)
@@ -30,60 +29,67 @@ class GooglePasienController extends Controller
       $driver = Socialite::driver('google');
       $googleUser = $driver->userFromToken($request->access_token);
 
-      $User = DB::transaction(function () use ($googleUser) {
-        $checkUser = Users::where('email', '=', $googleUser->getEmail(), 'and')->first();
+      $user = DB::transaction(function () use ($googleUser) {
+        // 1. Cari user berdasarkan email
+        $checkUser = Users::where('email', $googleUser->getEmail())->first();
 
         if (!$checkUser) {
-          $user = Users::create([
-            'email' => $googleUser->getEmail(),
-            'password' => null,
+          $newUser = Users::create([
+            'email'     => $googleUser->getEmail(),
+            'password'  => null,
             'is_active' => true,
             'google_id' => $googleUser->getId(),
           ]);
 
-         $user->roles()->attach(2);
+          $role = Role::firstOrCreate(['nama_role' => 'pasien']);
+          $newUser->roles()->attach($role->nama_role);
 
+          // Buat record profil Pasien awal
           Pasien::create([
-            'id_user' => $user->id_user,
-            'nama_lengkap' => $googleUser->getName() ?? 'Guest',
-            'nik' => null,
+            'id_user'        => $newUser->id_user,
+            'nama_lengkap'   => $googleUser->getName() ?? 'Guest',
+            'nik'            => null,
             'golongan_darah' => null,
-            'jenis_kelamin' => null,
-            'alamat_utama' => null,
+            'jenis_kelamin'  => null,
+            'alamat_utama'   => null,
           ]);
-          return $user;
+
+          return $newUser;
         } 
-        elseif (!$checkUser->google_id) {
+        
+        if (!$checkUser->google_id) {
           $checkUser->update(['google_id' => $googleUser->getId()]);
         }
 
         return $checkUser;
       });
 
-      if (!$User->is_active) {
+      if (!$user->is_active) {
         return response()->json([
           'success' => false,
           'message' => 'Akun Anda telah dinonaktifkan oleh admin.',
         ], 403);
       }
 
-      $User->load('pasien');
-      $userRoles = $User->roles()->pluck('roles.nama_role')->toArray();
+      $user->load(['pasien', 'tenagaMedis']); 
+      $userRoles = $user->roles()->pluck('roles.nama_role')->toArray();
 
-      $token = $User->createToken('auth-token')->plainTextToken;
-      $pasien = $User->pasien;
-      $isProfileComplete = $pasien && $pasien->nik && $pasien->golongan_darah && $pasien->jenis_kelamin && $pasien->alamat_utama && $User->password;
+      $pasien = $user->pasien;
+      $isProfileComplete = $pasien && $pasien->nik && $pasien->golongan_darah && $pasien->jenis_kelamin && $pasien->alamat_utama && $user->password;
+
+      $token = $user->createToken('auth-token')->plainTextToken;
 
       return response()->json([
-        'success' => true,
-        'message' => 'Login Google Berhasil',
-        'token' => $token,
-        'user' => $User,
-        'roles' => $userRoles,
+        'success'             => true,
+        'message'             => 'Login Google Berhasil',
+        'token'               => $token,
+        'user'                => $user,
+        'roles'               => $userRoles,
         'is_profile_complete' => (bool) $isProfileComplete
       ], 200);
+
     } catch (Exception $e) {
-    Log::error($e->getMessage());
+      Log::error($e->getMessage());
 
       return response()->json([
         'success' => false,
@@ -91,7 +97,4 @@ class GooglePasienController extends Controller
       ], 500);
     }
   }
-
-  
 }
-

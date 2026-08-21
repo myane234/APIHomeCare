@@ -23,14 +23,17 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             roleSeeder::class,
+            AdminTierSeeder::class,
             AdminSeeder::class,
             SuperAdminSeeder::class,
             KategoriLayananSeeder::class,
                 //LayananSeeder::class,
                 //PromoSeeder::class,
+            MasterBankSeeder::class,
             ProvinsiSeeder::class,
             KotaKabupatenSeeder::class,
             WilayahSeeder::class,
+            GlobalConfigSeeder::class
             // ArtikelSeeder::class,
             // TenagaMedisSeeder::class
         ]);

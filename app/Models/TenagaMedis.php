@@ -53,11 +53,22 @@ class TenagaMedis extends Model
         // Status
         'status',
         'admin_notes',
+
+        // Kelengkapan Data Setelah Approved
+        'pas_foto',
+        'no_npwp',
+        'foto_npwp',
+        'id_bank',
+        'nama_pemilik_rekening',
+        'no_rekening',
+        'file_pakta_integritas',
+        'is_data_complete',
     ];
 
     protected $casts = [
         'dokumen_tambahan' => 'array',
         'tanggal_lahir'    => 'date',
+        'is_data_complete' => 'boolean',
     ];
 
     public function user()
@@ -83,5 +94,10 @@ class TenagaMedis extends Model
             'id_tenaga_medis',
             'id_kategori_layanan'
         );
+    }
+
+    public function bank()
+    {
+        return $this->belongsTo(MasterBank::class, 'id_bank', 'id_bank');
     }
 }

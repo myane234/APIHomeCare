@@ -3,8 +3,8 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\File;
+use App\Services\WilayahImportService;
 use App\Models\WilayahLayanan;
 use App\Models\KotaKabupaten;
 use App\Models\Kecamatan;
@@ -15,13 +15,11 @@ class WilayahSeeder extends Seeder
     /**
      * Run the database seeds.
      */
-    public function run(): void
+    public function run(WilayahImportService $importService): void
     {
         // Hilangkan limit waktu eksekusi & naikkan batas memori
         ini_set('max_execution_time', 0);
         ini_set('memory_limit', '2048M');
-
-        $baseUrl = 'https://www.emsifa.com/api-wilayah-indonesia/api';
 
         // Lokasi penyiapan folder dan nama file JSON keluaran
         $directoryPath = database_path('seeders/data');
@@ -31,15 +29,8 @@ class WilayahSeeder extends Seeder
             File::makeDirectory($directoryPath, 0755, true);
         }
 
-        $this->command->info("1. Mengambil data Provinsi dari API...");
-        $responseProvinsi = Http::get("{$baseUrl}/provinces.json");
-
-        if ($responseProvinsi->failed()) {
-            $this->command->error("Gagal mengambil data Provinsi.");
-            return;
-        }
-
-        $provinces = $responseProvinsi->json();
+        $this->command->info('1. Membaca sumber data wilayah yang tersimpan...');
+        $provinces = $importService->load();
         $exportData = [];
 
         foreach ($provinces as $prov) {
@@ -58,17 +49,15 @@ class WilayahSeeder extends Seeder
                 'regencies' => []
             ];
 
-            // B. Mengambil Kota/Kabupaten
-            $responseKota = Http::get("{$baseUrl}/regencies/{$prov['id']}.json");
-
-            if ($responseKota->successful()) {
-                $cities = $responseKota->json();
-
-                foreach ($cities as $city) {
+            // B. Memproses Kota/Kabupaten dari sumber yang dipilih
+            foreach ($prov['regencies'] ?? [] as $city) {
                     // Simpan ke Database (Kota)
                     $kotaModel = KotaKabupaten::updateOrCreate(
-                        ['nama_kota' => $city['name']],
-                        ['id_provinsi' => $provinsiModel->id_provinsi]
+                        ['id_kota' => $city['id']],
+                        [
+                            'nama_kota' => $city['name'],
+                            'id_provinsi' => $provinsiModel->id_provinsi
+                        ]
                     );
 
                     $cityData = [
@@ -78,13 +67,8 @@ class WilayahSeeder extends Seeder
                         'districts' => []
                     ];
 
-                    // C. Mengambil Kecamatan
-                    $responseDistricts = Http::get("{$baseUrl}/districts/{$city['id']}.json");
-
-                    if ($responseDistricts->successful()) {
-                        $districts = $responseDistricts->json();
-
-                        foreach ($districts as $district) {
+                    // C. Memproses Kecamatan dari sumber yang dipilih
+                    foreach ($city['districts'] ?? [] as $district) {
                             // Simpan ke Database (Kecamatan)
                             Kecamatan::updateOrCreate(
                                 ['id_kecamatan' => $district['id']],
@@ -101,14 +85,9 @@ class WilayahSeeder extends Seeder
                                 'villages' => []
                             ];
 
-                            // D. Mengambil Kelurahan/Desa
-                            $responseVillages = Http::get("{$baseUrl}/villages/{$district['id']}.json");
-
-                            if ($responseVillages->successful()) {
-                                $villages = $responseVillages->json();
-                                $kelurahanBatch = [];
-
-                                foreach ($villages as $village) {
+                            // D. Memproses Kelurahan/Desa dari sumber yang dipilih
+                            $kelurahanBatch = [];
+                            foreach ($district['villages'] ?? [] as $village) {
                                     // Untuk Database
                                     $kelurahanBatch[] = [
                                         'id_kelurahan' => $village['id'],
@@ -124,25 +103,21 @@ class WilayahSeeder extends Seeder
                                         'district_id' => $village['district_id'] ?? $district['id'],
                                         'name' => $village['name'],
                                     ];
-                                }
+                            }
 
-
-                                if (!empty($kelurahanBatch)) {
-                                    Kelurahan::upsert(
-                                        $kelurahanBatch,
-                                        ['id_kelurahan'],
-                                        ['id_kecamatan', 'nama_kelurahan', 'updated_at']
-                                    );
-                                }
+                            if (!empty($kelurahanBatch)) {
+                                Kelurahan::upsert(
+                                    $kelurahanBatch,
+                                    ['id_kelurahan'],
+                                    ['id_kecamatan', 'nama_kelurahan', 'updated_at']
+                                );
                             }
 
                             $cityData['districts'][] = $districtData;
-                        }
                     }
 
                     $provData['regencies'][] = $cityData;
                     $this->command->info("  -> Berhasil memproses & menyusun JSON untuk: {$city['name']}");
-                }
             }
 
             $exportData[] = $provData;
