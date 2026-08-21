@@ -64,6 +64,56 @@ class WilayahImportService
             : $this->loadFile($source->file_path);
     }
 
+    public function loadProvinces(): array
+    {
+        $source = $this->getSource();
+        if (!$source) {
+            throw new RuntimeException('Sumber wilayah belum dikonfigurasi.');
+        }
+
+        if ($source->source_type === 'api') {
+            return $this->requestJson($this->apiUrls($source)['provinces']);
+        }
+
+        return array_map(
+            static fn (array $province): array => [
+                'id' => $province['id'],
+                'name' => $province['name'],
+            ],
+            $this->loadFile($source->file_path)
+        );
+    }
+
+    public function loadRegencies(): array
+    {
+        $source = $this->getSource();
+        if (!$source) {
+            throw new RuntimeException('Sumber wilayah belum dikonfigurasi.');
+        }
+
+        if ($source->source_type === 'api') {
+            $urls = $this->apiUrls($source);
+            $provinces = $this->requestJson($urls['provinces']);
+
+            foreach ($provinces as &$province) {
+                $province['regencies'] = $this->requestJson(
+                    str_replace('{id_provinsi}', $province['id'], $urls['regencies'])
+                );
+            }
+
+            return $provinces;
+        }
+
+        return array_map(
+            static fn (array $province): array => [
+                'id' => $province['id'],
+                'name' => $province['name'],
+                'regencies' => $province['regencies'] ?? [],
+            ],
+            $this->loadFile($source->file_path)
+        );
+    }
+
     private function loadApi(array $urls, ?callable $progress = null): array
     {
         $provinces = $this->requestJson($urls['provinces']);
