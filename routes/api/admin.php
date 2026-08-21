@@ -27,6 +27,7 @@ use App\Http\Controllers\KecamatanController;
 use App\Http\Controllers\KelurahanController;
 use App\Http\Controllers\MasterAgamaController;
 use App\Http\Controllers\MasterPendidikanController;
+use App\Http\Controllers\MasterUniversitasController;
 use App\Http\Controllers\AdminSeederController;
 Route::middleware(['auth:sanctum'])->group(function () {
 
@@ -157,6 +158,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Master Wilayah - Provinsi
     Route::prefix('wilayah-layanan')->group(function () {
+        Route::get('/', [WilayahLayananController::class, 'index']);
+        Route::get('/{id}', [WilayahLayananController::class, 'show']);
         Route::post('/', [WilayahLayananController::class, 'store']);
         Route::put('/{wilayahLayanan}', [WilayahLayananController::class, 'update']);
         Route::delete('/{wilayahLayanan}', [WilayahLayananController::class, 'destroy']);
@@ -165,6 +168,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Master Wilayah - Kota / Kabupaten
     Route::prefix('kota-kabupaten')->group(function () {
+        Route::get('/', [KotaKabupatenController::class, 'index']);
+        Route::get('/provinsi/{id_provinsi}', [KotaKabupatenController::class, 'getByProvinsi']);
+        Route::get('/{id}', [KotaKabupatenController::class, 'show']);
         Route::post('/', [KotaKabupatenController::class, 'store']);
         Route::put('/{id}', [KotaKabupatenController::class, 'update']);
         Route::delete('/{id}', [KotaKabupatenController::class, 'destroy']);
@@ -192,5 +198,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         ->parameters(['master-agama' => 'agama']);
     Route::apiResource('/master-pendidikan', MasterPendidikanController::class)
         ->parameters(['master-pendidikan' => 'pendidikan']);
+    Route::apiResource('/master-universitas', MasterUniversitasController::class)
+        ->parameters(['master-universitas' => 'universita']);
 
 });

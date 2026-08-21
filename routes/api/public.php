@@ -26,6 +26,7 @@ Route::get('/artikel/{artikel}', [ArtikelController::class, 'show']);
 Route::get('/pasien', [PasienController::class, 'index']);
 
 //Provinsi
+Route::get('/provinsi', [WilayahLayananController::class, 'index']);
 Route::get('/wilayah-layanan', [WilayahLayananController::class, 'index']);
 Route::get('/wilayah-layanan/{wilayahLayanan}', [WilayahLayananController::class, 'show']);
 

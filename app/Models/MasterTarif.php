@@ -21,17 +21,18 @@ class MasterTarif extends Model
         'nama_template',
         'id_layanan',
         'id_kota',
+        'id_provinsi',
         'tarif_pasien',
+        'fee_nakes_tipe',
+        'fee_nakes_nilai',
         'transport_base_fare',
         'transport_per_km',
-        'total_bhp',
-        'potongan_persen_nakes',
         'fee_nakes_nominal',
         'fee_platform_nominal',
         'persen_ppn',
         'total_ppn',
         'total_biaya_admin',
-        'total_asuransi',
+        'total_biaya_lainnya',
         'subtotal',
         'total_tarif_final',
         'is_active',
@@ -40,15 +41,15 @@ class MasterTarif extends Model
 
     protected $casts = [
         'tarif_pasien' => 'decimal:2',
+        'fee_nakes_nilai' => 'decimal:2',
         'transport_base_fare' => 'decimal:2',
         'transport_per_km' => 'decimal:2',
-        'total_bhp' => 'decimal:2',
         'fee_nakes_nominal' => 'decimal:2',
         'fee_platform_nominal' => 'decimal:2',
         'persen_ppn' => 'decimal:2',
         'total_ppn' => 'decimal:2',
         'total_biaya_admin' => 'decimal:2',
-        'total_asuransi' => 'decimal:2',
+        'total_biaya_lainnya' => 'decimal:2',
         'subtotal' => 'decimal:2',
         'total_tarif_final' => 'decimal:2',
         'is_active' => 'boolean',
@@ -63,5 +64,34 @@ class MasterTarif extends Model
     public function kota()
     {
         return $this->belongsTo(KotaKabupaten::class, 'id_kota', 'id_kota');
+    }
+
+    public function provinsi()
+    {
+        return $this->belongsTo(WilayahLayanan::class, 'id_provinsi', 'id_provinsi');
+    }
+
+    public function layananTermasuk()
+    {
+        return $this->belongsToMany(
+            MasterLayanan::class,
+            'master_tarif_layanan',
+            'id_master_tarif',
+            'id_layanan',
+            'id_master_tarif',
+            'id_layanan'
+        );
+    }
+
+    public function komponenTarif()
+    {
+        return $this->belongsToMany(
+            MasterKomponenBiaya::class,
+            'master_tarif_komponen',
+            'id_master_tarif',
+            'id_komponen',
+            'id_master_tarif',
+            'id_komponen'
+        );
     }
 }
