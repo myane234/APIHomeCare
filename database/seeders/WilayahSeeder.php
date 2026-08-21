@@ -15,7 +15,7 @@ class WilayahSeeder extends Seeder
     /**
      * Run the database seeds.
      */
-    public function run(WilayahImportService $importService): void
+    public function run(WilayahImportService $importService, ?callable $progress = null): void
     {
         // Hilangkan limit waktu eksekusi & naikkan batas memori
         ini_set('max_execution_time', 0);
@@ -29,8 +29,8 @@ class WilayahSeeder extends Seeder
             File::makeDirectory($directoryPath, 0755, true);
         }
 
-        $this->command->info('1. Membaca sumber data wilayah yang tersimpan...');
-        $provinces = $importService->load();
+        $this->command?->info('1. Membaca sumber data wilayah yang tersimpan...');
+        $provinces = $importService->load($progress);
         $exportData = [];
 
         foreach ($provinces as $prov) {
@@ -40,7 +40,10 @@ class WilayahSeeder extends Seeder
                 ['is_active' => true]
             );
 
-            $this->command->info("=== Provinsi: {$prov['name']} ===");
+            $this->command?->info("=== Provinsi: {$prov['name']} ===");
+            if ($progress) {
+                $progress('province_started', ['province' => $prov]);
+            }
 
             // Struktur array JSON untuk Provinsi
             $provData = [
@@ -117,7 +120,10 @@ class WilayahSeeder extends Seeder
                     }
 
                     $provData['regencies'][] = $cityData;
-                    $this->command->info("  -> Berhasil memproses & menyusun JSON untuk: {$city['name']}");
+                    $this->command?->info("  -> Berhasil memproses & menyusun JSON untuk: {$city['name']}");
+                    if ($progress) {
+                        $progress('city_processed', ['city' => $city, 'districts' => count($city['districts'] ?? [])]);
+                    }
             }
 
             $exportData[] = $provData;
@@ -126,8 +132,8 @@ class WilayahSeeder extends Seeder
         $jsonContents = json_encode($exportData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         File::put($filePath, $jsonContents);
 
-        $this->command->info("==================================================");
-        $this->command->info("File JSON berhasil dibuat di: {$filePath}");
-        $this->command->info("Seeder dan ekspor JSON seluruh wilayah selesai!");
+        $this->command?->info("==================================================");
+        $this->command?->info("File JSON berhasil dibuat di: {$filePath}");
+        $this->command?->info("Seeder dan ekspor JSON seluruh wilayah selesai!");
     }
 }

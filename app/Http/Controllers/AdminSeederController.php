@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\WilayahImportJob;
+use App\Models\WilayahImportRun;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
@@ -124,6 +126,10 @@ class AdminSeederController extends Controller
             ], 422);
         }
 
+        if (!$runAll && $selected === ['WilayahSeeder']) {
+            return $this->startWilayahImport();
+        }
+
         $seeders = $runAll
             ? [['name' => 'all', 'class' => 'Database\\Seeders\\DatabaseSeeder']]
             : collect($selected)->map(fn (string $name) => [
@@ -172,6 +178,41 @@ class AdminSeederController extends Controller
             'message' => $failed ? 'Sebagian seeder gagal dijalankan.' : 'Seeder berhasil dijalankan.',
             'results' => $results,
         ], $failed ? 500 : 200);
+    }
+
+    public function startWilayahImport()
+    {
+        $activeRun = WilayahImportRun::query()
+            ->whereIn('status', ['queued', 'running'])
+            ->latest()
+            ->first();
+
+        if ($activeRun) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Import wilayah sedang berjalan.',
+                'data' => $activeRun,
+            ], 409);
+        }
+
+        $run = WilayahImportRun::create();
+        WilayahImportJob::dispatch($run->id)->onQueue('wilayah');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Import wilayah dimasukkan ke antrean.',
+            'data' => $run,
+        ], 202);
+    }
+
+    public function wilayahImportStatus(string $runId)
+    {
+        $run = WilayahImportRun::with('logs')->findOrFail($runId);
+
+        return response()->json([
+            'success' => true,
+            'data' => $run,
+        ]);
     }
 
     public function wilayahSource(WilayahImportService $service)
