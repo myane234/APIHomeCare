@@ -11,6 +11,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use RuntimeException;
 use Throwable;
 
 class WilayahImportJob implements ShouldQueue
@@ -27,6 +28,10 @@ class WilayahImportJob implements ShouldQueue
     public function handle(WilayahImportService $importService): void
     {
         $run = WilayahImportRun::findOrFail($this->runId);
+        if ($run->status === 'cancelled') {
+            return;
+        }
+
         $run->update([
             'status' => 'running',
             'started_at' => now(),
@@ -35,6 +40,10 @@ class WilayahImportJob implements ShouldQueue
 
         try {
             app(WilayahSeeder::class)->run($importService, function (string $event, array $data) use ($run): void {
+                if ($run->fresh()->status === 'cancelled') {
+                    throw new WilayahImportCancelledException();
+                }
+
                 match ($event) {
                     'source_loaded' => $this->sourceLoaded($run, $data),
                     'province_started' => $this->provinceStarted($run, $data),
@@ -49,6 +58,8 @@ class WilayahImportJob implements ShouldQueue
                 'finished_at' => now(),
             ]);
             $this->log($run, 'info', 'Import seluruh wilayah selesai.');
+        } catch (WilayahImportCancelledException) {
+            $this->log($run, 'warning', 'Import dibatalkan oleh pengguna.');
         } catch (Throwable $exception) {
             $run->update([
                 'status' => 'failed',
@@ -96,4 +107,8 @@ class WilayahImportJob implements ShouldQueue
             'message' => $message,
         ]);
     }
+}
+
+class WilayahImportCancelledException extends RuntimeException
+{
 }
