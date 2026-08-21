@@ -95,7 +95,7 @@ return new class extends Migration {
         Schema::create('master_komponen_biaya', function (Blueprint $table) {
             $table->id('id_komponen');
             $table->string('nama_komponen');
-            $table->enum('tipe_komponen', ['pajak', 'admin_aplikasi', 'asuransi', 'lainnya']);
+            $table->enum('tipe_komponen', ['pajak', 'admin_aplikasi', 'lainnya']);
             $table->enum('jenis_nilai', ['nominal', 'persen']);
             $table->decimal('nilai', 10, 2);
             $table->boolean('is_active')->default(true);

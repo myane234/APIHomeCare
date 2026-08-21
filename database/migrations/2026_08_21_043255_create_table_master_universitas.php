@@ -11,15 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('artikels', function (Blueprint $table) {
-            $table->id();
-            $table->string('judul_artikel');
-            $table->enum('kategori_artikel', [
-                'Tips Kesehatan',
-                'Kegiatan'
-            ]);
-            $table->text('isi_artikel');
-            $table->string('gambar_artikel');
+        Schema::create('master_universitas', function (Blueprint $table) {
+            $table->id('id_universitas');
+            $table->string('nama_universitas');
+            $table->boolean('is_active');
             $table->timestamps();
         });
     }
@@ -29,6 +24,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('artikel');
+        Schema::dropIfExists('master_universitas');
     }
 };
