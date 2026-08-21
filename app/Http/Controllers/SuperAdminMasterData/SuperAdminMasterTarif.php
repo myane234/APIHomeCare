@@ -95,29 +95,56 @@ class SuperAdminMasterTarif extends Controller
         if ($feeType === 'persen' && $feeValue > 100) {
             return response()->json(['message' => 'Fee nakes dalam persen tidak boleh lebih dari 100'], 422);
         }
+
+        // Tentukan daftar target kota/kabupaten yang akan dibuatkan/diupdate tarifnya
+        $targetKotas = [];
         if ($request->filled('id_kota')) {
             $kota = KotaKabupaten::findOrFail($request->id_kota);
             if ($request->filled('id_provinsi') && (int) $request->id_provinsi !== (int) $kota->id_provinsi) {
                 return response()->json(['message' => 'Kota tidak termasuk dalam provinsi yang dipilih'], 422);
             }
-            $request->merge(['id_provinsi' => $kota->id_provinsi]);
+            $targetKotas[] = [
+                'id_kota' => $kota->id_kota,
+                'id_provinsi' => $kota->id_provinsi,
+            ];
+        } elseif ($request->filled('id_provinsi')) {
+            // Jika provinsi dipilih tanpa kota, semua kota di provinsi tersebut akan otomatis dimasukkan
+            $kotasInProvinsi = KotaKabupaten::where('id_provinsi', $request->id_provinsi)->get();
+            if ($kotasInProvinsi->isNotEmpty()) {
+                foreach ($kotasInProvinsi as $k) {
+                    $targetKotas[] = [
+                        'id_kota' => $k->id_kota,
+                        'id_provinsi' => $k->id_provinsi,
+                    ];
+                }
+            } else {
+                // Fallback jika belum ada data kota di provinsi ini
+                $targetKotas[] = [
+                    'id_kota' => null,
+                    'id_provinsi' => $request->id_provinsi,
+                ];
+            }
+        } else {
+            // Berlaku Nasional
+            $targetKotas[] = [
+                'id_kota' => null,
+                'id_provinsi' => null,
+            ];
         }
 
         DB::beginTransaction();
         try {
-            // 1. Kalkulasi Tarif Transportasi Berdasarkan Kota
-            $tarifTransportBaseFare = 0;
-            $tarifTransportPerKilometer = 0;
-            if ($request->id_kota) {
-                $transportBlueprint = MasterTarifTransport::where('id_kota', $request->id_kota)->first();
-                if ($transportBlueprint) {
-                    $tarifTransportBaseFare = $transportBlueprint->tarif_awal;
-                    $tarifTransportPerKilometer = $transportBlueprint->tarif_per_kilometer;
-                }
-            }
+            $createdTarifs = [];
 
-            // 2. Kalkulasi Pembagian Jasa (Nakes vs Platform)
-            $nominalTarifLayananJasa = $request->tarif_pasien;
+            // Layanan & Komponen yang akan disinkronkan
+            $layananIds = array_unique(array_merge(
+                [(int) $request->id_layanan],
+                array_map('intval', $request->input('layanan_ids', []))
+            ));
+            $komponenIds = $request->input('komponen_tarif_ids', []);
+
+            // 1. Kalkulasi Pembagian Jasa (Nakes vs Platform)
+            $nominalTarifLayananJasa = (float) $request->tarif_pasien;
             $persentaseBagianNakes = $feeType === 'persen'
                 ? $feeValue
                 : ($nominalTarifLayananJasa > 0 ? ($feeValue / $nominalTarifLayananJasa) * 100 : 0);
@@ -126,10 +153,10 @@ class SuperAdminMasterTarif extends Controller
                 : $nominalTarifLayananJasa * ($persentaseBagianNakes / 100);
             $nominalFeePlatformJasa = $nominalTarifLayananJasa - $nominalFeeNakesJasa;
 
-            // 3. Kalkulasi Komponen Tarif (PPN, admin aplikasi, dan lainnya)
+            // 2. Kalkulasi Komponen Tarif (PPN, admin aplikasi, dan lainnya)
             $komponenQuery = MasterKomponenBiaya::where('is_active', true);
             if ($request->has('komponen_tarif_ids')) {
-                $komponenQuery->whereIn('id_komponen', $request->input('komponen_tarif_ids', []));
+                $komponenQuery->whereIn('id_komponen', $komponenIds);
             }
             $daftarKomponenBiayaAktif = $komponenQuery->get();
 
@@ -155,53 +182,75 @@ class SuperAdminMasterTarif extends Controller
                 }
             }
 
-            // 4. Kalkulasi Ringkasan Akhir
+            // 3. Kalkulasi Ringkasan Akhir
             $subtotalTarifPasien = $nominalTarifLayananJasa 
                 + $nominalTotalPpnPajak 
                 + $nominalTotalBiayaAdminAplikasi
                 + $nominalTotalBiayaLainnya;
 
-            $totalTarifFinalPasien = $subtotalTarifPasien; // Eksklusi transport dinamis
+            $totalTarifFinalPasien = $subtotalTarifPasien;
 
-            $masterTarif = MasterTarif::create([
-                'nama_template' => $request->nama_template,
-                'id_layanan' => $request->id_layanan,
-                'id_provinsi' => $request->id_provinsi,
-                'id_kota' => $request->id_kota,
-                'tarif_pasien' => $nominalTarifLayananJasa,
-                'fee_nakes_tipe' => $feeType,
-                'fee_nakes_nilai' => $feeValue,
+            foreach ($targetKotas as $target) {
+                $idKotaItem = $target['id_kota'];
+                $idProvinsiItem = $target['id_provinsi'];
 
-                'transport_base_fare' => $tarifTransportBaseFare,
-                'transport_per_km' => $tarifTransportPerKilometer,
+                // Kalkulasi Tarif Transportasi per Kota
+                $tarifTransportBaseFare = 0;
+                $tarifTransportPerKilometer = 0;
+                if ($idKotaItem) {
+                    $transportBlueprint = MasterTarifTransport::where('id_kota', $idKotaItem)->first();
+                    if ($transportBlueprint) {
+                        $tarifTransportBaseFare = $transportBlueprint->tarif_awal;
+                        $tarifTransportPerKilometer = $transportBlueprint->tarif_per_kilometer;
+                    }
+                }
 
-                'fee_nakes_nominal' => $nominalFeeNakesJasa,
-                'fee_platform_nominal' => $nominalFeePlatformJasa,
+                $masterTarif = MasterTarif::updateOrCreate(
+                    [
+                        'nama_template' => $request->nama_template,
+                        'id_layanan' => $request->id_layanan,
+                        'id_kota' => $idKotaItem,
+                    ],
+                    [
+                        'id_provinsi' => $idProvinsiItem,
+                        'tarif_pasien' => $nominalTarifLayananJasa,
+                        'fee_nakes_tipe' => $feeType,
+                        'fee_nakes_nilai' => $feeValue,
 
-                'persen_ppn' => $persentasePpnPajak,
-                'total_ppn' => $nominalTotalPpnPajak,
-                'total_biaya_admin' => $nominalTotalBiayaAdminAplikasi,
-                'total_biaya_lainnya' => $nominalTotalBiayaLainnya,
+                        'transport_base_fare' => $tarifTransportBaseFare,
+                        'transport_per_km' => $tarifTransportPerKilometer,
 
-                'subtotal' => $subtotalTarifPasien,
-                'total_tarif_final' => $totalTarifFinalPasien,
+                        'fee_nakes_nominal' => $nominalFeeNakesJasa,
+                        'fee_platform_nominal' => $nominalFeePlatformJasa,
 
-                'is_active' => $request->is_active ?? true,
-                'synced_at' => Carbon::now(),
-            ]);
+                        'persen_ppn' => $persentasePpnPajak,
+                        'total_ppn' => $nominalTotalPpnPajak,
+                        'total_biaya_admin' => $nominalTotalBiayaAdminAplikasi,
+                        'total_biaya_lainnya' => $nominalTotalBiayaLainnya,
+
+                        'subtotal' => $subtotalTarifPasien,
+                        'total_tarif_final' => $totalTarifFinalPasien,
+
+                        'is_active' => $request->is_active ?? true,
+                        'synced_at' => Carbon::now(),
+                    ]
+                );
+
+                $masterTarif->layananTermasuk()->sync($layananIds);
+                if ($request->has('komponen_tarif_ids')) {
+                    $masterTarif->komponenTarif()->sync($komponenIds);
+                }
+
+                $masterTarif->load(['layanan', 'kota.provinsi', 'provinsi', 'layananTermasuk', 'komponenTarif']);
+                $createdTarifs[] = $masterTarif;
+            }
 
             DB::commit();
-            $masterTarif->layananTermasuk()->sync(array_unique(array_merge(
-                [$request->id_layanan],
-                $request->input('layanan_ids', [])
-            )));
-            $masterTarif->komponenTarif()->sync($request->input('komponen_tarif_ids', []));
-            $masterTarif->load(['layanan', 'kota.provinsi', 'provinsi', 'layananTermasuk', 'komponenTarif']);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Blueprint Tarif berhasil dikalkulasi dan disimpan',
-                'data' => $masterTarif
+                'data' => count($createdTarifs) === 1 ? $createdTarifs[0] : $createdTarifs
             ], 201);
 
         } catch (\Exception $e) {
@@ -232,10 +281,13 @@ class SuperAdminMasterTarif extends Controller
      * 
      * @bodyParam nama_template string optional Nama template tarif
      * @bodyParam id_layanan int optional ID layanan
+     * @bodyParam layanan_ids array optional List ID layanan yang masuk dalam tarif ini
+     * @bodyParam komponen_tarif_ids array optional List ID komponen biaya/tarif
+     * @bodyParam id_provinsi int optional ID provinsi (jika diset tanpa id_kota, semua kota di provinsi tersebut akan masuk)
      * @bodyParam id_kota int optional ID kota/kabupaten
      * @bodyParam tarif_pasien numeric optional Tarif dasar layanan
-    * @bodyParam fee_nakes_tipe string optional Jenis fee nakes: nominal atau persen
-    * @bodyParam fee_nakes_nilai numeric optional Nilai fee sesuai fee_nakes_tipe
+     * @bodyParam fee_nakes_tipe string optional Jenis fee nakes: nominal atau persen
+     * @bodyParam fee_nakes_nilai numeric optional Nilai fee sesuai fee_nakes_tipe
      * @bodyParam is_active boolean optional Status keaktifan
      */
     public function update(Request $request, $id)
@@ -259,6 +311,7 @@ class SuperAdminMasterTarif extends Controller
 
         DB::beginTransaction();
         try {
+            // Tentukan kota/provinsi
             if ($request->filled('id_kota')) {
                 $kota = KotaKabupaten::findOrFail($request->id_kota);
                 $provinsiId = $request->has('id_provinsi') ? $request->id_provinsi : $masterTarif->id_provinsi;
@@ -266,12 +319,24 @@ class SuperAdminMasterTarif extends Controller
                     throw new \InvalidArgumentException('Kota tidak termasuk dalam provinsi yang dipilih');
                 }
                 $masterTarif->id_provinsi = $kota->id_provinsi;
+                $masterTarif->id_kota = $kota->id_kota;
+            } elseif ($request->has('id_provinsi')) {
+                $masterTarif->id_provinsi = $request->id_provinsi;
+                if ($request->id_provinsi !== null && !$request->filled('id_kota')) {
+                    $kotasInProv = KotaKabupaten::where('id_provinsi', $request->id_provinsi)->get();
+                    if ($kotasInProv->isNotEmpty()) {
+                        $masterTarif->id_kota = $kotasInProv->first()->id_kota;
+                    } else {
+                        $masterTarif->id_kota = null;
+                    }
+                } elseif ($request->id_provinsi === null) {
+                    $masterTarif->id_kota = null;
+                }
             }
+
             // Update data input
             if ($request->has('nama_template')) $masterTarif->nama_template = $request->nama_template;
             if ($request->has('id_layanan')) $masterTarif->id_layanan = $request->id_layanan;
-            if ($request->has('id_provinsi')) $masterTarif->id_provinsi = $request->id_provinsi;
-            if ($request->has('id_kota')) $masterTarif->id_kota = $request->id_kota;
             if ($request->has('tarif_pasien')) $masterTarif->tarif_pasien = $request->tarif_pasien;
             if ($request->has('fee_nakes_tipe')) $masterTarif->fee_nakes_tipe = $request->fee_nakes_tipe;
             if ($request->has('fee_nakes_nilai')) $masterTarif->fee_nakes_nilai = $request->fee_nakes_nilai;
@@ -289,7 +354,7 @@ class SuperAdminMasterTarif extends Controller
             }
 
             // Re-kalkulasi Pembagian Jasa
-            $nominalTarifLayananJasa = $masterTarif->tarif_pasien;
+            $nominalTarifLayananJasa = (float) $masterTarif->tarif_pasien;
             $feeType = $masterTarif->fee_nakes_tipe ?: 'persen';
             $feeValue = (float) $masterTarif->fee_nakes_nilai;
             if ($feeType === 'persen' && $feeValue > 100) {
@@ -354,7 +419,57 @@ class SuperAdminMasterTarif extends Controller
             $masterTarif->synced_at = Carbon::now();
 
             $masterTarif->save();
+
+            // Jika update menyangkut provinsi tanpa spesifik kota, sinkronkan juga untuk kota-kota lain dalam provinsi tersebut
+            if ($request->has('id_provinsi') && $request->id_provinsi !== null && !$request->filled('id_kota')) {
+                $kotasInProv = KotaKabupaten::where('id_provinsi', $request->id_provinsi)->get();
+                foreach ($kotasInProv as $k) {
+                    if ((string)$k->id_kota === (string)$masterTarif->id_kota) continue;
+                    
+                    $tBase = 0; $tKm = 0;
+                    $tb = MasterTarifTransport::where('id_kota', $k->id_kota)->first();
+                    if ($tb) { $tBase = $tb->tarif_awal; $tKm = $tb->tarif_per_kilometer; }
+
+                    $otherTarif = MasterTarif::updateOrCreate(
+                        [
+                            'nama_template' => $masterTarif->nama_template,
+                            'id_layanan' => $masterTarif->id_layanan,
+                            'id_kota' => $k->id_kota,
+                        ],
+                        [
+                            'id_provinsi' => $request->id_provinsi,
+                            'tarif_pasien' => $masterTarif->tarif_pasien,
+                            'fee_nakes_tipe' => $feeType,
+                            'fee_nakes_nilai' => $feeValue,
+                            'transport_base_fare' => $tBase,
+                            'transport_per_km' => $tKm,
+                            'fee_nakes_nominal' => $nominalFeeNakesJasa,
+                            'fee_platform_nominal' => $nominalFeePlatformJasa,
+                            'persen_ppn' => $persentasePpnPajak,
+                            'total_ppn' => $nominalTotalPpnPajak,
+                            'total_biaya_admin' => $nominalTotalBiayaAdminAplikasi,
+                            'total_biaya_lainnya' => $nominalTotalBiayaLainnya,
+                            'subtotal' => $masterTarif->subtotal,
+                            'total_tarif_final' => $masterTarif->total_tarif_final,
+                            'is_active' => $masterTarif->is_active,
+                            'synced_at' => Carbon::now(),
+                        ]
+                    );
+
+                    if ($request->has('layanan_ids') || $request->has('id_layanan')) {
+                        $otherTarif->layananTermasuk()->sync(array_unique(array_merge(
+                            [$masterTarif->id_layanan],
+                            $request->input('layanan_ids', [])
+                        )));
+                    }
+                    if ($request->has('komponen_tarif_ids')) {
+                        $otherTarif->komponenTarif()->sync($request->input('komponen_tarif_ids', []));
+                    }
+                }
+            }
+
             DB::commit();
+
             if ($request->has('layanan_ids') || $request->has('id_layanan')) {
                 $masterTarif->layananTermasuk()->sync(array_unique(array_merge(
                     [$masterTarif->id_layanan],
@@ -364,6 +479,7 @@ class SuperAdminMasterTarif extends Controller
             if ($request->has('komponen_tarif_ids')) {
                 $masterTarif->komponenTarif()->sync($request->input('komponen_tarif_ids', []));
             }
+
             $masterTarif->load(['layanan', 'kota.provinsi', 'provinsi', 'layananTermasuk', 'komponenTarif']);
 
             return response()->json([
