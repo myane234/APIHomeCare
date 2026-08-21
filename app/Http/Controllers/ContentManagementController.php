@@ -257,8 +257,9 @@ class ContentManagementController extends Controller
             'footer_address' => ['nullable', 'string'],
             'footer_socials' => ['nullable', 'array'],
             'footer_socials.*.name' => ['required_with:footer_socials', 'string', 'max:255'],
-            'footer_socials.*.icon' => ['required_with:footer_socials', 'string', 'max:255'],
-            'footer_socials.*.url' => ['required_with:footer_socials', 'string', 'max:255'],
+            'footer_socials.*.icon' => ['nullable', 'string', 'max:255'],
+            'footer_socials.*.url' => ['nullable', 'string', 'max:255'],
+            'footer_socials.*.text' => ['nullable', 'string', 'max:255'],
         ]);
 
         $content->update($validated);

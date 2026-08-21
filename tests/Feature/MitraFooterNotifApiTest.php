@@ -111,12 +111,13 @@ class MitraFooterNotifApiTest extends TestCase
             [
                 'name' => 'Facebook',
                 'icon' => 'fa-facebook',
-                'url' => 'https://facebook.com/homecare'
+                'url' => 'https://facebook.com/homecare',
+                'text' => '@smarthomecare'
             ],
             [
                 'name' => 'Instagram',
                 'icon' => 'fa-instagram',
-                'url' => 'https://instagram.com/homecare'
+                'text' => 'Smart Home Care Instagram'
             ]
         ];
 

@@ -186,6 +186,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Template Notifikasi CRUD
     Route::apiResource('/notification-templates', NotificationTemplateController::class);
+
     // Master Bank - Admin CRUD
     Route::prefix('banks')->group(function () {
         Route::get('/', [\App\Http\Controllers\MasterBankController::class, 'adminIndex']);
@@ -194,6 +195,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::patch('/{id}/toggle-status', [\App\Http\Controllers\MasterBankController::class, 'toggleStatus']);
         Route::delete('/{id}', [\App\Http\Controllers\MasterBankController::class, 'destroy']);
     });
+
+    // Global Config - Admin Update
+    Route::post('/global-config', [\App\Http\Controllers\GlobalConfigController::class, 'updateGlobalConfig']);
 
     // Master Agama dan Pendidikan - Admin CRUD
     Route::apiResource('/master-agama', MasterAgamaController::class)
