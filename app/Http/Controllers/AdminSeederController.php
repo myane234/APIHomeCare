@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\WilayahImportJob;
+use App\Models\WilayahImportRun;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
@@ -124,6 +126,10 @@ class AdminSeederController extends Controller
             ], 422);
         }
 
+        if (!$runAll && $selected === ['WilayahSeeder']) {
+            return $this->startWilayahImport();
+        }
+
         $seeders = $runAll
             ? [['name' => 'all', 'class' => 'Database\\Seeders\\DatabaseSeeder']]
             : collect($selected)->map(fn (string $name) => [
@@ -174,6 +180,51 @@ class AdminSeederController extends Controller
         ], $failed ? 500 : 200);
     }
 
+    public function startWilayahImport()
+    {
+        $activeRun = WilayahImportRun::query()
+            ->whereIn('status', ['queued', 'running'])
+            ->latest()
+            ->first();
+
+        if ($activeRun) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Import wilayah sedang berjalan.',
+                'data' => $activeRun,
+            ], 409);
+        }
+
+        $run = WilayahImportRun::create();
+        WilayahImportJob::dispatch($run->id)->onQueue('wilayah');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Import wilayah dimasukkan ke antrean.',
+            'data' => $run,
+        ], 202);
+    }
+
+    public function wilayahImportStatus(string $runId)
+    {
+        $run = WilayahImportRun::with('logs')->findOrFail($runId);
+
+        return response()->json([
+            'success' => true,
+            'data' => $run,
+        ]);
+    }
+
+    public function latestWilayahImportStatus()
+    {
+        $run = WilayahImportRun::with('logs')->latest()->first();
+
+        return response()->json([
+            'success' => true,
+            'data' => $run,
+        ]);
+    }
+
     public function wilayahSource(WilayahImportService $service)
     {
         return response()->json([
@@ -184,14 +235,25 @@ class AdminSeederController extends Controller
 
     public function saveWilayahApi(Request $request, WilayahImportService $service)
     {
+        $endpointUrlRule = function (string $attribute, mixed $value, \Closure $fail): void {
+            $urlWithoutPlaceholder = preg_replace('/\{[^}]+\}/', 'placeholder', $value);
+
+            if (!filter_var($urlWithoutPlaceholder, FILTER_VALIDATE_URL)) {
+                $fail("{$attribute} harus berupa URL yang valid.");
+            }
+        };
+
         $validated = $request->validate([
-            'base_url' => ['required', 'url', 'max:2000'],
+            'provinces_url' => ['required', 'max:2000', $endpointUrlRule],
+            'regencies_url' => ['required', 'max:2000', $endpointUrlRule],
+            'districts_url' => ['required', 'max:2000', $endpointUrlRule],
+            'villages_url' => ['required', 'max:2000', $endpointUrlRule],
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Sumber API wilayah berhasil disimpan.',
-            'data' => $service->saveApi($validated['base_url']),
+            'data' => $service->saveApi($validated),
         ]);
     }
 

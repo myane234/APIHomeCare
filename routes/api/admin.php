@@ -25,6 +25,8 @@ use App\Http\Controllers\BhpController;
 use App\Http\Controllers\MappingLayananBhpController;
 use App\Http\Controllers\KecamatanController;
 use App\Http\Controllers\KelurahanController;
+use App\Http\Controllers\MasterAgamaController;
+use App\Http\Controllers\MasterPendidikanController;
 use App\Http\Controllers\AdminSeederController;
 use App\Http\Controllers\NotificationTemplateController;
 
@@ -109,6 +111,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Seeder Management
     Route::get('/admin/seeders', [AdminSeederController::class, 'index']);
     Route::post('/admin/seeders/run', [AdminSeederController::class, 'run']);
+    Route::post('/admin/seeders/wilayah/run', [AdminSeederController::class, 'startWilayahImport']);
+    Route::get('/admin/seeders/wilayah/runs/latest', [AdminSeederController::class, 'latestWilayahImportStatus']);
+    Route::get('/admin/seeders/wilayah/runs/{runId}', [AdminSeederController::class, 'wilayahImportStatus'])
+        ->whereUuid('runId');
     Route::get('/admin/seeders/wilayah-source', [AdminSeederController::class, 'wilayahSource']);
     Route::put('/admin/seeders/wilayah-source/api', [AdminSeederController::class, 'saveWilayahApi']);
     Route::post('/admin/seeders/wilayah-source/file', [AdminSeederController::class, 'saveWilayahFile']);
@@ -184,5 +190,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Global Config - Admin Update
     Route::post('/global-config', [\App\Http\Controllers\GlobalConfigController::class, 'updateGlobalConfig']);
+
+    // Master Agama dan Pendidikan - Admin CRUD
+    Route::apiResource('/master-agama', MasterAgamaController::class)
+        ->parameters(['master-agama' => 'agama']);
+    Route::apiResource('/master-pendidikan', MasterPendidikanController::class)
+        ->parameters(['master-pendidikan' => 'pendidikan']);
 
 });

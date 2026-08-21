@@ -9,6 +9,10 @@ class WilayahImportSource extends Model
     protected $fillable = [
         'source_type',
         'base_url',
+        'provinces_url',
+        'regencies_url',
+        'districts_url',
+        'villages_url',
         'file_path',
         'file_name',
     ];
