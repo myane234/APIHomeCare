@@ -38,6 +38,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/register',
             'api/pasien/complete-profile',
         ]);
+
+        $middleware->redirectTo(
+            fn (Request $request) => $request->is('api/*') ? null : '/login'
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
