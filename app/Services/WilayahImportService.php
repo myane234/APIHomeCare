@@ -52,7 +52,7 @@ class WilayahImportService
         return WilayahImportSource::find(1) ?? ($this->defaultApiSource());
     }
 
-    public function load(): array
+    public function load(?callable $progress = null): array
     {
         $source = $this->getSource();
         if (!$source) {
@@ -60,19 +60,31 @@ class WilayahImportService
         }
 
         return $source->source_type === 'api'
-            ? $this->loadApi($this->apiUrls($source))
+            ? $this->loadApi($this->apiUrls($source), $progress)
             : $this->loadFile($source->file_path);
     }
 
-    private function loadApi(array $urls): array
+    private function loadApi(array $urls, ?callable $progress = null): array
     {
         $provinces = $this->requestJson($urls['provinces']);
+        if ($progress) {
+            $progress('source_loaded', ['total_provinces' => count($provinces)]);
+        }
+
         foreach ($provinces as &$province) {
             $province['regencies'] = $this->requestJson(str_replace('{id_provinsi}', $province['id'], $urls['regencies']));
+            if ($progress) {
+                $progress('province_loaded', ['province' => $province, 'cities' => count($province['regencies'])]);
+            }
+
             foreach ($province['regencies'] as &$city) {
                 $city['districts'] = $this->requestJson(str_replace('{id_kota}', $city['id'], $urls['districts']));
                 foreach ($city['districts'] as &$district) {
                     $district['villages'] = $this->requestJson(str_replace('{id_kecamatan}', $district['id'], $urls['villages']));
+                }
+
+                if ($progress) {
+                    $progress('city_loaded', ['city' => $city]);
                 }
             }
         }

@@ -109,6 +109,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Seeder Management
     Route::get('/admin/seeders', [AdminSeederController::class, 'index']);
     Route::post('/admin/seeders/run', [AdminSeederController::class, 'run']);
+    Route::post('/admin/seeders/wilayah/run', [AdminSeederController::class, 'startWilayahImport']);
+    Route::get('/admin/seeders/wilayah/runs/{runId}', [AdminSeederController::class, 'wilayahImportStatus']);
     Route::get('/admin/seeders/wilayah-source', [AdminSeederController::class, 'wilayahSource']);
     Route::put('/admin/seeders/wilayah-source/api', [AdminSeederController::class, 'saveWilayahApi']);
     Route::post('/admin/seeders/wilayah-source/file', [AdminSeederController::class, 'saveWilayahFile']);
