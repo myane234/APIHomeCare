@@ -25,7 +25,6 @@ class GlobalConfigSeeder extends Seeder
                 'phone_number' => '0211234567',
                 'email' => 'info@smarthomecare.com',
                 'address' => 'Jl. Kesehatan No. 123, Jakarta Selatan',
-                'running_text' => 'Selamat datang di Smart Home Care! Dapatkan potongan harga 10% untuk pemesanan pertama Anda.',
                 'maintenance_mode' => false,
             ]
         );
