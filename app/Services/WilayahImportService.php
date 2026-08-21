@@ -12,11 +12,15 @@ use ZipArchive;
 
 class WilayahImportService
 {
-    public function saveApi(string $baseUrl): WilayahImportSource
+    public function saveApi(array $urls): WilayahImportSource
     {
         return WilayahImportSource::updateOrCreate(['id' => 1], [
             'source_type' => 'api',
-            'base_url' => rtrim($baseUrl, '/'),
+            'base_url' => null,
+            'provinces_url' => rtrim($urls['provinces_url'], '/'),
+            'regencies_url' => rtrim($urls['regencies_url'], '/'),
+            'districts_url' => rtrim($urls['districts_url'], '/'),
+            'villages_url' => rtrim($urls['villages_url'], '/'),
             'file_path' => null,
             'file_name' => null,
         ]);
@@ -34,6 +38,10 @@ class WilayahImportService
         return WilayahImportSource::updateOrCreate(['id' => 1], [
             'source_type' => 'file',
             'base_url' => null,
+            'provinces_url' => null,
+            'regencies_url' => null,
+            'districts_url' => null,
+            'villages_url' => null,
             'file_path' => $path,
             'file_name' => $file->getClientOriginalName(),
         ]);
@@ -52,19 +60,19 @@ class WilayahImportService
         }
 
         return $source->source_type === 'api'
-            ? $this->loadApi($source->base_url)
+            ? $this->loadApi($this->apiUrls($source))
             : $this->loadFile($source->file_path);
     }
 
-    private function loadApi(string $baseUrl): array
+    private function loadApi(array $urls): array
     {
-        $provinces = $this->requestJson($baseUrl . '/provinces.json');
+        $provinces = $this->requestJson($urls['provinces']);
         foreach ($provinces as &$province) {
-            $province['regencies'] = $this->requestJson($baseUrl . '/regencies/' . $province['id'] . '.json');
+            $province['regencies'] = $this->requestJson(str_replace('{id_provinsi}', $province['id'], $urls['regencies']));
             foreach ($province['regencies'] as &$city) {
-                $city['districts'] = $this->requestJson($baseUrl . '/districts/' . $city['id'] . '.json');
+                $city['districts'] = $this->requestJson(str_replace('{id_kota}', $city['id'], $urls['districts']));
                 foreach ($city['districts'] as &$district) {
-                    $district['villages'] = $this->requestJson($baseUrl . '/villages/' . $district['id'] . '.json');
+                    $district['villages'] = $this->requestJson(str_replace('{id_kecamatan}', $district['id'], $urls['villages']));
                 }
             }
         }
@@ -74,8 +82,32 @@ class WilayahImportService
 
     private function defaultApiSource(): ?WilayahImportSource
     {
-        $baseUrl = config('services.wilayah.base_url');
-        return $baseUrl ? $this->saveApi($baseUrl) : null;
+        $urls = config('services.wilayah');
+        if (empty($urls['provinces_url'])) {
+            return null;
+        }
+
+        return $this->saveApi($urls);
+    }
+
+    private function apiUrls(WilayahImportSource $source): array
+    {
+        if ($source->provinces_url && $source->regencies_url && $source->districts_url && $source->villages_url) {
+            return [
+                'provinces' => $source->provinces_url,
+                'regencies' => $source->regencies_url,
+                'districts' => $source->districts_url,
+                'villages' => $source->villages_url,
+            ];
+        }
+
+        $baseUrl = rtrim((string) $source->base_url, '/');
+        return [
+            'provinces' => $baseUrl . '/provinces.json',
+            'regencies' => $baseUrl . '/regencies/{id_provinsi}.json',
+            'districts' => $baseUrl . '/districts/{id_kota}.json',
+            'villages' => $baseUrl . '/villages/{id_kecamatan}.json',
+        ];
     }
 
     private function loadFile(string $path): array

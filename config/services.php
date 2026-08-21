@@ -3,7 +3,10 @@
 return [
 
     'wilayah' => [
-        'base_url' => env('WILAYAH_API_BASE_URL'),
+        'provinces_url' => env('WILAYAH_PROVINCES_URL'),
+        'regencies_url' => env('WILAYAH_REGENCIES_URL'),
+        'districts_url' => env('WILAYAH_DISTRICTS_URL'),
+        'villages_url' => env('WILAYAH_VILLAGES_URL'),
     ],
 
     /*
