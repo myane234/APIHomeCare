@@ -215,6 +215,16 @@ class AdminSeederController extends Controller
         ]);
     }
 
+    public function latestWilayahImportStatus()
+    {
+        $run = WilayahImportRun::with('logs')->latest()->first();
+
+        return response()->json([
+            'success' => true,
+            'data' => $run,
+        ]);
+    }
+
     public function wilayahSource(WilayahImportService $service)
     {
         return response()->json([
