@@ -179,4 +179,99 @@ class ContentManagementController extends Controller
             ]
         ], 200);
     }
+
+    /**
+     * Get Gabung Mitra Content
+     */
+    public function getMitra()
+    {
+        $content = ContentManagement::firstOrCreate([]);
+
+        return response()->json([
+            'mitra_banner' => $content->mitra_banner_url,
+            'mitra_text_banner' => $content->mitra_text_banner,
+            'mitra_description' => $content->mitra_description,
+        ], 200);
+    }
+
+    /**
+     * Update Gabung Mitra Content (Admin)
+     */
+    public function updateMitra(Request $request)
+    {
+        $content = ContentManagement::firstOrCreate([]);
+
+        $validated = $request->validate([
+            'mitra_banner' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:2048'],
+            'mitra_text_banner' => ['nullable', 'string'],
+            'mitra_description' => ['nullable', 'string'],
+        ]);
+
+        if ($request->hasFile('mitra_banner')) {
+            if ($content->mitra_banner) {
+                Storage::disk('public')->delete($content->mitra_banner);
+            }
+            $path = $request->file('mitra_banner')->store('content', 'public');
+            $validated['mitra_banner'] = $path;
+        }
+
+        $content->update($validated);
+
+        return response()->json([
+            'message' => 'Konten Gabung Mitra berhasil diperbarui',
+            'data' => [
+                'mitra_banner' => $content->mitra_banner_url,
+                'mitra_text_banner' => $content->mitra_text_banner,
+                'mitra_description' => $content->mitra_description,
+            ]
+        ], 200);
+    }
+
+    /**
+     * Get Footer Content
+     */
+    public function getFooter()
+    {
+        $content = ContentManagement::firstOrCreate([]);
+
+        return response()->json([
+            'footer_description' => $content->footer_description,
+            'footer_phone' => $content->footer_phone,
+            'footer_email' => $content->footer_email,
+            'footer_address' => $content->footer_address,
+            'footer_socials' => $content->footer_socials ?? [],
+        ], 200);
+    }
+
+    /**
+     * Update Footer Content (Admin)
+     */
+    public function updateFooter(Request $request)
+    {
+        $content = ContentManagement::firstOrCreate([]);
+
+        $validated = $request->validate([
+            'footer_description' => ['nullable', 'string'],
+            'footer_phone' => ['nullable', 'string', 'max:50'],
+            'footer_email' => ['nullable', 'email', 'max:255'],
+            'footer_address' => ['nullable', 'string'],
+            'footer_socials' => ['nullable', 'array'],
+            'footer_socials.*.name' => ['required_with:footer_socials', 'string', 'max:255'],
+            'footer_socials.*.icon' => ['required_with:footer_socials', 'string', 'max:255'],
+            'footer_socials.*.url' => ['required_with:footer_socials', 'string', 'max:255'],
+        ]);
+
+        $content->update($validated);
+
+        return response()->json([
+            'message' => 'Konten Footer berhasil diperbarui',
+            'data' => [
+                'footer_description' => $content->footer_description,
+                'footer_phone' => $content->footer_phone,
+                'footer_email' => $content->footer_email,
+                'footer_address' => $content->footer_address,
+                'footer_socials' => $content->footer_socials ?? [],
+            ]
+        ], 200);
+    }
 }

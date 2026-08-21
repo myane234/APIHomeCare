@@ -174,6 +174,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Master Wilayah - Kelurahan
     Route::apiResource('/kelurahan', KelurahanController::class);
 
+    // Template Notifikasi CRUD
+    Route::apiResource('/notification-templates', NotificationTemplateController::class);
     // Master Bank - Admin CRUD
     Route::prefix('banks')->group(function () {
         Route::get('/', [\App\Http\Controllers\MasterBankController::class, 'adminIndex']);

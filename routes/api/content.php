@@ -8,6 +8,8 @@ use App\Http\Controllers\KategoriArtikelController;
 Route::prefix('resource/content')->group(function () {
     Route::get('/home', [ContentManagementController::class, 'getHome']);
     Route::get('/about', [ContentManagementController::class, 'getAbout']);
+    Route::get('/mitra', [ContentManagementController::class, 'getMitra']);
+    Route::get('/footer', [ContentManagementController::class, 'getFooter']);
     
     // Kategori Artikel (Public Read)
     Route::get('/artikel/kategori', [KategoriArtikelController::class, 'index']);
@@ -17,6 +19,8 @@ Route::prefix('resource/content')->group(function () {
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('resource/content')->group(function () {
     Route::post('/home', [ContentManagementController::class, 'updateHome']);
     Route::post('/about', [ContentManagementController::class, 'updateAbout']);
+    Route::post('/mitra', [ContentManagementController::class, 'updateMitra']);
+    Route::post('/footer', [ContentManagementController::class, 'updateFooter']);
 
     // Kategori Artikel CRUD (Admin only)
     Route::post('/artikel/kategori', [KategoriArtikelController::class, 'store']);
