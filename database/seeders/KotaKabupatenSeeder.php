@@ -11,7 +11,7 @@ class KotaKabupatenSeeder extends Seeder
 {
     public function run(WilayahImportService $importService): void
     {
-        foreach ($importService->load() as $prov) {
+        foreach ($importService->loadRegencies() as $prov) {
             $provinsiModel = WilayahLayanan::updateOrCreate(
                 ['nama_provinsi' => $prov['name']],
                 ['is_active' => true]

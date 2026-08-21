@@ -29,6 +29,8 @@ use App\Http\Controllers\MasterAgamaController;
 use App\Http\Controllers\MasterPendidikanController;
 use App\Http\Controllers\MasterUniversitasController;
 use App\Http\Controllers\AdminSeederController;
+use App\Http\Controllers\NotificationTemplateController;
+
 Route::middleware(['auth:sanctum'])->group(function () {
 
     // Auth Admin & Super Admin

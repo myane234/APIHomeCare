@@ -12,11 +12,13 @@ class ProvinsiSeeder extends Seeder
      */
     public function run(WilayahImportService $importService): void
     {
-        foreach ($importService->load() as $item) {
+        foreach ($importService->loadProvinces() as $item) {
             WilayahLayanan::updateOrCreate(
                 ['nama_provinsi' => $item['name']],
                 ['is_active' => true]
             );
         }
+
+        $this->command?->info('Berhasil mengimpor data provinsi.');
     }
 }
