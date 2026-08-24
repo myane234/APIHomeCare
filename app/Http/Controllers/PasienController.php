@@ -76,11 +76,18 @@ class PasienController extends Controller
         'no_hp'          => 'nullable|string',
         'jenis_kelamin'  => ['nullable', 'string', Rule::enum(JenisKelamin::class)],
         'alamat_utama'   => 'nullable|string',
-        'avatar'         => 'nullable|string',
+        'avatar'         => 'nullable|string|image|mimes:jpeg,png,jpg,gif|max:2048',
     ]);
 
     // 2. Filter data agar hanya meng-update field yang benar-benar dikirimkan
     $dataToUpdate = array_filter($validate, fn ($value) => $value !== null);
+
+    // 3. Jika avatar adalah file, convert ke string URL
+    if ($request->hasFile('avatar')) {
+        $file = $request->file('avatar');
+        $path = $file->store('avatars', 'public');
+        $dataToUpdate['avatar'] = asset('storage/' . $path);
+    }
 
     $pasien->update($dataToUpdate);
 
