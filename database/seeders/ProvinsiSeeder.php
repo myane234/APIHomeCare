@@ -14,8 +14,11 @@ class ProvinsiSeeder extends Seeder
     {
         foreach ($importService->loadProvinces() as $item) {
             WilayahLayanan::updateOrCreate(
-                ['nama_provinsi' => $item['name']],
-                ['is_active' => true]
+                ['id_provinsi' => $item['id']],
+                [
+                    'nama_provinsi' => $item['name'],
+                    'is_active' => true
+                ]
             );
         }
 

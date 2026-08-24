@@ -15,8 +15,11 @@ class MasterProvinsiSeeder extends Seeder
     {
         foreach ($importService->loadProvinces() as $province) {
             WilayahLayanan::updateOrCreate(
-                ['nama_provinsi' => $province['name']],
-                ['is_active' => true]
+                ['id_provinsi' => $province['id']],
+                [
+                    'nama_provinsi' => $province['name'],
+                    'is_active' => true
+                ]
             );
         }
         $this->command->info('Berhasil sinkronisasi data provinsi.');

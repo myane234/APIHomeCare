@@ -9,8 +9,12 @@ class WilayahLayanan extends Model
 {
     protected $table = 'master_provinsi';
     protected $primaryKey = 'id_provinsi';
+    
+    public $incrementing = false;
+    protected $keyType = 'string';
 
     protected $fillable = [
+        'id_provinsi',
         'nama_provinsi',
         'is_active',
     ];

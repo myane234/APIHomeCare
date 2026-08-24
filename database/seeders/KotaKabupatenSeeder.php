@@ -13,8 +13,11 @@ class KotaKabupatenSeeder extends Seeder
     {
         foreach ($importService->loadRegencies() as $prov) {
             $provinsiModel = WilayahLayanan::updateOrCreate(
-                ['nama_provinsi' => $prov['name']],
-                ['is_active' => true]
+                ['id_provinsi' => $prov['id']],
+                [
+                    'nama_provinsi' => $prov['name'],
+                    'is_active' => true
+                ]
             );
 
             $localProvinsiId = $provinsiModel->id_provinsi;
