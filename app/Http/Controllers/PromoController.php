@@ -50,7 +50,7 @@ class PromoController extends Controller
             'tanggal_berakhir' => ['required', 'date', 'after_or_equal:tanggal_mulai'],
             'status_promo' => ['required', 'in:Aktif,Tidak Aktif'],
             'layanan_ids' => ['required', 'array'], // Input ID layanan dalam bentuk array
-            'layanan_ids.*' => ['exists:layanans,id_layanan'], 
+            'layanan_ids.*' => ['exists:master_layanan,id_layanan'],
             'gambar_promo' => ['sometimes','nullable','image','max:2048'],
         ]);
 
@@ -98,7 +98,7 @@ class PromoController extends Controller
             'tanggal_berakhir' => ['sometimes', 'required', 'date', 'after_or_equal:tanggal_mulai'],
             'status_promo' => ['sometimes', 'required', 'in:Aktif,Tidak Aktif'],
             'layanan_ids' => ['sometimes', 'required', 'array'],
-            'layanan_ids.*' => ['exists:layanans,id_layanan'],
+            'layanan_ids.*' => ['exists:master_layanan,id_layanan'],
             'gambar_promo' => ['sometimes','nullable','image','max:2048'],
         ]);
 
@@ -128,6 +128,9 @@ class PromoController extends Controller
     public function destroy(Promo $promo)
     {
         $promo->layanans()->detach(); // Hapus relasi sebelum delete
+        if ($promo->gambar_promo) {
+            Storage::disk('public')->delete($promo->gambar_promo);
+        }
         $promo->delete();
 
         return response()->json([
