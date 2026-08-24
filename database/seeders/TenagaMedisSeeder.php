@@ -4,6 +4,8 @@ namespace Database\Seeders;
 
 use App\Models\TenagaMedis;
 use App\Models\Users;
+use App\Models\Pasien;
+use App\Models\WilayahLayanan;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -14,38 +16,67 @@ class TenagaMedisSeeder extends Seeder
      */
     public function run(): void
     {
-        // Buat beberapa data tenaga medis dummy beserta akun usernya
-        for ($i = 1; $i <= 5; $i++) {
-            $user = Users::create([
-                'email' => "nakes{$i}@example.com", // Diperbaiki menjadi tanda kutip dua ganda (")
-                'password' => Hash::make('password'),
-            ]);
+        $wilayah = WilayahLayanan::query()->first();
+        if (!$wilayah) {
+            $this->command?->warn('Tenaga medis dilewati karena data provinsi belum tersedia.');
+            return;
+        }
 
-            TenagaMedis::create([
+        for ($i = 1; $i <= 5; $i++) {
+            $user = Users::updateOrCreate(
+                ['email' => "nakes{$i}@example.com"],
+                ['password' => Hash::make('password'), 'is_active' => true]
+            );
+            $pasien = Pasien::updateOrCreate(
+                ['id_user' => $user->id_user],
+                [
+                    'nama_lengkap' => "Tenaga Medis {$i}",
+                    'no_hp' => '0812345678' . $i,
+                    'nik' => '320101900000000' . $i,
+                    'jenis_kelamin' => $i % 2 === 0 ? 'P' : 'L',
+                    'alamat_utama' => "Jl. Kesehatan No. {$i}, Jakarta",
+                ]
+            );
+
+            TenagaMedis::updateOrCreate(
+                ['id_user' => $user->id_user],
+                [
                 'id_user' => $user->id_user,
+                'id_pasien' => $pasien->id_pasien,
+                'id_wilayah_layanan' => $wilayah->id_provinsi,
                 'nama_lengkap' => "Dr. Tenaga Medis {$i}",
-                'nik' => '320101' . rand(100000000, 999999999),
-                'jenis_kelamin' => $i % 2 == 0 ? 'P' : 'L',
+                'nama_panggilan' => "Nakes {$i}",
+                'nik' => '320101900000000' . $i,
+                'jenis_kelamin' => $i % 2 === 0 ? 'P' : 'L',
                 'tempat_lahir' => 'Jakarta',
                 'tanggal_lahir' => '1990-01-01',
+                'agama' => 'Islam',
                 'alamat_lengkap' => "Jl. Kesehatan No. {$i}, Jakarta",
                 'no_telp' => '0812345678' . $i,
                 'jenis_tenaga_medis' => 'Dokter Umum',
+                'universitas' => 'Universitas Indonesia',
+                'program_studi' => 'Kedokteran',
+                'tahun_lulus' => 2015,
                 'no_str' => 'STR-' . rand(10000, 99999),
                 'no_sip' => 'SIP-' . rand(10000, 99999),
-                'no_npwp' => '12.345.678.9-001.000',
-                'lulusan' => 'Universitas Indonesia',
-                // Koordinat dummy (diatur agar fitur jarak Haversine di controller bisa berjalan)
-                'latitude' => -6.200000 + ($i * 0.01),
-                'longitude' => 106.816666 + ($i * 0.01),
-                'status' => 'approved', // Penting agar terbaca oleh logika booking controller
+                'file_ktp' => 'seeders/placeholder/ktp.jpg',
+                'ijazah' => 'seeders/placeholder/ijazah.jpg',
+                'file_skck' => 'seeders/placeholder/skck.jpg',
+                'file_cv' => 'seeders/placeholder/cv.pdf',
+                'file_str' => 'seeders/placeholder/str.jpg',
+                'file_sip' => 'seeders/placeholder/sip.jpg',
+                'tempat_kerja' => 'Smart Home Care',
+                'lama_bekerja' => '5 tahun',
+                'status' => 'approved',
                 'pengalaman_kerja' => [
                     ['instansi' => 'RS Sehat Selalu', 'tahun' => '2015-2020'],
                 ],
-                'seminar_pelatihan' => [
+                'dokumen_tambahan' => [
                     ['nama' => 'Pelatihan First Aid', 'tahun' => '2021'],
                 ],
-            ]);
+                'is_data_complete' => true,
+                ]
+            );
         }
     }
 }

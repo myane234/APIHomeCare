@@ -5,9 +5,7 @@ namespace Database\Seeders;
 use App\Models\Users;
 use App\Models\Pasien;
 //use App\Models\Layanan;
-use App\Models\Artikel;
 use Database\Seeders\WilayahSeeder;
-use Database\Seeders\TenagaMedisSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -26,13 +24,15 @@ class DatabaseSeeder extends Seeder
             AdminSeeder::class,
             SuperAdminSeeder::class,
             KategoriLayananSeeder::class,
-                //LayananSeeder::class,
-                //PromoSeeder::class,
+            KategoriArtikelSeeder::class,
             MasterBankSeeder::class,
             WilayahSeeder::class,
-            GlobalConfigSeeder::class
-            // ArtikelSeeder::class,
-            // TenagaMedisSeeder::class
+            MasterPendidikanSeeder::class,
+            MasterUniversitasSeeder::class,
+            LayananSeeder::class,
+            ArtikelSeeder::class,
+            PromoSeeder::class,
+            GlobalConfigSeeder::class,
         ]);
 
         // Jika ingin membuat data pasien tetap langsung di sini, silakan:
@@ -41,5 +41,7 @@ class DatabaseSeeder extends Seeder
         Pasien::factory(5)->create([
             'id_user' => Users::factory()->google(),
         ]);
+
+        $this->call(TenagaMedisSeeder::class);
     }
 }
