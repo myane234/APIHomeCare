@@ -43,6 +43,8 @@ class SuperAdminMasterTarif extends Controller
             'id_kategori_tarif' => ['required', 'exists:master_kategori_tarif,id_kategori_tarif'],
             'id_layanan' => ['nullable', 'required_without:layanan_ids', 'exists:master_layanan,id_layanan'],
             'id_kategori_layanan' => ['nullable', 'exists:kategori_layanans,id_kategori_layanan'],
+            'kategori_layanan_ids' => ['sometimes', 'array'],
+            'kategori_layanan_ids.*' => ['integer', 'exists:kategori_layanans,id_kategori_layanan'],
             'layanan_ids' => ['sometimes', 'array'],
             'layanan_ids.*' => ['integer', 'exists:master_layanan,id_layanan'],
             'komponen_tarif_ids' => ['sometimes', 'array'],
@@ -51,6 +53,7 @@ class SuperAdminMasterTarif extends Controller
             'id_kota' => ['nullable', 'exists:master_kota_kabupaten,id_kota'],
             'fee_nakes_tipe' => ['sometimes', 'in:nominal,persen'],
             'fee_nakes_nilai' => ['required', 'numeric', 'min:0'],
+            'is_transport' => ['boolean'],
             'is_active' => ['boolean'],
         ]);
 
@@ -113,6 +116,9 @@ class SuperAdminMasterTarif extends Controller
                 array_map('intval', $request->input('layanan_ids', [])),
                 $request->filled('id_kategori_layanan')
                     ? MasterLayanan::where('id_kategori_layanan', $request->id_kategori_layanan)->pluck('id_layanan')->all()
+                    : [],
+                !empty($request->input('kategori_layanan_ids', []))
+                    ? MasterLayanan::whereIn('id_kategori_layanan', $request->input('kategori_layanan_ids', []))->pluck('id_layanan')->all()
                     : []
             )));
             if (empty($layananIds)) {
@@ -134,6 +140,7 @@ class SuperAdminMasterTarif extends Controller
                         'fee_nakes_nilai' => $feeValue,
                         'fee_nakes_nominal' => $nominalFeeNakes,
                         'fee_platform_nominal' => $nominalFeePlatform,
+                        'is_transport' => $request->is_transport ?? false,
                         'is_active' => $request->is_active ?? true,
                     ]
                 );
@@ -190,6 +197,8 @@ class SuperAdminMasterTarif extends Controller
             'id_kategori_tarif' => ['sometimes', 'required', 'exists:master_kategori_tarif,id_kategori_tarif'],
             'id_layanan' => ['nullable', 'required_without:layanan_ids', 'exists:master_layanan,id_layanan'],
             'id_kategori_layanan' => ['nullable', 'exists:kategori_layanans,id_kategori_layanan'],
+            'kategori_layanan_ids' => ['sometimes', 'array'],
+            'kategori_layanan_ids.*' => ['integer', 'exists:kategori_layanans,id_kategori_layanan'],
             'layanan_ids' => ['sometimes', 'array'],
             'layanan_ids.*' => ['integer', 'exists:master_layanan,id_layanan'],
             'komponen_tarif_ids' => ['sometimes', 'array'],
@@ -198,6 +207,7 @@ class SuperAdminMasterTarif extends Controller
             'id_kota' => ['nullable', 'exists:master_kota_kabupaten,id_kota'],
             'fee_nakes_tipe' => ['sometimes', 'in:nominal,persen'],
             'fee_nakes_nilai' => ['sometimes', 'numeric', 'min:0'],
+            'is_transport' => ['boolean'],
             'is_active' => ['boolean'],
         ]);
 
@@ -232,6 +242,9 @@ class SuperAdminMasterTarif extends Controller
                 array_map('intval', $request->input('layanan_ids', [])),
                 $request->filled('id_kategori_layanan')
                     ? MasterLayanan::where('id_kategori_layanan', $request->id_kategori_layanan)->pluck('id_layanan')->all()
+                    : [],
+                !empty($request->input('kategori_layanan_ids', []))
+                    ? MasterLayanan::whereIn('id_kategori_layanan', $request->input('kategori_layanan_ids', []))->pluck('id_layanan')->all()
                     : []
             )));
             if (empty($layananIds)) {
@@ -240,6 +253,7 @@ class SuperAdminMasterTarif extends Controller
             if ($request->has('id_layanan')) $masterTarif->id_layanan = $layananIds[0];
             if ($request->has('fee_nakes_tipe')) $masterTarif->fee_nakes_tipe = $request->fee_nakes_tipe;
             if ($request->has('fee_nakes_nilai')) $masterTarif->fee_nakes_nilai = $request->fee_nakes_nilai;
+            if ($request->has('is_transport')) $masterTarif->is_transport = $request->is_transport;
             if ($request->has('is_active')) $masterTarif->is_active = $request->is_active;
 
             $layananUtama = MasterLayanan::find($masterTarif->id_layanan);

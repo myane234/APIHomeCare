@@ -25,6 +25,7 @@ class MasterTarif extends Model
         'fee_nakes_nilai',
         'fee_nakes_nominal',
         'fee_platform_nominal',
+        'is_transport',
         'is_active',
     ];
 
@@ -32,6 +33,7 @@ class MasterTarif extends Model
         'fee_nakes_nilai' => 'decimal:2',
         'fee_nakes_nominal' => 'decimal:2',
         'fee_platform_nominal' => 'decimal:2',
+        'is_transport' => 'boolean',
         'is_active' => 'boolean',
     ];
 

@@ -32,7 +32,6 @@ class MasterLayanan extends Model
         'nama_layanan',
         'deskripsi_layanan',
         'harga',
-        'include_transport',
         'foto_layanan',
         'tipe_layanan',
         'durasi_menit',
@@ -40,7 +39,6 @@ class MasterLayanan extends Model
 
     protected $casts = [
         'harga'             => 'decimal:2',
-        'include_transport' => 'boolean',
         'durasi_menit'      => 'integer',
     ];
 
