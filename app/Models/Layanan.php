@@ -16,9 +16,17 @@ class Layanan extends Model
         'id_kategori_layanan',
         'nama_layanan',
         'deskripsi_layanan',
+        'harga',
+        'include_transport',
         'foto_layanan',
         'tipe_layanan',
         'durasi_menit',
+    ];
+
+    protected $casts = [
+        'harga' => 'decimal:2',
+        'include_transport' => 'boolean',
+        'durasi_menit' => 'integer',
     ];
 
     public function kategori()

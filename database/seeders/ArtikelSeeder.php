@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Artikel;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Storage;
+use App\Models\KategoriArtikel;
 
 class ArtikelSeeder extends Seeder
 {
@@ -70,9 +71,9 @@ class ArtikelSeeder extends Seeder
             }
 
             // Get id_kategori_artikel
-            $idKategori = \Illuminate\Support\Facades\DB::table('kategori_artikels')
-                ->where('nama_kategori', $article['kategori_artikel'])
-                ->value('id_kategori_artikel');
+            $idKategori = KategoriArtikel::firstOrCreate([
+                'nama_kategori' => $article['kategori_artikel'],
+            ])->id_kategori_artikel;
 
             Artikel::updateOrCreate(
                 ['judul_artikel' => $article['judul_artikel']],

@@ -42,6 +42,11 @@ class AdminSeederController extends Controller
             'label' => 'Kategori Layanan',
             'description' => 'Kategori layanan home care.',
         ],
+        'KategoriArtikelSeeder' => [
+            'class' => 'Database\\Seeders\\KategoriArtikelSeeder',
+            'label' => 'Kategori Artikel',
+            'description' => 'Kategori artikel CMS.',
+        ],
         'MasterBankSeeder' => [
             'class' => 'Database\\Seeders\\MasterBankSeeder',
             'label' => 'Master Bank Payout',
@@ -86,6 +91,16 @@ class AdminSeederController extends Controller
             'class' => 'Database\\Seeders\\TenagaMedisSeeder',
             'label' => 'Tenaga Medis',
             'description' => 'Data tenaga medis.',
+        ],
+        'MasterPendidikanSeeder' => [
+            'class' => 'Database\\Seeders\\MasterPendidikanSeeder',
+            'label' => 'Master Pendidikan',
+            'description' => 'Pilihan jenjang pendidikan tenaga medis.',
+        ],
+        'MasterUniversitasSeeder' => [
+            'class' => 'Database\\Seeders\\MasterUniversitasSeeder',
+            'label' => 'Master Universitas',
+            'description' => 'Sinkronisasi universitas Indonesia dari Hipolabs.',
         ],
     ];
     
