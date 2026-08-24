@@ -13,7 +13,7 @@ class MasterProvinsiSeeder extends Seeder
      */
     public function run(WilayahImportService $importService): void
     {
-        foreach ($importService->load() as $province) {
+        foreach ($importService->loadProvinces() as $province) {
             WilayahLayanan::updateOrCreate(
                 ['nama_provinsi' => $province['name']],
                 ['is_active' => true]

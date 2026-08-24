@@ -7,7 +7,6 @@ use App\Models\Pasien;
 //use App\Models\Layanan;
 use App\Models\Artikel;
 use Database\Seeders\WilayahSeeder;
-use Database\Seeders\ProvinsiSeeder;
 use Database\Seeders\TenagaMedisSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -30,9 +29,7 @@ class DatabaseSeeder extends Seeder
                 //LayananSeeder::class,
                 //PromoSeeder::class,
             MasterBankSeeder::class,
-            ProvinsiSeeder::class,
-            KotaKabupatenSeeder::class,
-            // WilayahSeeder::class,
+            WilayahSeeder::class,
             GlobalConfigSeeder::class
             // ArtikelSeeder::class,
             // TenagaMedisSeeder::class
