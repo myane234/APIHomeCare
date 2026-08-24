@@ -14,10 +14,12 @@ class MasterKategoriTarif extends Model
 
     protected $fillable = [
         'nama_kategori',
+        'biaya_tambahan',
         'is_default',
     ];
 
     protected $casts = [
+        'biaya_tambahan' => 'decimal:2',
         'is_default' => 'boolean',
     ];
 

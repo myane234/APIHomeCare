@@ -21,6 +21,7 @@ class MasterKategoriTarifController extends Controller
     {
         $validated = $request->validate([
             'nama_kategori' => ['required', 'string', 'max:100', 'unique:master_kategori_tarif,nama_kategori'],
+            'biaya_tambahan' => ['required', 'numeric', 'min:0'],
             'is_default' => ['sometimes', 'boolean'],
         ]);
 
@@ -52,6 +53,7 @@ class MasterKategoriTarifController extends Controller
     {
         $validated = $request->validate([
             'nama_kategori' => ['sometimes', 'required', 'string', 'max:100', 'unique:master_kategori_tarif,nama_kategori,' . $masterKategoriTarif->id_kategori_tarif . ',id_kategori_tarif'],
+            'biaya_tambahan' => ['sometimes', 'required', 'numeric', 'min:0'],
             'is_default' => ['sometimes', 'boolean'],
         ]);
 
