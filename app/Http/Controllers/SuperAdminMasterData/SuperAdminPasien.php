@@ -59,10 +59,10 @@ class SuperAdminPasien extends Controller
             'jenis_kelamin'  => 'sometimes|required|in:L,P',
             'golongan_darah' => 'sometimes|nullable|string|max:3',
             'alamat_utama'   => 'sometimes|nullable|string',
-            'avatar'         => 'sometimes|nullable|string',
+            'avatar'         => 'sometimes|nullable|string|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
-        $pasien->update($request->only([
+        $dataToUpdate = $request->only([
             'nama_lengkap',
             'no_hp',
             'nik',
@@ -70,7 +70,16 @@ class SuperAdminPasien extends Controller
             'jenis_kelamin',
             'alamat_utama',
             'avatar',
-        ]));
+        ]);
+
+        // Jika avatar adalah file, convert ke string URL
+        if ($request->hasFile('avatar')) {
+            $file = $request->file('avatar');
+            $path = $file->store('avatars', 'public');
+            $dataToUpdate['avatar'] = asset('storage/' . $path);
+        }
+
+        $pasien->update($dataToUpdate);
 
         return response()->json([
             'success' => true,
