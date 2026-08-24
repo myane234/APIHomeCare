@@ -23,7 +23,16 @@ class Pasien extends Model
         'golongan_darah',
         'jenis_kelamin',
         'alamat_utama',
+        'avatar',
     ];
+
+    /**
+     * Get avatar - from Pasien or fallback to Users
+     */
+    public function getAvatarAttribute($value)
+    {
+        return $value ?? $this->user?->avatar;
+    }
 
     public function user()
     {

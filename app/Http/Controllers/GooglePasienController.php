@@ -30,8 +30,11 @@ class GooglePasienController extends Controller
       $googleUser = $driver->userFromToken($request->access_token);
 
       $user = DB::transaction(function () use ($googleUser) {
-        // 1. Cari user berdasarkan email
+    
         $checkUser = Users::where('email', $googleUser->getEmail())->first();
+
+   
+        $googleAvatar = $googleUser->getAvatar() ?? "https://lh3.googleusercontent.com/a/default-user=s96-c";
 
         if (!$checkUser) {
           $newUser = Users::create([
@@ -39,12 +42,13 @@ class GooglePasienController extends Controller
             'password'  => null,
             'is_active' => true,
             'google_id' => $googleUser->getId(),
+            'avatar'    => $googleAvatar,
           ]);
 
           $role = Role::firstOrCreate(['nama_role' => 'pasien']);
           $newUser->roles()->attach($role->nama_role);
 
-          // Buat record profil Pasien awal
+  
           Pasien::create([
             'id_user'        => $newUser->id_user,
             'nama_lengkap'   => $googleUser->getName() ?? 'Guest',
@@ -52,13 +56,17 @@ class GooglePasienController extends Controller
             'golongan_darah' => null,
             'jenis_kelamin'  => null,
             'alamat_utama'   => null,
+            'avatar'         => $googleAvatar,
           ]);
 
           return $newUser;
         } 
         
         if (!$checkUser->google_id) {
-          $checkUser->update(['google_id' => $googleUser->getId()]);
+          $checkUser->update([
+            'google_id' => $googleUser->getId(),
+            'avatar'    => $googleAvatar,
+          ]);
         }
 
         return $checkUser;
