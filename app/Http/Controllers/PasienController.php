@@ -69,15 +69,23 @@ class PasienController extends Controller
     }
 
     // 1. Validasi Input Profil
-    $validate = $request->validate([
+    $rules = [
         'nama_lengkap' => 'nullable|string',
         'nik'            => 'nullable|string',
         'golongan_darah' => ['nullable', Rule::enum(KategoriGoldar::class)],
         'no_hp'          => 'nullable|string',
         'jenis_kelamin'  => ['nullable', 'string', Rule::enum(JenisKelamin::class)],
         'alamat_utama'   => 'nullable|string',
-        'avatar'         => 'nullable|string|image|mimes:jpeg,png,jpg,gif|max:2048',
-    ]);
+    ];
+
+    // Conditional validation untuk avatar: bisa file atau string URL
+    if ($request->hasFile('avatar')) {
+        $rules['avatar'] = 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048';
+    } else {
+        $rules['avatar'] = 'nullable|string';
+    }
+
+    $validate = $request->validate($rules);
 
     // 2. Filter data agar hanya meng-update field yang benar-benar dikirimkan
     $dataToUpdate = array_filter($validate, fn ($value) => $value !== null);
