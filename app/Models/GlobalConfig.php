@@ -24,7 +24,6 @@ class GlobalConfig extends Model
         'email',
         'address',
         'socials',
-        'running_text',
         'maintenance_mode',
     ];
 

@@ -60,7 +60,6 @@ class GlobalConfigApiTest extends TestCase
                     'email',
                     'address',
                     'socials',
-                    'running_text',
                     'maintenance_mode',
                 ]
             ]);
@@ -113,7 +112,6 @@ class GlobalConfigApiTest extends TestCase
             'email' => 'adminbaru@test.com',
             'address' => 'Alamat Baru',
             'socials' => $socials,
-            'running_text' => 'Running Text Baru',
             'maintenance_mode' => true,
         ]);
 

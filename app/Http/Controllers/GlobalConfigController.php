@@ -24,7 +24,6 @@ class GlobalConfigController extends Controller
                 'phone_number' => '0211234567',
                 'email' => 'info@smarthomecare.com',
                 'address' => 'Jl. Kesehatan No. 123, Jakarta Selatan',
-                'running_text' => 'Selamat datang di Smart Home Care! Dapatkan potongan harga 10% untuk pemesanan pertama Anda.',
                 'maintenance_mode' => false,
             ]);
         }
@@ -43,7 +42,6 @@ class GlobalConfigController extends Controller
                 'email' => $config->email,
                 'address' => $config->address,
                 'socials' => $config->socials ?? [],
-                'running_text' => $config->running_text,
                 'maintenance_mode' => $config->maintenance_mode,
             ]
         ], 200);
@@ -80,7 +78,6 @@ class GlobalConfigController extends Controller
             'socials.*.icon' => 'nullable|string|max:255',
             'socials.*.url' => 'nullable|string|max:255',
             'socials.*.text' => 'nullable|string|max:255',
-            'running_text' => 'nullable|string',
             'maintenance_mode' => 'nullable', // parsed below
         ]);
 
@@ -124,7 +121,6 @@ class GlobalConfigController extends Controller
                 'email' => $config->email,
                 'address' => $config->address,
                 'socials' => $config->socials ?? [],
-                'running_text' => $config->running_text,
                 'maintenance_mode' => $config->maintenance_mode,
             ]
         ], 200);
