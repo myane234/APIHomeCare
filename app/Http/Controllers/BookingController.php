@@ -69,6 +69,7 @@ class BookingController extends Controller
 
         $validate = $request->validate([
             'id_layanan' => 'required',
+            'id_kategori_tarif' => 'nullable|exists:master_kategori_tarif,id_kategori_tarif',
             'id_tenaga_medis' => 'nullable',
             'tanggal_kunjungan' => 'required|date',
             'jam_kunjungan' => 'required',
@@ -129,12 +130,14 @@ class BookingController extends Controller
         $masterTarif = null;
         if ($idKota) {
             $masterTarif = \App\Models\MasterTarif::where('id_layanan', $layanan->id_layanan)
+                ->when($request->filled('id_kategori_tarif'), fn ($query) => $query->where('id_kategori_tarif', $request->input('id_kategori_tarif')))
                 ->where('id_kota', $idKota)
                 ->where('is_active', true)
                 ->first();
         }
         if (!$masterTarif) {
             $masterTarif = \App\Models\MasterTarif::where('id_layanan', $layanan->id_layanan)
+                ->when($request->filled('id_kategori_tarif'), fn ($query) => $query->where('id_kategori_tarif', $request->input('id_kategori_tarif')))
                 ->whereNull('id_kota')
                 ->where('is_active', true)
                 ->first();

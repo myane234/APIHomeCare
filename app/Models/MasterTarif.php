@@ -17,6 +17,7 @@ class MasterTarif extends Model
 
     protected $fillable = [
         'nama_template',
+        'id_kategori_tarif',
         'id_layanan',
         'id_kota',
         'id_provinsi',
@@ -37,6 +38,11 @@ class MasterTarif extends Model
     public function layanan()
     {
         return $this->belongsTo(MasterLayanan::class, 'id_layanan', 'id_layanan');
+    }
+
+    public function kategoriTarif()
+    {
+        return $this->belongsTo(MasterKategoriTarif::class, 'id_kategori_tarif', 'id_kategori_tarif');
     }
 
     public function kota()

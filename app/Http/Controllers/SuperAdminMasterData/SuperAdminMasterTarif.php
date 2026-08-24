@@ -22,7 +22,7 @@ class SuperAdminMasterTarif extends Controller
      */
     public function index()
     {
-        $masterTarifs = MasterTarif::with(['layanan', 'kota.provinsi', 'provinsi', 'layananTermasuk', 'komponenTarif'])->get();
+        $masterTarifs = MasterTarif::with(['layanan', 'kategoriTarif', 'kota.provinsi', 'provinsi', 'layananTermasuk', 'komponenTarif'])->get();
 
         return response()->json([
             'success' => true,
@@ -40,6 +40,7 @@ class SuperAdminMasterTarif extends Controller
     {
         $validated = $request->validate([
             'nama_template' => ['required', 'string', 'max:255'],
+            'id_kategori_tarif' => ['required', 'exists:master_kategori_tarif,id_kategori_tarif'],
             'id_layanan' => ['required', 'exists:master_layanan,id_layanan'],
             'layanan_ids' => ['sometimes', 'array'],
             'layanan_ids.*' => ['integer', 'exists:master_layanan,id_layanan'],
@@ -116,6 +117,7 @@ class SuperAdminMasterTarif extends Controller
                 $masterTarif = MasterTarif::updateOrCreate(
                     [
                         'nama_template' => $request->nama_template,
+                        'id_kategori_tarif' => $request->id_kategori_tarif,
                         'id_layanan' => $request->id_layanan,
                         'id_kota' => $target['id_kota'],
                     ],
@@ -134,7 +136,7 @@ class SuperAdminMasterTarif extends Controller
                     $masterTarif->komponenTarif()->sync($komponenIds);
                 }
 
-                $masterTarif->load(['layanan', 'kota.provinsi', 'provinsi', 'layananTermasuk', 'komponenTarif']);
+                $masterTarif->load(['layanan', 'kategoriTarif', 'kota.provinsi', 'provinsi', 'layananTermasuk', 'komponenTarif']);
                 $createdTarifs[] = $masterTarif;
             }
 
@@ -160,7 +162,7 @@ class SuperAdminMasterTarif extends Controller
      */
     public function show($id)
     {
-        $masterTarif = MasterTarif::with(['layanan', 'kota.provinsi', 'provinsi', 'layananTermasuk', 'komponenTarif'])->findOrFail($id);
+        $masterTarif = MasterTarif::with(['layanan', 'kategoriTarif', 'kota.provinsi', 'provinsi', 'layananTermasuk', 'komponenTarif'])->findOrFail($id);
 
         return response()->json([
             'success' => true,
@@ -178,6 +180,7 @@ class SuperAdminMasterTarif extends Controller
 
         $validated = $request->validate([
             'nama_template' => ['sometimes', 'required', 'string', 'max:255'],
+            'id_kategori_tarif' => ['sometimes', 'required', 'exists:master_kategori_tarif,id_kategori_tarif'],
             'id_layanan' => ['sometimes', 'required', 'exists:master_layanan,id_layanan'],
             'layanan_ids' => ['sometimes', 'array'],
             'layanan_ids.*' => ['integer', 'exists:master_layanan,id_layanan'],
@@ -215,6 +218,7 @@ class SuperAdminMasterTarif extends Controller
             }
 
             if ($request->has('nama_template')) $masterTarif->nama_template = $request->nama_template;
+            if ($request->has('id_kategori_tarif')) $masterTarif->id_kategori_tarif = $request->id_kategori_tarif;
             if ($request->has('id_layanan')) $masterTarif->id_layanan = $request->id_layanan;
             if ($request->has('fee_nakes_tipe')) $masterTarif->fee_nakes_tipe = $request->fee_nakes_tipe;
             if ($request->has('fee_nakes_nilai')) $masterTarif->fee_nakes_nilai = $request->fee_nakes_nilai;
@@ -243,6 +247,7 @@ class SuperAdminMasterTarif extends Controller
                     $otherTarif = MasterTarif::updateOrCreate(
                         [
                             'nama_template' => $masterTarif->nama_template,
+                            'id_kategori_tarif' => $masterTarif->id_kategori_tarif,
                             'id_layanan' => $masterTarif->id_layanan,
                             'id_kota' => $k->id_kota,
                         ],
@@ -280,7 +285,7 @@ class SuperAdminMasterTarif extends Controller
 
             DB::commit();
 
-            $masterTarif->load(['layanan', 'kota.provinsi', 'provinsi', 'layananTermasuk', 'komponenTarif']);
+            $masterTarif->load(['layanan', 'kategoriTarif', 'kota.provinsi', 'provinsi', 'layananTermasuk', 'komponenTarif']);
 
             return response()->json([
                 'success' => true,
