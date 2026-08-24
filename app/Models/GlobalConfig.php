@@ -16,15 +16,11 @@ class GlobalConfig extends Model
         'app_name',
         'app_logo',
         'app_favicon',
-        'meta_title',
-        'meta_description',
-        'meta_keywords',
         'whatsapp_number',
         'phone_number',
         'email',
         'address',
         'socials',
-        'running_text',
         'maintenance_mode',
     ];
 

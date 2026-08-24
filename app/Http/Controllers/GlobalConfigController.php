@@ -17,14 +17,10 @@ class GlobalConfigController extends Controller
         if (!$config) {
             $config = GlobalConfig::create([
                 'app_name' => 'Smart Home Care',
-                'meta_title' => 'Smart Home Care - Layanan Kesehatan Home Care Terpercaya',
-                'meta_description' => 'Kami menyediakan layanan kesehatan home care profesional langsung ke rumah Anda.',
-                'meta_keywords' => 'homecare, kesehatan, perawat, dokter, fisioterapi',
                 'whatsapp_number' => '6281234567890',
                 'phone_number' => '0211234567',
                 'email' => 'info@smarthomecare.com',
                 'address' => 'Jl. Kesehatan No. 123, Jakarta Selatan',
-                'running_text' => 'Selamat datang di Smart Home Care! Dapatkan potongan harga 10% untuk pemesanan pertama Anda.',
                 'maintenance_mode' => false,
             ]);
         }
@@ -35,15 +31,11 @@ class GlobalConfigController extends Controller
                 'app_name' => $config->app_name,
                 'app_logo' => $config->app_logo_url,
                 'app_favicon' => $config->app_favicon_url,
-                'meta_title' => $config->meta_title,
-                'meta_description' => $config->meta_description,
-                'meta_keywords' => $config->meta_keywords,
                 'whatsapp_number' => $config->whatsapp_number,
                 'phone_number' => $config->phone_number,
                 'email' => $config->email,
                 'address' => $config->address,
                 'socials' => $config->socials ?? [],
-                'running_text' => $config->running_text,
                 'maintenance_mode' => $config->maintenance_mode,
             ]
         ], 200);
@@ -68,9 +60,6 @@ class GlobalConfigController extends Controller
             'app_name' => 'nullable|string|max:255',
             'app_logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
             'app_favicon' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,ico,webp|max:1024',
-            'meta_title' => 'nullable|string|max:255',
-            'meta_description' => 'nullable|string',
-            'meta_keywords' => 'nullable|string|max:500',
             'whatsapp_number' => 'nullable|string|max:20',
             'phone_number' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
@@ -80,7 +69,6 @@ class GlobalConfigController extends Controller
             'socials.*.icon' => 'nullable|string|max:255',
             'socials.*.url' => 'nullable|string|max:255',
             'socials.*.text' => 'nullable|string|max:255',
-            'running_text' => 'nullable|string',
             'maintenance_mode' => 'nullable', // parsed below
         ]);
 
@@ -116,15 +104,11 @@ class GlobalConfigController extends Controller
                 'app_name' => $config->app_name,
                 'app_logo' => $config->app_logo_url,
                 'app_favicon' => $config->app_favicon_url,
-                'meta_title' => $config->meta_title,
-                'meta_description' => $config->meta_description,
-                'meta_keywords' => $config->meta_keywords,
                 'whatsapp_number' => $config->whatsapp_number,
                 'phone_number' => $config->phone_number,
                 'email' => $config->email,
                 'address' => $config->address,
                 'socials' => $config->socials ?? [],
-                'running_text' => $config->running_text,
                 'maintenance_mode' => $config->maintenance_mode,
             ]
         ], 200);

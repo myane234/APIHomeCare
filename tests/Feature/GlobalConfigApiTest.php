@@ -52,15 +52,11 @@ class GlobalConfigApiTest extends TestCase
                     'app_name',
                     'app_logo',
                     'app_favicon',
-                    'meta_title',
-                    'meta_description',
-                    'meta_keywords',
                     'whatsapp_number',
                     'phone_number',
                     'email',
                     'address',
                     'socials',
-                    'running_text',
                     'maintenance_mode',
                 ]
             ]);
@@ -105,15 +101,11 @@ class GlobalConfigApiTest extends TestCase
             'app_name' => 'Home Care Baru',
             'app_logo' => $logo,
             'app_favicon' => $favicon,
-            'meta_title' => 'Title Baru',
-            'meta_description' => 'Desc Baru',
-            'meta_keywords' => 'Keyword Baru',
             'whatsapp_number' => '6289999999',
             'phone_number' => '02199999',
             'email' => 'adminbaru@test.com',
             'address' => 'Alamat Baru',
             'socials' => $socials,
-            'running_text' => 'Running Text Baru',
             'maintenance_mode' => true,
         ]);
 
@@ -122,8 +114,6 @@ class GlobalConfigApiTest extends TestCase
             ->assertJsonPath('message', 'Konfigurasi global berhasil diperbarui');
 
         $this->assertEquals('Home Care Baru', $response->json('data.app_name'));
-        $this->assertEquals('Title Baru', $response->json('data.meta_title'));
-        $this->assertEquals('Desc Baru', $response->json('data.meta_description'));
         $this->assertTrue($response->json('data.maintenance_mode'));
         $this->assertEquals($socials, $response->json('data.socials'));
 

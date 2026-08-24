@@ -45,3 +45,6 @@ Route::get('/banks', [\App\Http\Controllers\MasterBankController::class, 'index'
 
 // Global Config
 Route::get('/global-config', [\App\Http\Controllers\GlobalConfigController::class, 'getGlobalConfig']);
+
+// SEO Config
+Route::get('/seo-config', [\App\Http\Controllers\SeoConfigController::class, 'getSeoConfig']);
