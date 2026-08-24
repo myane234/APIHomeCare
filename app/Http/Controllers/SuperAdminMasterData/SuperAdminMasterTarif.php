@@ -41,7 +41,8 @@ class SuperAdminMasterTarif extends Controller
         $validated = $request->validate([
             'nama_template' => ['required', 'string', 'max:255'],
             'id_kategori_tarif' => ['required', 'exists:master_kategori_tarif,id_kategori_tarif'],
-            'id_layanan' => ['required', 'exists:master_layanan,id_layanan'],
+            'id_layanan' => ['nullable', 'required_without:layanan_ids', 'exists:master_layanan,id_layanan'],
+            'id_kategori_layanan' => ['nullable', 'exists:kategori_layanans,id_kategori_layanan'],
             'layanan_ids' => ['sometimes', 'array'],
             'layanan_ids.*' => ['integer', 'exists:master_layanan,id_layanan'],
             'komponen_tarif_ids' => ['sometimes', 'array'],
@@ -107,10 +108,16 @@ class SuperAdminMasterTarif extends Controller
         try {
             $createdTarifs = [];
 
-            $layananIds = array_unique(array_merge(
-                [(int) $request->id_layanan],
-                array_map('intval', $request->input('layanan_ids', []))
-            ));
+            $layananIds = array_unique(array_filter(array_merge(
+                $request->filled('id_layanan') ? [(int) $request->id_layanan] : [],
+                array_map('intval', $request->input('layanan_ids', [])),
+                $request->filled('id_kategori_layanan')
+                    ? MasterLayanan::where('id_kategori_layanan', $request->id_kategori_layanan)->pluck('id_layanan')->all()
+                    : []
+            )));
+            if (empty($layananIds)) {
+                throw new \InvalidArgumentException('Minimal satu layanan harus dipilih');
+            }
             $komponenIds = $request->input('komponen_tarif_ids', []);
 
             foreach ($targetKotas as $target) {
@@ -118,7 +125,7 @@ class SuperAdminMasterTarif extends Controller
                     [
                         'nama_template' => $request->nama_template,
                         'id_kategori_tarif' => $request->id_kategori_tarif,
-                        'id_layanan' => $request->id_layanan,
+                        'id_layanan' => $layananIds[0],
                         'id_kota' => $target['id_kota'],
                     ],
                     [
@@ -181,7 +188,8 @@ class SuperAdminMasterTarif extends Controller
         $validated = $request->validate([
             'nama_template' => ['sometimes', 'required', 'string', 'max:255'],
             'id_kategori_tarif' => ['sometimes', 'required', 'exists:master_kategori_tarif,id_kategori_tarif'],
-            'id_layanan' => ['sometimes', 'required', 'exists:master_layanan,id_layanan'],
+            'id_layanan' => ['nullable', 'required_without:layanan_ids', 'exists:master_layanan,id_layanan'],
+            'id_kategori_layanan' => ['nullable', 'exists:kategori_layanans,id_kategori_layanan'],
             'layanan_ids' => ['sometimes', 'array'],
             'layanan_ids.*' => ['integer', 'exists:master_layanan,id_layanan'],
             'komponen_tarif_ids' => ['sometimes', 'array'],
@@ -219,7 +227,17 @@ class SuperAdminMasterTarif extends Controller
 
             if ($request->has('nama_template')) $masterTarif->nama_template = $request->nama_template;
             if ($request->has('id_kategori_tarif')) $masterTarif->id_kategori_tarif = $request->id_kategori_tarif;
-            if ($request->has('id_layanan')) $masterTarif->id_layanan = $request->id_layanan;
+            $layananIds = array_unique(array_filter(array_merge(
+                $request->filled('id_layanan') ? [(int) $request->id_layanan] : [],
+                array_map('intval', $request->input('layanan_ids', [])),
+                $request->filled('id_kategori_layanan')
+                    ? MasterLayanan::where('id_kategori_layanan', $request->id_kategori_layanan)->pluck('id_layanan')->all()
+                    : []
+            )));
+            if (empty($layananIds)) {
+                $layananIds = [(int) $masterTarif->id_layanan];
+            }
+            if ($request->has('id_layanan')) $masterTarif->id_layanan = $layananIds[0];
             if ($request->has('fee_nakes_tipe')) $masterTarif->fee_nakes_tipe = $request->fee_nakes_tipe;
             if ($request->has('fee_nakes_nilai')) $masterTarif->fee_nakes_nilai = $request->fee_nakes_nilai;
             if ($request->has('is_active')) $masterTarif->is_active = $request->is_active;
@@ -261,11 +279,8 @@ class SuperAdminMasterTarif extends Controller
                         ]
                     );
 
-                    if ($request->has('layanan_ids') || $request->has('id_layanan')) {
-                        $otherTarif->layananTermasuk()->sync(array_unique(array_merge(
-                            [$masterTarif->id_layanan],
-                            $request->input('layanan_ids', [])
-                        )));
+                    if ($request->has('layanan_ids') || $request->has('id_layanan') || $request->has('id_kategori_layanan')) {
+                        $otherTarif->layananTermasuk()->sync($layananIds);
                     }
                     if ($request->has('komponen_tarif_ids')) {
                         $otherTarif->komponenTarif()->sync($request->input('komponen_tarif_ids', []));
@@ -273,11 +288,8 @@ class SuperAdminMasterTarif extends Controller
                 }
             }
 
-            if ($request->has('layanan_ids') || $request->has('id_layanan')) {
-                $masterTarif->layananTermasuk()->sync(array_unique(array_merge(
-                    [$masterTarif->id_layanan],
-                    $request->input('layanan_ids', [])
-                )));
+            if ($request->has('layanan_ids') || $request->has('id_layanan') || $request->has('id_kategori_layanan')) {
+                $masterTarif->layananTermasuk()->sync($layananIds);
             }
             if ($request->has('komponen_tarif_ids')) {
                 $masterTarif->komponenTarif()->sync($request->input('komponen_tarif_ids', []));

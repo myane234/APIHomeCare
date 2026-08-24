@@ -143,8 +143,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Master Data (BHP & Tarif)
     Route::apiResource('/master-kategori-tarif', MasterKategoriTarifController::class);
-    Route::apiResource('/bhp-items', SuperAdminDataBarang::class);
     Route::put('/bhp-items/global-margin', [SuperAdminDataBarang::class, 'updateGlobalMargin']);
+    Route::apiResource('/bhp-items', SuperAdminDataBarang::class);
     Route::apiResource('/master-tarif', SuperAdminMasterTarif::class);
 
     // Tarif Transport CRUD
