@@ -52,15 +52,23 @@ class SuperAdminPasien extends Controller
             ], 404);
         }
 
-        $request->validate([
+        $rules = [
             'nama_lengkap'   => 'sometimes|required|string|max:255',
             'no_hp'          => 'sometimes|required|string|max:15',
             'nik'            => 'sometimes|required|string|max:16',
             'jenis_kelamin'  => 'sometimes|required|in:L,P',
             'golongan_darah' => 'sometimes|nullable|string|max:3',
             'alamat_utama'   => 'sometimes|nullable|string',
-            'avatar'         => 'sometimes|nullable|string|image|mimes:jpeg,png,jpg,gif|max:2048',
-        ]);
+        ];
+
+        // Conditional validation untuk avatar: bisa file atau string URL
+        if ($request->hasFile('avatar')) {
+            $rules['avatar'] = 'sometimes|nullable|image|mimes:jpeg,png,jpg,gif|max:2048';
+        } else {
+            $rules['avatar'] = 'sometimes|nullable|string';
+        }
+
+        $request->validate($rules);
 
         $dataToUpdate = $request->only([
             'nama_lengkap',
