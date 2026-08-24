@@ -76,6 +76,7 @@ class PasienController extends Controller
         'no_hp'          => 'nullable|string',
         'jenis_kelamin'  => ['nullable', 'string', Rule::enum(JenisKelamin::class)],
         'alamat_utama'   => 'nullable|string',
+        'avatar'         => 'nullable|string',
     ]);
 
     // 2. Filter data agar hanya meng-update field yang benar-benar dikirimkan

@@ -58,6 +58,8 @@ class SuperAdminPasien extends Controller
             'nik'            => 'sometimes|required|string|max:16',
             'jenis_kelamin'  => 'sometimes|required|in:L,P',
             'golongan_darah' => 'sometimes|nullable|string|max:3',
+            'alamat_utama'   => 'sometimes|nullable|string',
+            'avatar'         => 'sometimes|nullable|string',
         ]);
 
         $pasien->update($request->only([
@@ -66,7 +68,8 @@ class SuperAdminPasien extends Controller
             'nik',
             'golongan_darah',
             'jenis_kelamin',
-            'alamat_utama'
+            'alamat_utama',
+            'avatar',
         ]));
 
         return response()->json([

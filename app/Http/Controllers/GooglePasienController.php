@@ -67,6 +67,15 @@ class GooglePasienController extends Controller
             'google_id' => $googleUser->getId(),
             'avatar'    => $googleAvatar,
           ]);
+        } else {
+          // Always update avatar from Google on every login
+          $checkUser->update(['avatar' => $googleAvatar]);
+        }
+
+        // Always update Pasien avatar as well
+        $pasien = Pasien::where('id_user', $checkUser->id_user)->first();
+        if ($pasien) {
+          $pasien->update(['avatar' => $googleAvatar]);
         }
 
         return $checkUser;
