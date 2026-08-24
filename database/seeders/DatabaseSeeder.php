@@ -33,7 +33,8 @@ class DatabaseSeeder extends Seeder
             ProvinsiSeeder::class,
             KotaKabupatenSeeder::class,
             // WilayahSeeder::class,
-            GlobalConfigSeeder::class
+            GlobalConfigSeeder::class,
+            SeoConfigSeeder::class
             // ArtikelSeeder::class,
             // TenagaMedisSeeder::class
         ]);
