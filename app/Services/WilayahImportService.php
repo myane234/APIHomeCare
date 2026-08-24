@@ -49,7 +49,22 @@ class WilayahImportService
 
     public function getSource(): ?WilayahImportSource
     {
-        return WilayahImportSource::find(1) ?? ($this->defaultApiSource());
+        $storedSource = WilayahImportSource::find(1);
+
+        // Konfigurasi database bersifat opsional. Gunakan hanya jika lengkap.
+        if ($storedSource?->source_type === 'file' && $storedSource->file_path) {
+            return $storedSource;
+        }
+
+        if ($storedSource?->source_type === 'api'
+            && $storedSource->provinces_url
+            && $storedSource->regencies_url
+            && $storedSource->districts_url
+            && $storedSource->villages_url) {
+            return $storedSource;
+        }
+
+        return $this->defaultApiSource();
     }
 
     public function load(?callable $progress = null): array
@@ -145,11 +160,21 @@ class WilayahImportService
     private function defaultApiSource(): ?WilayahImportSource
     {
         $urls = config('services.wilayah');
-        if (empty($urls['provinces_url'])) {
+        if (empty($urls['provinces_url'])
+            || empty($urls['regencies_url'])
+            || empty($urls['districts_url'])
+            || empty($urls['villages_url'])) {
             return null;
         }
 
-        return $this->saveApi($urls);
+        // Jangan membuat record konfigurasi. Seeder cukup membaca .env.
+        return new WilayahImportSource([
+            'source_type' => 'api',
+            'provinces_url' => rtrim($urls['provinces_url'], '/'),
+            'regencies_url' => rtrim($urls['regencies_url'], '/'),
+            'districts_url' => rtrim($urls['districts_url'], '/'),
+            'villages_url' => rtrim($urls['villages_url'], '/'),
+        ]);
     }
 
     private function apiUrls(WilayahImportSource $source): array
