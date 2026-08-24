@@ -28,13 +28,15 @@ class Promo extends Model
         'tanggal_berakhir' => 'date',
     ];
 
+    protected $appends = ['gambar_promo_url'];
+
     public function getGambarPromoUrlAttribute()
     {
         if (!$this->gambar_promo) {
             return null;
         }
 
-        return \Illuminate\Support\Facades\Storage::disk('public')->url($this->gambar_promo);
+        return url(\Illuminate\Support\Facades\Storage::disk('public')->url($this->gambar_promo));
     }
 
     public function layanans()
