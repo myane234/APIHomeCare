@@ -30,6 +30,7 @@ use App\Http\Controllers\MasterPendidikanController;
 use App\Http\Controllers\MasterUniversitasController;
 use App\Http\Controllers\AdminSeederController;
 use App\Http\Controllers\NotificationTemplateController;
+use App\Http\Controllers\MasterKategoriTarifController;
 
 use App\Http\Controllers\KonfigurasiEnvController;
 
@@ -141,6 +142,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     });
 
     // Master Data (BHP & Tarif)
+    Route::apiResource('/master-kategori-tarif', MasterKategoriTarifController::class);
     Route::apiResource('/bhp-items', SuperAdminDataBarang::class);
     Route::put('/bhp-items/global-margin', [SuperAdminDataBarang::class, 'updateGlobalMargin']);
     Route::apiResource('/master-tarif', SuperAdminMasterTarif::class);

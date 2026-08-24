@@ -42,7 +42,21 @@ class MappingLayananBhpController extends Controller
      */
     public function index()
     {
-        $layanans = MasterLayanan::with('bhpItems')->get();
+        $layanans = MasterLayanan::with('bhpItems')->get()->map(function (MasterLayanan $layanan) {
+            return [
+                'id_layanan' => $layanan->id_layanan,
+                'nama_layanan' => $layanan->nama_layanan,
+                'bhp_items' => $layanan->bhpItems->map(function (BhpItem $bhp) {
+                    return [
+                        'id_bhp' => $bhp->id_bhp,
+                        'nama_bhp' => $bhp->nama_bhp,
+                        'harga_jual' => $bhp->harga_jual,
+                        'qty_default' => $bhp->pivot->qty_default,
+                        'is_mandatory' => (bool) $bhp->pivot->is_mandatory,
+                    ];
+                })->values(),
+            ];
+        })->values();
 
         return response()->json([
             'success' => true,
@@ -78,7 +92,19 @@ class MappingLayananBhpController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Detail mapping BHP untuk layanan terpilih',
-            'data' => $layanan
+            'data' => [
+                'id_layanan' => $layanan->id_layanan,
+                'nama_layanan' => $layanan->nama_layanan,
+                'bhp_items' => $layanan->bhpItems->map(function (BhpItem $bhp) {
+                    return [
+                        'id_bhp' => $bhp->id_bhp,
+                        'nama_bhp' => $bhp->nama_bhp,
+                        'harga_jual' => $bhp->harga_jual,
+                        'qty_default' => $bhp->pivot->qty_default,
+                        'is_mandatory' => (bool) $bhp->pivot->is_mandatory,
+                    ];
+                })->values(),
+            ]
         ], 200);
     }
 
@@ -110,6 +136,14 @@ class MappingLayananBhpController extends Controller
             'bhp_items.*.qty_default' => 'nullable|integer|min:1',
             'bhp_items.*.is_mandatory' => 'nullable|boolean',
         ]);
+
+        $bhpIds = collect($request->input('bhp_items', []))->pluck('id_bhp');
+        if ($bhpIds->count() !== $bhpIds->unique()->count()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'BHP yang sama tidak boleh dipilih lebih dari satu kali',
+            ], 422);
+        }
 
         $syncData = [];
         if (!empty($request->bhp_items)) {
