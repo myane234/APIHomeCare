@@ -201,6 +201,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Global Config - Admin Update
     Route::post('/global-config', [\App\Http\Controllers\GlobalConfigController::class, 'updateGlobalConfig']);
 
+    // SEO Config - Admin Update
+    Route::post('/seo-config', [\App\Http\Controllers\SeoConfigController::class, 'updateSeoConfig']);
+
     // Master Agama dan Pendidikan - Admin CRUD
     Route::apiResource('/master-agama', MasterAgamaController::class)
         ->parameters(['master-agama' => 'agama']);
