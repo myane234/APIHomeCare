@@ -20,6 +20,7 @@ return new class extends Migration
             $table->enum('golongan_darah', ['A', 'B', 'AB', 'O'])->nullable();
             $table->enum('jenis_kelamin', ['L', 'P'])->nullable();
             $table->string('alamat_utama')->nullable();
+            $table->text('avatar')->nullable();
             $table->timestamps();
         });
     }
