@@ -31,6 +31,8 @@ use App\Http\Controllers\MasterUniversitasController;
 use App\Http\Controllers\AdminSeederController;
 use App\Http\Controllers\NotificationTemplateController;
 
+use App\Http\Controllers\KonfigurasiEnvController;
+
 Route::middleware(['auth:sanctum'])->group(function () {
 
     // Auth Admin & Super Admin
@@ -206,5 +208,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
         ->parameters(['master-pendidikan' => 'pendidikan']);
     Route::apiResource('/master-universitas', MasterUniversitasController::class)
         ->parameters(['master-universitas' => 'universita']);
+
+    // Konfigurasi .env
+    Route::get('/konfigurasi-env', [KonfigurasiEnvController::class, 'index']);
+    Route::post('/konfigurasi-env', [KonfigurasiEnvController::class, 'update']);
 
 });
