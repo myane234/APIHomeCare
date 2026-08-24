@@ -1,6 +1,8 @@
 <?php
+
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
@@ -8,20 +10,39 @@ use Illuminate\Support\Facades\File;
 class KonfigurasiEnvController extends Controller
 {
     /**
-     * Get all current .env settings
+     * Whitelist key yang DIIZINKAN untuk di-edit via CMS.
+     * Key selain di daftar ini otomatis is_editable = false.
+     */
+    private array $editableKeys = [
+        'APP_NAME',
+        'APP_ENV',
+        'APP_DEBUG',
+        'APP_URL',
+        'DB_HOST',
+        'DB_PORT',
+        'DB_DATABASE',
+        'DB_USERNAME',
+        'DB_PASSWORD',
+        'GOOGLE_CLIENT_ID',
+        'GOOGLE_CLIENT_SECRET',
+        'GOOGLE_REDIRECT_URI',
+        'SANCTUM_STATEFUL_DOMAINS',
+        'CORS_ALLOWED_ORIGINS',
+    ];
+
+    /**
+     * Get semua key .env beserta status is_editable
      */
     public function index()
     {
-        $envData = $this->parseEnvFile();
-
         return response()->json([
             'status' => 'success',
-            'data'   => $envData
+            'data'   => $this->parseEnvFile()
         ], 200);
     }
 
     /**
-     * Update .env key-value pairs
+     * Update .env (Hanya memproses key dengan is_editable = true)
      */
     public function update(Request $request)
     {
@@ -53,9 +74,13 @@ class KonfigurasiEnvController extends Controller
         $envContent = File::get($envPath);
 
         foreach ($validated as $key => $value) {
+            // Abaikan jika key tidak terdaftar di whitelist
+            if (!in_array($key, $this->editableKeys)) {
+                continue;
+            }
+
             $value = $value ?? '';
 
-            // Handle spasi, karakter khusus (#, $, dll), atau regex CORS
             if (preg_match('/[\s#$"\\\\]/', $value) || str_contains($value, '=')) {
                 $value = '"' . addcslashes($value, '"$') . '"';
             }
@@ -69,8 +94,6 @@ class KonfigurasiEnvController extends Controller
         }
 
         File::put($envPath, $envContent);
-
-        // Hapus & refresh cache konfigurasi Laravel
         Artisan::call('config:clear');
 
         return response()->json([
@@ -93,7 +116,13 @@ class KonfigurasiEnvController extends Controller
 
             if (str_contains($line, '=')) {
                 [$key, $value] = explode('=', $line, 2);
-                $env[trim($key)] = trim($value, "\"'\r\t\n");
+                $key = trim($key);
+
+                $env[] = [
+                    'key'         => $key,
+                    'value'       => trim($value, "\"'\r\t\n"),
+                    'is_editable' => in_array($key, $this->editableKeys),
+                ];
             }
         }
 
