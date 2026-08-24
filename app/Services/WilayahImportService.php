@@ -97,7 +97,7 @@ class WilayahImportService
 
             foreach ($provinces as &$province) {
                 $province['regencies'] = $this->requestJson(
-                    str_replace('{id_provinsi}', $province['id'], $urls['regencies'])
+                    $this->resolveUrl($urls['regencies'], 'id_provinsi', $province['id'])
                 );
             }
 
@@ -122,15 +122,15 @@ class WilayahImportService
         }
 
         foreach ($provinces as &$province) {
-            $province['regencies'] = $this->requestJson(str_replace('{id_provinsi}', $province['id'], $urls['regencies']));
+            $province['regencies'] = $this->requestJson($this->resolveUrl($urls['regencies'], 'id_provinsi', $province['id']));
             if ($progress) {
                 $progress('province_loaded', ['province' => $province, 'cities' => count($province['regencies'])]);
             }
 
             foreach ($province['regencies'] as &$city) {
-                $city['districts'] = $this->requestJson(str_replace('{id_kota}', $city['id'], $urls['districts']));
+                $city['districts'] = $this->requestJson($this->resolveUrl($urls['districts'], 'id_kota', $city['id']));
                 foreach ($city['districts'] as &$district) {
-                    $district['villages'] = $this->requestJson(str_replace('{id_kecamatan}', $district['id'], $urls['villages']));
+                    $district['villages'] = $this->requestJson($this->resolveUrl($urls['villages'], 'id_kecamatan', $district['id']));
                 }
 
                 if ($progress) {
@@ -195,12 +195,29 @@ class WilayahImportService
 
     private function requestJson(string $url): array
     {
-        $response = Http::acceptJson()->timeout(60)->get($url);
+        $response = Http::acceptJson()
+            ->retry(3, 1000, throw: false)
+            ->timeout(60)
+            ->get($url);
         if ($response->failed() || !is_array($response->json())) {
-            throw new RuntimeException('Gagal mengambil data wilayah dari: ' . $url);
+            throw new RuntimeException(sprintf(
+                'Gagal mengambil data wilayah dari %s (HTTP %s).',
+                $url,
+                $response->status() ?: 'tidak tersedia'
+            ));
         }
 
         return $response->json();
+    }
+
+    private function resolveUrl(string $template, string $placeholder, string|int $value): string
+    {
+        $token = '{' . $placeholder . '}';
+        if (!str_contains($template, $token)) {
+            throw new RuntimeException("URL wilayah harus memiliki placeholder {$token}: {$template}");
+        }
+
+        return str_replace($token, rawurlencode((string) $value), $template);
     }
 
     private function normalizeJson(array $data): array
