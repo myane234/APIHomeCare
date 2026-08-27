@@ -33,6 +33,7 @@ class DatabaseSeeder extends Seeder
             ArtikelSeeder::class,
             PromoSeeder::class,
             GlobalConfigSeeder::class,
+            LegalitySeeder::class,
         ]);
 
         // Jika ingin membuat data pasien tetap langsung di sini, silakan:

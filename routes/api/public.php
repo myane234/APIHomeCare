@@ -11,6 +11,7 @@ use App\Http\Controllers\WilayahLayananController;
 use App\Http\Controllers\KotaKabupatenController;
 use App\Http\Controllers\KategoriPembayaranController;
 use App\Http\Controllers\MetodePembayaranController;
+use App\Http\Controllers\MasterUniversitasController;
 
 Route::get('/layanan', [LayananController::class, 'index']);
 Route::get('/layanan/kategori', [KategoriLayananController::class, 'index']);
@@ -48,3 +49,13 @@ Route::get('/global-config', [\App\Http\Controllers\GlobalConfigController::clas
 
 // SEO Config
 Route::get('/seo-config', [\App\Http\Controllers\SeoConfigController::class, 'getSeoConfig']);
+
+// Web Setting (Logo & Favicon)
+Route::get('/web-setting', [\App\Http\Controllers\WebSettingController::class, 'getWebSetting']);
+
+// Legality (Syarat & Ketentuan)
+Route::get('/legalitas/detail/{key}', [\App\Http\Controllers\LegalityController::class, 'getPublicLegality']);
+Route::get('/legalitas/list', [\App\Http\Controllers\LegalityController::class, 'publicList']);
+
+// Master Universitas (Public - untuk dropdown pendaftaran nakes/mitra)
+Route::get('/universitas', [MasterUniversitasController::class, 'publicIndex']);

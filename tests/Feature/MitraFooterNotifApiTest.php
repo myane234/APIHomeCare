@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Role;
 use App\Models\Users;
 use App\Models\NotificationTemplate;
+use App\Models\MasterUniversitas;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -99,7 +100,8 @@ class MitraFooterNotifApiTest extends TestCase
                 'footer_phone',
                 'footer_email',
                 'footer_address',
-                'footer_socials'
+                'footer_socials',
+                'footer_links'
             ]);
     }
 
@@ -121,12 +123,29 @@ class MitraFooterNotifApiTest extends TestCase
             ]
         ];
 
+        $links = [
+            [
+                'title' => 'Layanan Kami',
+                'links' => [
+                    ['label' => 'Perawat Lansia', 'url' => '/layanan/perawat-lansia'],
+                    ['label' => 'Fisioterapi', 'url' => '/layanan/fisioterapi']
+                ]
+            ],
+            [
+                'title' => 'Perusahaan',
+                'links' => [
+                    ['label' => 'Tentang Kami', 'url' => '/tentang-kami']
+                ]
+            ]
+        ];
+
         $response = $this->postJson('/api/resource/content/footer', [
             'footer_description' => 'Ini deskripsi kaki website',
             'footer_phone' => '08123456789',
             'footer_email' => 'kontak@homecare.com',
             'footer_address' => 'Jl. Home Care No. 123',
             'footer_socials' => $socials,
+            'footer_links' => $links,
         ]);
 
         $response->assertStatus(200)
@@ -137,7 +156,66 @@ class MitraFooterNotifApiTest extends TestCase
         $this->assertEquals('kontak@homecare.com', $response->json('data.footer_email'));
         $this->assertEquals('Jl. Home Care No. 123', $response->json('data.footer_address'));
         $this->assertEquals($socials, $response->json('data.footer_socials'));
+        $this->assertEquals($links, $response->json('data.footer_links'));
     }
+
+    public function test_update_footer_links_validation()
+    {
+        $this->actingAs($this->adminUser, 'sanctum');
+
+        // Invalid: links field missing or links is not array
+        $response = $this->postJson('/api/resource/content/footer', [
+            'footer_links' => [
+                [
+                    'title' => 'Layanan Kami'
+                ]
+            ]
+        ]);
+        $response->assertStatus(422);
+
+        // Invalid: label or url in child links missing
+        $response = $this->postJson('/api/resource/content/footer', [
+            'footer_links' => [
+                [
+                    'title' => 'Layanan Kami',
+                    'links' => [
+                        ['label' => 'Perawat Lansia'] // missing url
+                    ]
+                ]
+            ]
+        ]);
+        $response->assertStatus(422);
+    }
+
+    public function test_public_universitas_list_api()
+    {
+        // Setup mock universities
+        MasterUniversitas::create(['nama_universitas' => 'Universitas Indonesia', 'is_active' => true]);
+        MasterUniversitas::create(['nama_universitas' => 'Institut Teknologi Bandung', 'is_active' => true]);
+        MasterUniversitas::create(['nama_universitas' => 'Universitas Gadjah Mada', 'is_active' => false]); // inactive
+
+        // 1. Get all active universities
+        $response = $this->getJson('/api/universitas');
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true);
+
+        $data = $response->json('data');
+        $this->assertCount(2, $data);
+        $this->assertEquals('Institut Teknologi Bandung', $data[0]['nama_universitas']);
+        $this->assertEquals('Universitas Indonesia', $data[1]['nama_universitas']);
+
+        // 2. Search universities
+        $responseSearch = $this->getJson('/api/universitas?search=Bandung');
+        $responseSearch->assertStatus(200);
+        $this->assertCount(1, $responseSearch->json('data'));
+        $this->assertEquals('Institut Teknologi Bandung', $responseSearch->json('data.0.nama_universitas'));
+
+        // 3. Search inactive (should return 0)
+        $responseInactive = $this->getJson('/api/universitas?search=Gadjah');
+        $responseInactive->assertStatus(200);
+        $this->assertCount(0, $responseInactive->json('data'));
+    }
+
 
     public function test_admin_can_manage_notification_templates()
     {

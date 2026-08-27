@@ -77,4 +77,24 @@ class MasterUniversitasController extends Controller
             'message' => 'Universitas berhasil dihapus',
         ]);
     }
+
+    /**
+     * Get active universities for dropdown selection (Public)
+     */
+    public function publicIndex(Request $request)
+    {
+        $query = MasterUniversitas::where('is_active', true);
+
+        if ($request->has('search')) {
+            $query->where('nama_universitas', 'like', '%' . $request->query('search') . '%');
+        }
+
+        $universitas = $query->orderBy('nama_universitas')->get();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Berhasil mengambil data universitas',
+            'data' => $universitas,
+        ], 200);
+    }
 }

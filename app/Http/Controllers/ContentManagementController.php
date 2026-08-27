@@ -240,6 +240,7 @@ class ContentManagementController extends Controller
             'footer_email' => $content->footer_email,
             'footer_address' => $content->footer_address,
             'footer_socials' => $content->footer_socials ?? [],
+            'footer_links' => $content->footer_links ?? [],
         ], 200);
     }
 
@@ -260,6 +261,11 @@ class ContentManagementController extends Controller
             'footer_socials.*.icon' => ['nullable', 'string', 'max:255'],
             'footer_socials.*.url' => ['nullable', 'string', 'max:255'],
             'footer_socials.*.text' => ['nullable', 'string', 'max:255'],
+            'footer_links' => ['nullable', 'array'],
+            'footer_links.*.title' => ['required_with:footer_links', 'string', 'max:255'],
+            'footer_links.*.links' => ['required_with:footer_links', 'array'],
+            'footer_links.*.links.*.label' => ['required', 'string', 'max:255'],
+            'footer_links.*.links.*.url' => ['required', 'string', 'max:255'],
         ]);
 
         $content->update($validated);
@@ -272,6 +278,7 @@ class ContentManagementController extends Controller
                 'footer_email' => $content->footer_email,
                 'footer_address' => $content->footer_address,
                 'footer_socials' => $content->footer_socials ?? [],
+                'footer_links' => $content->footer_links ?? [],
             ]
         ], 200);
     }
