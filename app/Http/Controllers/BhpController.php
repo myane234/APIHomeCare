@@ -26,7 +26,6 @@ class BhpController extends Controller
      *      {
      *          "id_bhp": 1,
      *          "nama_bhp": "Suntikan 5ml",
-     *          "tipe_bhp": "satuan",
      *          "harga_modal": 1500.00,
      *          "harga_jual": 5000.00,
      *          "is_active": true,
@@ -51,7 +50,6 @@ class BhpController extends Controller
      * Store new master BHP
      * 
      * @bodyParam nama_bhp string required Nama BHP (e.g. Spuit, Kassa)
-     * @bodyParam tipe_bhp string required Tipe BHP (satuan, paket)
      * @bodyParam harga_modal numeric required Harga pokok/modal BHP
      * @bodyParam harga_jual numeric required Harga jual ke pasien
      * @bodyParam is_active boolean optional Status keaktifan BHP
@@ -60,7 +58,6 @@ class BhpController extends Controller
     {
         $validated = $request->validate([
             'nama_bhp' => 'required|string|max:255',
-            'tipe_bhp' => 'required|in:satuan,paket',
             'harga_modal' => 'required|numeric|min:0',
             'harga_jual' => 'required|numeric|min:0',
             'is_active' => 'boolean',
@@ -93,7 +90,6 @@ class BhpController extends Controller
      * Update master BHP
      * 
      * @bodyParam nama_bhp string optional Nama BHP
-     * @bodyParam tipe_bhp string optional Tipe BHP
      * @bodyParam harga_modal numeric optional Harga pokok/modal BHP
      * @bodyParam harga_jual numeric optional Harga jual ke pasien
      * @bodyParam is_active boolean optional Status keaktifan BHP
@@ -104,7 +100,6 @@ class BhpController extends Controller
 
         $validated = $request->validate([
             'nama_bhp' => 'sometimes|required|string|max:255',
-            'tipe_bhp' => 'sometimes|required|in:satuan,paket',
             'harga_modal' => 'sometimes|required|numeric|min:0',
             'harga_jual' => 'sometimes|required|numeric|min:0',
             'is_active' => 'boolean',

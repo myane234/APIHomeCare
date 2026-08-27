@@ -30,7 +30,6 @@ class SuperAdminDataBarang extends Controller
     {
         $validated = $request->validate([
             'nama_bhp'     => ['required', 'string', 'max:255'],
-            'tipe_bhp'     => ['required', 'in:satuan,paket'],
             'harga_modal'  => ['required', 'numeric', 'min:0'],
             'tipe_margin'  => ['required', 'in:persen,nominal'],
             'nilai_margin' => ['required', 'numeric', 'min:0'],
@@ -70,7 +69,6 @@ class SuperAdminDataBarang extends Controller
 
         $validated = $request->validate([
             'nama_bhp'     => ['sometimes', 'required', 'string', 'max:255'],
-            'tipe_bhp'     => ['sometimes', 'required', 'in:satuan,paket'],
             'harga_modal'  => ['sometimes', 'required', 'numeric', 'min:0'],
             'tipe_margin'  => ['sometimes', 'required', 'in:persen,nominal'],
             'nilai_margin' => ['sometimes', 'required', 'numeric', 'min:0'],

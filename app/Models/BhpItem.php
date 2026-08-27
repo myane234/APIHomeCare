@@ -13,7 +13,6 @@ use Illuminate\Database\Eloquent\Model;
  *
  * @property int    $id_bhp
  * @property string $nama_bhp
- * @property string $tipe_bhp     — 'satuan' | 'paket'
  * @property float  $harga_modal
  * @property float  $harga_jual
  * @property string $tipe_margin  — 'persen' | 'nominal'
@@ -29,7 +28,6 @@ class BhpItem extends Model
 
     protected $fillable = [
         'nama_bhp',
-        'tipe_bhp',
         'harga_modal',
         'harga_jual',
         'tipe_margin',
