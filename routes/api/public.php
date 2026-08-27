@@ -16,7 +16,7 @@ Route::get('/layanan', [LayananController::class, 'index']);
 Route::get('/layanan/kategori', [KategoriLayananController::class, 'index']);
 Route::get('/layanan/{layanan}', [LayananController::class, 'show']);
 
-Route::get('/promo', [PromoController::class, 'frontendIndex']);
+Route::get('/promo', [PromoController::class, 'index']);
 Route::get('/promo/active', [PromoController::class, 'getActivePromos']);
 Route::get('/promo/{promo}', [PromoController::class, 'show']);
 
