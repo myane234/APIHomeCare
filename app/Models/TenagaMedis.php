@@ -63,6 +63,8 @@ class TenagaMedis extends Model
         'no_rekening',
         'file_pakta_integritas',
         'is_data_complete',
+        'latitude',
+        'longitude',
     ];
 
     protected $casts = [

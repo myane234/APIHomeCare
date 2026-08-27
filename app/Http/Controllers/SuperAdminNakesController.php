@@ -92,6 +92,27 @@ class SuperAdminNakesController extends Controller
             'kategori_layanan.*' => ['exists:kategori_layanans,id_kategori_layanan'],
         ]);
 
+        // Auto-geocode address if updated and coordinates are not explicitly passed
+        if ($request->has('alamat_lengkap') && !$request->filled('latitude')) {
+            try {
+                $response = \Illuminate\Support\Facades\Http::withHeaders([
+                    'User-Agent' => 'smartHomeCare/1.0'
+                ])->get('https://nominatim.openstreetmap.org/search', [
+                    'q' => $request->input('alamat_lengkap'),
+                    'format' => 'json',
+                    'limit' => 1
+                ]);
+
+                if ($response->successful() && !empty($response->json())) {
+                    $geoData = $response->json()[0];
+                    $validated['latitude'] = (float) $geoData['lat'];
+                    $validated['longitude'] = (float) $geoData['lon'];
+                }
+            } catch (\Throwable $e) {
+                // Fail silently
+            }
+        }
+
         if ($request->hasFile('foto_profile')) {
             $file = $request->file('foto_profile');
             $filename = 'nakes_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
