@@ -85,7 +85,7 @@ class CoreAuthController extends Controller
                 'is_active' => true
             ]);
 
-            $createdUser->roles()->attach(2);
+            $createdUser->roles()->attach('pasien');
 
             return Pasien::create([
                 'id_user' => $createdUser->id_user,
