@@ -42,10 +42,12 @@ class ContentManagement extends Model
         'footer_email',
         'footer_address',
         'footer_socials',
+        'footer_links',
     ];
 
     protected $casts = [
         'footer_socials' => 'array',
+        'footer_links' => 'array',
     ];
 
     public function getHomeBannerUrlAttribute()

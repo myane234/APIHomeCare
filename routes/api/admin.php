@@ -206,6 +206,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // SEO Config - Admin Update
     Route::post('/seo-config', [\App\Http\Controllers\SeoConfigController::class, 'updateSeoConfig']);
 
+    // Web Setting - Admin Update
+    Route::post('/web-setting', [\App\Http\Controllers\WebSettingController::class, 'updateWebSetting']);
+
+    // Legality Admin CRUD
+    Route::apiResource('/legalitas', \App\Http\Controllers\LegalityController::class);
+
     // Master Agama dan Pendidikan - Admin CRUD
     Route::apiResource('/master-agama', MasterAgamaController::class)
         ->parameters(['master-agama' => 'agama']);
