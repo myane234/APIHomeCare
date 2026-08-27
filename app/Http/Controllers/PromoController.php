@@ -25,21 +25,6 @@ class PromoController extends Controller
         ], 200);
     }
 
-    public function frontendIndex()
-    {
-        $promos = Promo::with('layanans')
-            ->where('status_promo', 'Aktif')
-            ->whereDate('tanggal_mulai', '<=', now()->toDateString())
-            ->whereDate('tanggal_berakhir', '>=', now()->toDateString())
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        return response()->json([
-            'success' => true,
-            'data' => $promos,
-        ], 200);
-    }
-
     public function store(Request $request)
     {
         $validated = $request->validate([
