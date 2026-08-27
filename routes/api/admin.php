@@ -111,6 +111,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::delete('/manage-admin/{id}', [AdminController::class, 'destroy']);
     
     Route::get('/manage-admin/bookings', [BookingController::class, 'adminIndex']);
+    Route::get('/admin/bookings', [BookingController::class, 'adminIndex']);
 
     // Seeder Management
     Route::get('/admin/seeders', [AdminSeederController::class, 'index']);
