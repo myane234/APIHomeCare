@@ -271,7 +271,13 @@ class BookingController extends Controller
         $distance = 0.0;
 
         if ($tenagaMedisId) {
-            $tenagaMedis = TenagaMedis::find($tenagaMedisId);
+            $tenagaMedis = TenagaMedis::where('status', 'approved')->find($tenagaMedisId);
+            if (!$tenagaMedis) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Tenaga medis yang dipilih tidak aktif atau tidak ditemukan.'
+                ], 422);
+            }
             if ($tenagaMedis && $tenagaMedis->latitude && $tenagaMedis->longitude) {
                 $distance = $this->calculateDistance($patientLat, $patientLng, (float)$tenagaMedis->latitude, (float)$tenagaMedis->longitude);
             }
@@ -286,7 +292,7 @@ class BookingController extends Controller
                 $distance = (float) ($nearestNakes->distance_km ?? 0.0);
                 if ($distance > 1000) $distance = 0.0;
             } else {
-                $tenagaMedis = TenagaMedis::where('status', 'approved')->first() ?? TenagaMedis::first();
+                $tenagaMedis = TenagaMedis::where('status', 'approved')->first();
                 $tenagaMedisId = $tenagaMedis?->id_tenaga_medis;
                 $distance = 0.0;
             }
@@ -408,6 +414,14 @@ class BookingController extends Controller
         $nominalHakNakes = $feeNakesNominalBase + $tarifTransportasiFinal;
         $totalTagihanPasien = $tarifLayananJasaMedis + $tarifBahanHabisPakai + $tarifTransportasiFinal + $biayaAdministrasiAplikasi + $nominalPpnPajak;
 
+        // Midtrans IDR hanya menerima nominal rupiah tanpa pecahan sen.
+        $tarifLayananJasaMedis = (int) round($tarifLayananJasaMedis);
+        $tarifBahanHabisPakai = (int) round($tarifBahanHabisPakai);
+        $tarifTransportasiFinal = (int) round($tarifTransportasiFinal);
+        $biayaAdministrasiAplikasi = (int) round($biayaAdministrasiAplikasi);
+        $nominalPpnPajak = (int) round($nominalPpnPajak);
+        $totalTagihanPasien = $tarifLayananJasaMedis + $tarifBahanHabisPakai + $tarifTransportasiFinal + $biayaAdministrasiAplikasi + $nominalPpnPajak;
+
         $feeMidtrans = (float) env('FEE_MIDTRANS', 4000.0);
         $estimasiProfitHomeCare = ($tarifLayananJasaMedis - $feeNakesNominalBase) + ($tarifBahanHabisPakai - $hppBhp) + $biayaAdministrasiAplikasi - $feeMidtrans;
 
@@ -465,7 +479,7 @@ class BookingController extends Controller
             $itemDetails = [];
             $itemDetails[] = [
                 'id' => 'LYN-' . $layanan->id_layanan,
-                'price' => (float) $tarifLayananJasaMedis,
+                'price' => $tarifLayananJasaMedis,
                 'quantity' => 1,
                 'name' => substr($layanan->nama_layanan, 0, 50),
             ];
@@ -473,7 +487,7 @@ class BookingController extends Controller
             if ($tarifBahanHabisPakai > 0) {
                 $itemDetails[] = [
                     'id' => 'BHP-' . $booking->id_booking,
-                    'price' => (float) $tarifBahanHabisPakai,
+                    'price' => $tarifBahanHabisPakai,
                     'quantity' => 1,
                     'name' => 'Bahan Habis Pakai (BHP)',
                 ];
@@ -482,7 +496,7 @@ class BookingController extends Controller
             if ($tarifTransportasiFinal > 0) {
                 $itemDetails[] = [
                     'id' => 'TRN-' . $booking->id_booking,
-                    'price' => (float) $tarifTransportasiFinal,
+                    'price' => $tarifTransportasiFinal,
                     'quantity' => 1,
                     'name' => 'Biaya Transportasi (' . round($distance, 1) . ' km)',
                 ];
@@ -491,7 +505,7 @@ class BookingController extends Controller
             if ($biayaAdministrasiAplikasi > 0) {
                 $itemDetails[] = [
                     'id' => 'ADM-' . $booking->id_booking,
-                    'price' => (float) $biayaAdministrasiAplikasi,
+                    'price' => $biayaAdministrasiAplikasi,
                     'quantity' => 1,
                     'name' => 'Biaya Administrasi',
                 ];
@@ -500,7 +514,7 @@ class BookingController extends Controller
             if ($nominalPpnPajak > 0) {
                 $itemDetails[] = [
                     'id' => 'TAX-' . $booking->id_booking,
-                    'price' => (float) $nominalPpnPajak,
+                    'price' => $nominalPpnPajak,
                     'quantity' => 1,
                     'name' => 'PPN (' . $persentasePpnPajak . '%)',
                 ];
@@ -509,7 +523,7 @@ class BookingController extends Controller
             $params = [
                 'transaction_details' => [
                     'order_id' => $orderId,
-                    'gross_amount' => (float) $totalTagihanPasien,
+                    'gross_amount' => $totalTagihanPasien,
                 ],
                 'customer_details' => [
                     'first_name' => $pasien->nama_lengkap ?? $user->email ?? 'Pasien',
