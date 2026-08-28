@@ -19,6 +19,11 @@ use Illuminate\Support\Facades\Http;
 use Midtrans\Config as MidtransConfig;
 use Midtrans\Snap as MidtransSnap;
 
+
+/**
+ * @group Booking Management
+ */
+
 class BookingController extends Controller
 {
     /**
