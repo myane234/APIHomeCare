@@ -24,14 +24,17 @@ class DatabaseSeeder extends Seeder
             AdminSeeder::class,
             SuperAdminSeeder::class,
             KategoriLayananSeeder::class,
+            LayananSeeder::class,
             KategoriArtikelSeeder::class,
+            ArtikelSeeder::class,
+            PromoSeeder::class,
             MasterBankSeeder::class,
             WilayahSeeder::class,
             MasterPendidikanSeeder::class,
             MasterUniversitasSeeder::class,
-            LayananSeeder::class,
-            ArtikelSeeder::class,
-            PromoSeeder::class,
+            
+            
+            
             GlobalConfigSeeder::class,
             LegalitySeeder::class,
         ]);

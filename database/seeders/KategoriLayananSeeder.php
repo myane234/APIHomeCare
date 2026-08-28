@@ -2,8 +2,9 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use App\Models\KategoriLayanan;
+use Illuminate\Support\Str;
 
 class KategoriLayananSeeder extends Seeder
 {
@@ -21,7 +22,14 @@ class KategoriLayananSeeder extends Seeder
         ];
 
         foreach ($kategoris as $kategori) {
-            \App\Models\KategoriLayanan::updateOrCreate(['nama_kategori' => $kategori]);
+            $slug = Str::slug($kategori);
+            
+            $imageUrl = "https://picsum.photos/seed/{$slug}/600/400";
+
+            KategoriLayanan::updateOrCreate(
+                ['nama_kategori' => $kategori],
+                ['photo_kategori' => $imageUrl]
+            );
         }
     }
 }

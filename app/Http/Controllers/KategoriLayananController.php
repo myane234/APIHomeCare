@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-
 use App\Models\KategoriLayanan;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Master Kategori Layanan
@@ -15,7 +15,6 @@ use App\Models\KategoriLayanan;
  * 
  * @resource Master Kategori Layanan
  */
-
 class KategoriLayananController extends Controller
 {
     /**
@@ -28,6 +27,7 @@ class KategoriLayananController extends Controller
      *      {
      *          "id_kategori_layanan": 1,
      *          "nama_kategori": "Layanan Medis",
+     *          "photo_kategori": "kategori_layanan/example.jpg",
      *          "created_at": "2022-01-01T00:00:00.000000Z",
      *          "updated_at": "2022-01-01T00:00:00.000000Z"
      *      }
@@ -50,8 +50,13 @@ class KategoriLayananController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'nama_kategori' => ['required', 'string', 'max:255', 'unique:kategori_layanans,nama_kategori'],
+            'nama_kategori'  => ['required', 'string', 'max:255', 'unique:kategori_layanans,nama_kategori'],
+            'photo_kategori' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
         ]);
+
+        if ($request->hasFile('photo_kategori')) {
+            $validated['photo_kategori'] = $request->file('photo_kategori')->store('kategori_layanan', 'public');
+        }
 
         $kategori = KategoriLayanan::create($validated);
 
@@ -83,8 +88,18 @@ class KategoriLayananController extends Controller
         $kategori = KategoriLayanan::findOrFail($id);
 
         $validated = $request->validate([
-            'nama_kategori' => ['required', 'string', 'max:255', 'unique:kategori_layanans,nama_kategori,' . $id . ',id_kategori_layanan'],
+            'nama_kategori'  => ['required', 'string', 'max:255', 'unique:kategori_layanans,nama_kategori,' . $id . ',id_kategori_layanan'],
+            'photo_kategori' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
         ]);
+
+        if ($request->hasFile('photo_kategori')) {
+            // Hapus foto lama jika ada di storage
+            if ($kategori->photo_kategori && Storage::disk('public')->exists($kategori->photo_kategori)) {
+                Storage::disk('public')->delete($kategori->photo_kategori);
+            }
+
+            $validated['photo_kategori'] = $request->file('photo_kategori')->store('kategori_layanan', 'public');
+        }
 
         $kategori->update($validated);
 
@@ -101,6 +116,12 @@ class KategoriLayananController extends Controller
     public function destroy($id)
     {
         $kategori = KategoriLayanan::findOrFail($id);
+
+        // Hapus foto dari storage saat data dihapus
+        if ($kategori->photo_kategori && Storage::disk('public')->exists($kategori->photo_kategori)) {
+            Storage::disk('public')->delete($kategori->photo_kategori);
+        }
+
         $kategori->delete();
 
         return response()->json([
