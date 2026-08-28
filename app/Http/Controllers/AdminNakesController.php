@@ -43,6 +43,7 @@ class AdminNakesController extends Controller
         ], 200);
     }
 
+    
     /**
      * List khusus tenaga medis yang sudah aktif / approved
      */
