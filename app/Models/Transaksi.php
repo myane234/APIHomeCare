@@ -46,6 +46,16 @@ class Transaksi extends Model
         // Bagi hasil
         'hak_nakes',
         'profit_hc',
+
+        // Payment details dari Midtrans
+        'midtrans_transaction_id',
+        'midtrans_order_id',
+        'qr_string',
+        'qr_url',
+        'va_number',
+        'bank_va',
+        'payment_method',
+        'midtrans_response',
     ];
 
     protected $casts = [
@@ -62,6 +72,7 @@ class Transaksi extends Model
         'hak_nakes'        => 'decimal:2',
         'profit_hc'        => 'decimal:2',
         'waktu_bayar'      => 'datetime',
+        'midtrans_response' => 'json',
     ];
 
     // ---------------------------------------------------------------

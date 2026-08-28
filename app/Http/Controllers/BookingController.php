@@ -10,8 +10,6 @@ use App\Models\Transaksi;
 use App\Models\MasterTarif;
 use App\Models\MasterKategoriTarif;
 use App\Models\MasterTarifTransport;
-use App\Models\MasterKomponenBiaya;
-use App\Models\Pasien;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,11 +17,9 @@ use Illuminate\Support\Facades\Http;
 use Midtrans\Config as MidtransConfig;
 use Midtrans\Snap as MidtransSnap;
 
-
 /**
  * @group Booking Management
  */
-
 class BookingController extends Controller
 {
     /**
@@ -45,7 +41,6 @@ class BookingController extends Controller
         $query = Booking::with(['pasien', 'layanan', 'tenagaMedis', 'transaksi'])
             ->where('id_pasien', $pasien->id_pasien);
 
-        // Filter opsional
         if ($request->filled('status_booking')) {
             $query->where('status_booking', $request->input('status_booking'));
         }
@@ -68,7 +63,6 @@ class BookingController extends Controller
 
     /**
      * API Admin: Menampilkan SELURUH booking.
-     * Filter: status_booking, tanggal_dari, tanggal_sampai, id_pasien, id_tenaga_medis
      */
     public function adminIndex(Request $request)
     {
@@ -113,7 +107,7 @@ class BookingController extends Controller
             return 0.0;
         }
 
-        $earthRadius = 6371; // Jari-jari bumi dalam km
+        $earthRadius = 6371;
 
         $dLat = deg2rad((float)$lat2 - (float)$lat1);
         $dLon = deg2rad((float)$lon2 - (float)$lon1);
@@ -143,7 +137,11 @@ class BookingController extends Controller
         }
 
         $query = TenagaMedis::with(['user', 'pasien', 'kategoriLayanan', 'wilayahLayanan'])
-            ->where('status', 'approved');
+            ->where('status', 'approved')
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->where('latitude', '!=', 0)
+            ->where('longitude', '!=', 0);
 
         if ($idLayanan) {
             $layanan = MasterLayanan::find($idLayanan);
@@ -166,21 +164,15 @@ class BookingController extends Controller
                     '(6371 * acos(greatest(-1.0, least(1.0, cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))))) AS distance_km',
                     [$patientLat, $patientLng, $patientLat]
                 )
-                ->whereNotNull('latitude')
-                ->whereNotNull('longitude')
                 ->orderBy('distance_km', 'asc')
                 ->get();
         } else {
             $nakesList = $query->get()
                 ->map(function ($nakes) use ($patientLat, $patientLng) {
-                    if ($nakes->latitude !== null && $nakes->longitude !== null) {
-                        $nakes->distance_km = $this->calculateDistance(
-                            (float)$patientLat, (float)$patientLng,
-                            (float)$nakes->latitude, (float)$nakes->longitude
-                        );
-                    } else {
-                        $nakes->distance_km = 999999.0;
-                    }
+                    $nakes->distance_km = $this->calculateDistance(
+                        (float)$patientLat, (float)$patientLng,
+                        (float)$nakes->latitude, (float)$nakes->longitude
+                    );
                     return $nakes;
                 })
                 ->sortBy('distance_km')
@@ -191,7 +183,7 @@ class BookingController extends Controller
     }
 
     /**
-     * API Pasien: Mendapatkan daftar Tenaga Medis terdekat dari lokasi yang dikirim.
+     * API Pasien: Mendapatkan daftar Tenaga Medis terdekat.
      */
     public function getNearestNakesList(Request $request)
     {
@@ -221,7 +213,7 @@ class BookingController extends Controller
      */
     public function store(Request $request)
     {
-        if ($request->has('payment_type')) {
+        if ($request->has('payment_type') && $request->has('transaction_details')) {
             return $this->charge($request);
         }
 
@@ -278,11 +270,10 @@ class BookingController extends Controller
                     'message' => 'Tenaga medis yang dipilih tidak aktif atau tidak ditemukan.'
                 ], 422);
             }
-            if ($tenagaMedis && $tenagaMedis->latitude && $tenagaMedis->longitude) {
+            if ($tenagaMedis->latitude && $tenagaMedis->longitude) {
                 $distance = $this->calculateDistance($patientLat, $patientLng, (float)$tenagaMedis->latitude, (float)$tenagaMedis->longitude);
             }
         } else {
-            // Logic pencocokan Nakes terdekat secara otomatis
             $nearestList = $this->findNearestNakes($patientLat, $patientLng, $idLayanan);
             $nearestNakes = $nearestList->first();
 
@@ -305,7 +296,7 @@ class BookingController extends Controller
             ], 422);
         }
 
-        // 2. Load Master Tarif Blueprint (Layanan, Kota, Kategori Tarif)
+        // Load Master Tarif Blueprint
         $idKota = $request->input('id_kota');
         $idKategoriTarif = $request->input('id_kategori_tarif');
 
@@ -335,7 +326,7 @@ class BookingController extends Controller
                 ->first();
         }
 
-        // 3. Hitung SL (Tarif Layanan / Jasa Medis)
+        // Kalkulasi Tarif
         $tarifLayananJasaMedis = (float) $layanan->harga;
         $kategoriTarifObj = $idKategoriTarif 
             ? MasterKategoriTarif::find($idKategoriTarif) 
@@ -345,7 +336,6 @@ class BookingController extends Controller
             $tarifLayananJasaMedis += (float) $kategoriTarifObj->biaya_tambahan;
         }
 
-        // 4. Hitung SB (Tarif BHP / Biaya Alat) & HPP BHP
         $tarifBahanHabisPakai = 0.0;
         $hppBhp = 0.0;
         foreach ($layanan->bhpItems as $bhpItem) {
@@ -356,7 +346,6 @@ class BookingController extends Controller
             $hppBhp += $hargaModal * $qty;
         }
 
-        // 5. Hitung ST (Tarif Transport)
         $tarifTransportasiFinal = 0.0;
         if (!$layanan->include_transport) {
             $transportMaster = null;
@@ -370,7 +359,6 @@ class BookingController extends Controller
             }
         }
 
-        // 6. Hitung Komponen Tarif (Admin Fee & PPN / Pajak)
         $biayaAdministrasiAplikasi = 0.0;
         $persentasePpnPajak = 0.0;
         $nominalPpnPajak = 0.0;
@@ -399,7 +387,6 @@ class BookingController extends Controller
             $nominalPpnPajak = ($tarifLayananJasaMedis + $tarifBahanHabisPakai + $tarifTransportasiFinal) * ($persentasePpnPajak / 100);
         }
 
-        // 7. Hitung Fee Nakes (Hak Nakes) & Profit HC
         $feeType = $masterTarif?->fee_nakes_tipe ?? 'persen';
         $feeVal = (float) ($masterTarif?->fee_nakes_nilai ?? 80.0);
 
@@ -412,9 +399,8 @@ class BookingController extends Controller
         }
 
         $nominalHakNakes = $feeNakesNominalBase + $tarifTransportasiFinal;
-        $totalTagihanPasien = $tarifLayananJasaMedis + $tarifBahanHabisPakai + $tarifTransportasiFinal + $biayaAdministrasiAplikasi + $nominalPpnPajak;
 
-        // Midtrans IDR hanya menerima nominal rupiah tanpa pecahan sen.
+        // Rounding nominal IDR
         $tarifLayananJasaMedis = (int) round($tarifLayananJasaMedis);
         $tarifBahanHabisPakai = (int) round($tarifBahanHabisPakai);
         $tarifTransportasiFinal = (int) round($tarifTransportasiFinal);
@@ -424,11 +410,6 @@ class BookingController extends Controller
 
         $feeMidtrans = (float) env('FEE_MIDTRANS', 4000.0);
         $estimasiProfitHomeCare = ($tarifLayananJasaMedis - $feeNakesNominalBase) + ($tarifBahanHabisPakai - $hppBhp) + $biayaAdministrasiAplikasi - $feeMidtrans;
-
-        $idPromo = $validate['id_promo'] ?? null;
-        if (is_array($idPromo)) {
-            $idPromo = $idPromo[0] ?? null;
-        }
 
         DB::beginTransaction();
 
@@ -451,8 +432,11 @@ class BookingController extends Controller
                 'status_booking' => 'Pending',
             ]);
 
+            $orderId = 'BOOKING-' . $booking->id_booking . '-' . time();
+
             $transaction = Transaksi::create([
                 'id_booking' => $booking->id_booking,
+                'midtrans_order_id' => $orderId,
                 'jumlah_total' => $totalTagihanPasien,
                 'metode_pembayaran' => 'QRIS',
                 'status_transaksi' => 'Belum Bayar',
@@ -473,8 +457,6 @@ class BookingController extends Controller
             MidtransConfig::$isProduction = config('services.midtrans.is_production', false);
             MidtransConfig::$isSanitized = config('services.midtrans.is_sanitized', true);
             MidtransConfig::$is3ds = config('services.midtrans.is_3ds', true);
-
-            $orderId = 'BOOKING-' . $booking->id_booking . '-' . time();
 
             $itemDetails = [];
             $itemDetails[] = [
@@ -535,11 +517,17 @@ class BookingController extends Controller
             if (app()->environment('testing')) {
                 $snapToken = 'mock-snap-token-123';
                 $redirectUrl = 'https://app.sandbox.midtrans.com/snap/v2/vtweb/mock';
+                $snapResponse = ['token' => $snapToken, 'redirect_url' => $redirectUrl];
             } else {
                 $snap = MidtransSnap::createTransaction($params);
                 $snapToken = $snap->token ?? null;
                 $redirectUrl = $snap->redirect_url ?? null;
+                $snapResponse = json_decode(json_encode($snap), true);
             }
+
+            $transaction->update([
+                'midtrans_response' => $snapResponse,
+            ]);
 
             DB::commit();
 
@@ -589,8 +577,153 @@ class BookingController extends Controller
     }
 
     /**
+     * API Menampilkan Payment Details untuk Pembayaran
+     * GET /api/booking/{id}/payment-details
+     */
+    public function getPaymentDetails($id)
+    {
+        $booking = Booking::with(['transaksi'])->find($id);
+
+        if (!$booking || !$booking->transaksi) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data booking atau transaksi tidak ditemukan.'
+            ], 404);
+        }
+
+        $transaksi = $booking->transaksi;
+
+        if (in_array(strtolower($transaksi->status_transaksi), ['lunas', 'sudah bayar', 'settlement', 'success'])) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Pembayaran untuk booking ini sudah lunas.',
+                'data' => [
+                    'status_transaksi' => $transaksi->status_transaksi,
+                    'waktu_bayar' => $transaksi->waktu_bayar,
+                ]
+            ], 200);
+        }
+
+        $paymentDetails = [];
+
+        if ($transaksi->payment_method === 'qris' || ($transaksi->qr_string && $transaksi->qr_url)) {
+            $paymentDetails['qris'] = [
+                'qr_string' => $transaksi->qr_string,
+                'qr_url' => $transaksi->qr_url,
+                'jumlah' => (float) $transaksi->jumlah_total,
+                'jumlah_format' => 'Rp ' . number_format((float) $transaksi->jumlah_total, 0, ',', '.'),
+            ];
+        }
+
+        if ($transaksi->payment_method === 'bank_transfer' || ($transaksi->va_number && $transaksi->bank_va)) {
+            $paymentDetails['virtual_account'] = [
+                'va_number' => $transaksi->va_number,
+                'bank' => strtoupper($transaksi->bank_va),
+                'jumlah' => (float) $transaksi->jumlah_total,
+                'jumlah_format' => 'Rp ' . number_format((float) $transaksi->jumlah_total, 0, ',', '.'),
+            ];
+        }
+
+        // Jika DB lokal belum terisi, lakukan query status ke Midtrans API
+        $orderId = $transaksi->midtrans_order_id ?? ('BOOKING-' . $booking->id_booking);
+
+        if (empty($paymentDetails) && $orderId) {
+            $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
+            $isProduction = config('services.midtrans.is_production', false);
+            $baseUrl = $isProduction 
+                ? 'https://api.midtrans.com/v2/' 
+                : 'https://api.sandbox.midtrans.com/v2/';
+
+            try {
+                $client = Http::withBasicAuth($serverKey, '')
+                    ->withHeaders([
+                        'Accept' => 'application/json',
+                        'Content-Type' => 'application/json',
+                    ]);
+
+                if (config('app.env') === 'local') {
+                    $client->withoutVerifying();
+                }
+
+                $response = $client->get($baseUrl . $orderId . '/status');
+
+                if ($response->successful()) {
+                    $midtransData = $response->json();
+                    $paymentType = $midtransData['payment_type'] ?? null;
+
+                    if (in_array($paymentType, ['qris', 'gopay', 'shopeepay'])) {
+                        $qrUrl = null;
+                        if (isset($midtransData['actions'])) {
+                            foreach ($midtransData['actions'] as $action) {
+                                if (($action['name'] ?? '') === 'generate-qr-code') {
+                                    $qrUrl = $action['url'];
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        $paymentDetails['qris'] = [
+                            'qr_string' => $midtransData['qr_string'] ?? null,
+                            'qr_url' => $qrUrl,
+                            'jumlah' => (float) ($midtransData['gross_amount'] ?? $transaksi->jumlah_total),
+                            'jumlah_format' => 'Rp ' . number_format((float) ($midtransData['gross_amount'] ?? $transaksi->jumlah_total), 0, ',', '.'),
+                        ];
+                    }
+
+                    if (isset($midtransData['va_numbers']) && is_array($midtransData['va_numbers'])) {
+                        $firstVa = $midtransData['va_numbers'][0] ?? null;
+                        if ($firstVa) {
+                            $paymentDetails['virtual_account'] = [
+                                'va_number' => $firstVa['va_number'],
+                                'bank' => strtoupper($firstVa['bank']),
+                                'jumlah' => (float) ($midtransData['gross_amount'] ?? $transaksi->jumlah_total),
+                                'jumlah_format' => 'Rp ' . number_format((float) ($midtransData['gross_amount'] ?? $transaksi->jumlah_total), 0, ',', '.'),
+                            ];
+                        }
+                    } elseif (isset($midtransData['permata_va_number'])) {
+                        $paymentDetails['virtual_account'] = [
+                            'va_number' => $midtransData['permata_va_number'],
+                            'bank' => 'PERMATA',
+                            'jumlah' => (float) ($midtransData['gross_amount'] ?? $transaksi->jumlah_total),
+                            'jumlah_format' => 'Rp ' . number_format((float) ($midtransData['gross_amount'] ?? $transaksi->jumlah_total), 0, ',', '.'),
+                        ];
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Ignore failure
+            }
+        }
+
+        if (empty($paymentDetails)) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Detail pembayaran belum tersedia. Gunakan snap token untuk memilih metode pembayaran.',
+                'data' => [
+                    'booking_code' => $booking->booking_code,
+                    'order_id' => $orderId,
+                    'status_transaksi' => $transaksi->status_transaksi,
+                    'snap_token' => is_array($transaksi->midtrans_response) ? ($transaksi->midtrans_response['token'] ?? null) : null,
+                ]
+            ], 200);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Detail pembayaran berhasil diambil.',
+            'data' => [
+                'booking_code' => $booking->booking_code,
+                'order_id' => $orderId,
+                'status_transaksi' => $transaksi->status_transaksi,
+                'jumlah_total' => (float) $transaksi->jumlah_total,
+                'jumlah_total_format' => 'Rp ' . number_format((float) $transaksi->jumlah_total, 0, ',', '.'),
+                'payment_details' => $paymentDetails,
+                'created_at' => $booking->created_at,
+            ]
+        ], 200);
+    }
+
+    /**
      * API Laporan / Ringkasan Transaksi satu Booking.
-     * GET /booking/{id}/laporan
      */
     public function laporan($id)
     {
@@ -606,12 +739,9 @@ class BookingController extends Controller
             'success'   => true,
             'message'   => 'Laporan transaksi booking',
             'data'      => [
-                // ── Identitas ────────────────────────────────────
                 'booking_code'      => $booking->booking_code,
                 'status_booking'    => $booking->status_booking,
                 'status_label'      => (new BookingResource($booking))->resolve()['status_label'] ?? $booking->status_booking,
-
-                // ── Waktu ────────────────────────────────────────
                 'tanggal_kunjungan' => $booking->tanggal_kunjungan
                     ? Carbon::parse($booking->tanggal_kunjungan)->translatedFormat('l, d F Y')
                     : null,
@@ -619,8 +749,6 @@ class BookingController extends Controller
                 'dibuat_pada'       => $booking->created_at
                     ? Carbon::parse($booking->created_at)->setTimezone('Asia/Jakarta')->translatedFormat('d M Y, H:i') . ' WIB'
                     : null,
-
-                // ── Pasien & Nakes ───────────────────────────────
                 'pasien'            => [
                     'nama'          => $booking->pasien?->nama_lengkap,
                     'alamat'        => $booking->alamat_kunjungan,
@@ -632,8 +760,6 @@ class BookingController extends Controller
                 'layanan'           => [
                     'nama'          => $booking->layanan?->nama_layanan,
                 ],
-
-                // ── Rincian Biaya ────────────────────────────────
                 'rincian_biaya'     => $t ? [
                     ['label' => 'Tarif Layanan (SL)',      'nilai' => (float)$t->sl,  'format' => 'Rp ' . number_format((float)$t->sl, 0, ',', '.')],
                     ['label' => 'Bahan Habis Pakai (SB)',  'nilai' => (float)$t->sb,  'format' => 'Rp ' . number_format((float)$t->sb, 0, ',', '.')],
@@ -641,8 +767,6 @@ class BookingController extends Controller
                     ['label' => 'Biaya Admin Aplikasi',    'nilai' => (float)$t->ba,  'format' => 'Rp ' . number_format((float)$t->ba, 0, ',', '.')],
                     ['label' => 'PPN (' . (float)$t->persen_ppn . '%)', 'nilai' => (float)$t->ppn, 'format' => 'Rp ' . number_format((float)$t->ppn, 0, ',', '.')],
                 ] : [],
-
-                // ── Total & Pembayaran ───────────────────────────
                 'jumlah_total'          => $t ? (float)$t->jumlah_total : 0,
                 'jumlah_total_format'   => $t ? 'Rp ' . number_format((float)$t->jumlah_total, 0, ',', '.') : '-',
                 'metode_pembayaran'     => $t?->metode_pembayaran,
@@ -650,8 +774,6 @@ class BookingController extends Controller
                 'waktu_bayar'           => $t?->waktu_bayar
                     ? Carbon::parse($t->waktu_bayar)->setTimezone('Asia/Jakarta')->translatedFormat('d M Y, H:i') . ' WIB'
                     : null,
-
-                // ── Bagi Hasil (internal) ────────────────────────
                 'bagi_hasil'            => $t ? [
                     'hak_nakes'         => (float)$t->hak_nakes,
                     'hak_nakes_format'  => 'Rp ' . number_format((float)$t->hak_nakes, 0, ',', '.'),
@@ -702,10 +824,11 @@ class BookingController extends Controller
             'transaction_details' => 'required|array',
             'transaction_details.order_id' => 'required|string',
             'transaction_details.gross_amount' => 'required|numeric',
+            'id_booking' => 'nullable|exists:bookings,id_booking',
         ]);
 
-        $serverKey = config('services.midtrans.server_key');
-        $isProduction = config('services.midtrans.is_production');
+        $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
+        $isProduction = config('services.midtrans.is_production', false);
         $url = $isProduction 
             ? 'https://api.midtrans.com/v2/charge' 
             : 'https://api.sandbox.midtrans.com/v2/charge';
@@ -722,8 +845,37 @@ class BookingController extends Controller
             }
 
             $response = $client->post($url, $request->all());
+            $responseData = $response->json();
 
-            return response()->json($response->json(), $response->status());
+            if ($request->filled('id_booking') && $response->successful()) {
+                $booking = Booking::with('transaksi')->find($request->input('id_booking'));
+                if ($booking && $booking->transaksi) {
+                    $paymentDetails = [
+                        'midtrans_transaction_id' => $responseData['transaction_id'] ?? null,
+                        'midtrans_order_id' => $responseData['order_id'] ?? null,
+                        'payment_method' => $request->input('payment_type'),
+                        'midtrans_response' => $responseData,
+                    ];
+
+                    if ($request->input('payment_type') === 'bank_transfer' && isset($responseData['va_numbers'])) {
+                        $vaArray = $responseData['va_numbers'];
+                        if (is_array($vaArray) && !empty($vaArray)) {
+                            $vaData = reset($vaArray);
+                            $paymentDetails['va_number'] = $vaData['va_number'] ?? null;
+                            $paymentDetails['bank_va'] = $vaData['bank'] ?? null;
+                        }
+                    }
+
+                    if ($request->input('payment_type') === 'qris' && isset($responseData['qr_string'])) {
+                        $paymentDetails['qr_string'] = $responseData['qr_string'];
+                        $paymentDetails['qr_url'] = $responseData['qr_url'] ?? null;
+                    }
+
+                    $booking->transaksi->update($paymentDetails);
+                }
+            }
+
+            return response()->json($responseData, $response->status());
         } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,
@@ -772,7 +924,7 @@ class BookingController extends Controller
     }
 
     /**
-     * API Nakes: Menampilkan daftar booking yang ditugaskan ke Nakes login atau booking pending terdekat.
+     * API Nakes: Menampilkan daftar booking.
      */
     public function nakesIndex(Request $request)
     {
@@ -806,7 +958,7 @@ class BookingController extends Controller
     }
 
     /**
-     * API Nakes: Terima Order Booking (Basic flow).
+     * API Nakes: Terima Order Booking (Atomic Update untuk cegah race condition).
      */
     public function nakesAcceptBooking(Request $request, $id)
     {
@@ -822,7 +974,7 @@ class BookingController extends Controller
             ], 403);
         }
 
-        $booking = Booking::with(['pasien', 'layanan', 'transaksi'])->find($id);
+        $booking = Booking::find($id);
 
         if (!$booking) {
             return response()->json([
@@ -838,26 +990,36 @@ class BookingController extends Controller
             ], 400);
         }
 
-        if ($booking->id_tenaga_medis && (int)$booking->id_tenaga_medis !== (int)$nakes->id_tenaga_medis && $booking->status_booking !== 'Pending') {
+        // Lock & Atomic update
+        $updated = Booking::where('id_booking', $id)
+            ->where(function ($q) use ($nakes) {
+                $q->whereNull('id_tenaga_medis')
+                  ->orWhere('id_tenaga_medis', $nakes->id_tenaga_medis);
+            })
+            ->whereNotIn('status_booking', ['Selesai', 'Dibatalkan'])
+            ->update([
+                'id_tenaga_medis' => $nakes->id_tenaga_medis,
+                'status_booking' => 'DiPerjalanan',
+            ]);
+
+        if (!$updated) {
             return response()->json([
                 'success' => false,
                 'message' => 'Order ini telah diambil oleh tenaga medis lain.'
             ], 400);
         }
 
-        $booking->id_tenaga_medis = $nakes->id_tenaga_medis;
-        $booking->status_booking = 'DiPerjalanan';
-        $booking->save();
+        $booking->refresh()->load(['pasien', 'layanan', 'tenagaMedis', 'transaksi']);
 
         return response()->json([
             'success' => true,
             'message' => 'Order berhasil diterima. Status booking diperbarui menjadi DiPerjalanan.',
-            'data'    => new BookingResource($booking->load(['pasien', 'layanan', 'tenagaMedis', 'transaksi'])),
+            'data'    => new BookingResource($booking),
         ]);
     }
 
     /**
-     * API Nakes: Update Status Order (DiPerjalanan, Tindakan, Selesai, Dibatalkan).
+     * API Nakes: Update Status Order.
      */
     public function nakesUpdateStatus(Request $request, $id)
     {

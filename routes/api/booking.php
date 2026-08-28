@@ -11,6 +11,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/booking', [BookingController::class, 'index']);
     Route::get('/booking/transaksi/{id_transaksi}', [BookingController::class, 'checkStatus']);
     Route::get('/booking/{id}/laporan', [BookingController::class, 'laporan']);
+    Route::get('/booking/{id}/payment-details', [BookingController::class, 'getPaymentDetails']);
     Route::get('/booking/{id}', [BookingController::class, 'show']);
     Route::patch('/booking/{id}/status', [BookingController::class, 'updateStatus']);
 });
