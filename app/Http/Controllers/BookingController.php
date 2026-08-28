@@ -14,8 +14,6 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Midtrans\Config as MidtransConfig;
-use Midtrans\Snap as MidtransSnap;
 
 /**
  * @group Booking Management
@@ -209,11 +207,12 @@ class BookingController extends Controller
     }
 
     /**
-     * API Pasien: Membuat booking baru + Generate Snap Token Midtrans.
+     * Step 1: API Pasien - Membuat booking baru (Tanpa pemilihan pembayaran).
+     * POST /api/booking
      */
     public function store(Request $request)
     {
-        if ($request->has('payment_type') && $request->has('transaction_details')) {
+        if ($request->has('payment_type')) {
             return $this->charge($request);
         }
 
@@ -296,7 +295,7 @@ class BookingController extends Controller
             ], 422);
         }
 
-        // Load Master Tarif Blueprint
+        // Load Master Tarif
         $idKota = $request->input('id_kota');
         $idKategoriTarif = $request->input('id_kategori_tarif');
 
@@ -400,7 +399,7 @@ class BookingController extends Controller
 
         $nominalHakNakes = $feeNakesNominalBase + $tarifTransportasiFinal;
 
-        // Rounding nominal IDR
+        // Rounding ke IDR
         $tarifLayananJasaMedis = (int) round($tarifLayananJasaMedis);
         $tarifBahanHabisPakai = (int) round($tarifBahanHabisPakai);
         $tarifTransportasiFinal = (int) round($tarifTransportasiFinal);
@@ -438,7 +437,7 @@ class BookingController extends Controller
                 'id_booking' => $booking->id_booking,
                 'midtrans_order_id' => $orderId,
                 'jumlah_total' => $totalTagihanPasien,
-                'metode_pembayaran' => 'QRIS',
+                'metode_pembayaran' => 'Pending',
                 'status_transaksi' => 'Belum Bayar',
                 'sl' => $tarifLayananJasaMedis,
                 'sb' => $tarifBahanHabisPakai,
@@ -453,104 +452,133 @@ class BookingController extends Controller
                 'profit_hc' => $estimasiProfitHomeCare,
             ]);
 
-            MidtransConfig::$serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY', 'SB-Mid-server-dummy-key');
-            MidtransConfig::$isProduction = config('services.midtrans.is_production', false);
-            MidtransConfig::$isSanitized = config('services.midtrans.is_sanitized', true);
-            MidtransConfig::$is3ds = config('services.midtrans.is_3ds', true);
-
-            $itemDetails = [];
-            $itemDetails[] = [
-                'id' => 'LYN-' . $layanan->id_layanan,
-                'price' => $tarifLayananJasaMedis,
-                'quantity' => 1,
-                'name' => substr($layanan->nama_layanan, 0, 50),
-            ];
-
-            if ($tarifBahanHabisPakai > 0) {
-                $itemDetails[] = [
-                    'id' => 'BHP-' . $booking->id_booking,
-                    'price' => $tarifBahanHabisPakai,
-                    'quantity' => 1,
-                    'name' => 'Bahan Habis Pakai (BHP)',
-                ];
-            }
-
-            if ($tarifTransportasiFinal > 0) {
-                $itemDetails[] = [
-                    'id' => 'TRN-' . $booking->id_booking,
-                    'price' => $tarifTransportasiFinal,
-                    'quantity' => 1,
-                    'name' => 'Biaya Transportasi (' . round($distance, 1) . ' km)',
-                ];
-            }
-
-            if ($biayaAdministrasiAplikasi > 0) {
-                $itemDetails[] = [
-                    'id' => 'ADM-' . $booking->id_booking,
-                    'price' => $biayaAdministrasiAplikasi,
-                    'quantity' => 1,
-                    'name' => 'Biaya Administrasi',
-                ];
-            }
-
-            if ($nominalPpnPajak > 0) {
-                $itemDetails[] = [
-                    'id' => 'TAX-' . $booking->id_booking,
-                    'price' => $nominalPpnPajak,
-                    'quantity' => 1,
-                    'name' => 'PPN (' . $persentasePpnPajak . '%)',
-                ];
-            }
-
-            $params = [
-                'transaction_details' => [
-                    'order_id' => $orderId,
-                    'gross_amount' => $totalTagihanPasien,
-                ],
-                'customer_details' => [
-                    'first_name' => $pasien->nama_lengkap ?? $user->email ?? 'Pasien',
-                    'email' => $user->email ?? 'no-reply@example.com',
-                ],
-                'item_details' => $itemDetails,
-            ];
-
-            if (app()->environment('testing')) {
-                $snapToken = 'mock-snap-token-123';
-                $redirectUrl = 'https://app.sandbox.midtrans.com/snap/v2/vtweb/mock';
-                $snapResponse = ['token' => $snapToken, 'redirect_url' => $redirectUrl];
-            } else {
-                $snap = MidtransSnap::createTransaction($params);
-                $snapToken = $snap->token ?? null;
-                $redirectUrl = $snap->redirect_url ?? null;
-                $snapResponse = json_decode(json_encode($snap), true);
-            }
-
-            $transaction->update([
-                'midtrans_response' => $snapResponse,
-            ]);
-
             DB::commit();
-
-            $booking->load(['pasien', 'layanan', 'tenagaMedis', 'transaksi']);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Booking berhasil dibuat. Silakan lanjutkan pembayaran.',
+                'message' => 'Booking berhasil dibuat. Silakan lanjutkan ke pemilihan metode pembayaran.',
                 'data' => [
-                    'booking' => $booking,
-                    'transaction' => $transaction,
+                    'id_booking' => $booking->id_booking,
+                    'booking_code' => $booking->booking_code,
                     'order_id' => $orderId,
-                    'snap_token' => $snapToken,
-                    'redirect_url' => $redirectUrl,
+                    'jumlah_total' => $totalTagihanPasien,
                     'distance_km' => round($distance, 2),
                 ]
-            ]);
+            ], 201);
         } catch (\Throwable $e) {
             DB::rollBack();
 
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal membuat booking: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Step 2: API Direct Midtrans Charge (Eksekusi Pembayaran via Core API)
+     * POST /api/booking/charge
+     */
+    public function charge(Request $request)
+    {
+        $request->validate([
+            'id_booking' => 'required|exists:bookings,id_booking',
+            'payment_type' => 'required|string|in:qris,bank_transfer,gopay,shopeepay',
+            'bank_transfer' => 'required_if:payment_type,bank_transfer|array',
+            'qris' => 'nullable|array',
+        ]);
+
+        $booking = Booking::with(['transaksi', 'pasien.user'])->find($request->input('id_booking'));
+
+        if (!$booking || !$booking->transaksi) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking atau data transaksi tidak ditemukan.'
+            ], 404);
+        }
+
+        $transaksi = $booking->transaksi;
+        $orderId = $transaksi->midtrans_order_id ?? ('BOOKING-' . $booking->id_booking . '-' . time());
+        $grossAmount = (int) $transaksi->jumlah_total;
+
+        $payload = [
+            'payment_type' => $request->input('payment_type'),
+            'transaction_details' => [
+                'order_id' => $orderId,
+                'gross_amount' => $grossAmount,
+            ],
+            'customer_details' => [
+                'first_name' => $booking->pasien?->nama_lengkap ?? 'Pasien',
+                'email' => $booking->pasien?->user?->email ?? 'no-reply@example.com',
+            ],
+        ];
+
+        if ($request->input('payment_type') === 'bank_transfer') {
+            $payload['bank_transfer'] = $request->input('bank_transfer');
+        }
+
+        if (in_array($request->input('payment_type'), ['qris', 'gopay'])) {
+            $payload['qris'] = $request->input('qris', ['acquirer' => 'gopay']);
+        }
+
+        $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
+        $isProduction = config('services.midtrans.is_production', false);
+        $url = $isProduction 
+            ? 'https://api.midtrans.com/v2/charge' 
+            : 'https://api.sandbox.midtrans.com/v2/charge';
+
+        try {
+            $client = Http::withBasicAuth($serverKey, '')
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
+                ]);
+
+            if (config('app.env') === 'local') {
+                $client->withoutVerifying();
+            }
+
+            $response = $client->post($url, $payload);
+            $responseData = $response->json();
+
+            if ($response->successful()) {
+                $paymentDetails = [
+                    'midtrans_transaction_id' => $responseData['transaction_id'] ?? null,
+                    'midtrans_order_id' => $responseData['order_id'] ?? $orderId,
+                    'payment_method' => $request->input('payment_type'),
+                    'midtrans_response' => $responseData,
+                ];
+
+                if ($request->input('payment_type') === 'bank_transfer' && isset($responseData['va_numbers'])) {
+                    $vaArray = $responseData['va_numbers'];
+                    if (is_array($vaArray) && !empty($vaArray)) {
+                        $vaData = reset($vaArray);
+                        $paymentDetails['va_number'] = $vaData['va_number'] ?? null;
+                        $paymentDetails['bank_va'] = $vaData['bank'] ?? null;
+                    }
+                }
+
+                if (in_array($request->input('payment_type'), ['qris', 'gopay']) && isset($responseData['qr_string'])) {
+                    $paymentDetails['qr_string'] = $responseData['qr_string'];
+                    
+                    if (isset($responseData['actions'])) {
+                        foreach ($responseData['actions'] as $action) {
+                            if (($action['name'] ?? '') === 'generate-qr-code') {
+                                $paymentDetails['qr_url'] = $action['url'];
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                $transaksi->update($paymentDetails);
+            }
+
+            return response()->json($responseData, $response->status());
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal meneruskan pembayaran ke Midtrans: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -624,7 +652,6 @@ class BookingController extends Controller
             ];
         }
 
-        // Jika DB lokal belum terisi, lakukan query status ke Midtrans API
         $orderId = $transaksi->midtrans_order_id ?? ('BOOKING-' . $booking->id_booking);
 
         if (empty($paymentDetails) && $orderId) {
@@ -692,19 +719,6 @@ class BookingController extends Controller
             } catch (\Throwable $e) {
                 // Ignore failure
             }
-        }
-
-        if (empty($paymentDetails)) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Detail pembayaran belum tersedia. Gunakan snap token untuk memilih metode pembayaran.',
-                'data' => [
-                    'booking_code' => $booking->booking_code,
-                    'order_id' => $orderId,
-                    'status_transaksi' => $transaksi->status_transaksi,
-                    'snap_token' => is_array($transaksi->midtrans_response) ? ($transaksi->midtrans_response['token'] ?? null) : null,
-                ]
-            ], 200);
         }
 
         return response()->json([
@@ -815,76 +829,6 @@ class BookingController extends Controller
     }
 
     /**
-     * API Direct Midtrans Charge
-     */
-    public function charge(Request $request)
-    {
-        $request->validate([
-            'payment_type' => 'required|string',
-            'transaction_details' => 'required|array',
-            'transaction_details.order_id' => 'required|string',
-            'transaction_details.gross_amount' => 'required|numeric',
-            'id_booking' => 'nullable|exists:bookings,id_booking',
-        ]);
-
-        $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
-        $isProduction = config('services.midtrans.is_production', false);
-        $url = $isProduction 
-            ? 'https://api.midtrans.com/v2/charge' 
-            : 'https://api.sandbox.midtrans.com/v2/charge';
-
-        try {
-            $client = Http::withBasicAuth($serverKey, '')
-                ->withHeaders([
-                    'Accept' => 'application/json',
-                    'Content-Type' => 'application/json',
-                ]);
-
-            if (config('app.env') === 'local') {
-                $client->withoutVerifying();
-            }
-
-            $response = $client->post($url, $request->all());
-            $responseData = $response->json();
-
-            if ($request->filled('id_booking') && $response->successful()) {
-                $booking = Booking::with('transaksi')->find($request->input('id_booking'));
-                if ($booking && $booking->transaksi) {
-                    $paymentDetails = [
-                        'midtrans_transaction_id' => $responseData['transaction_id'] ?? null,
-                        'midtrans_order_id' => $responseData['order_id'] ?? null,
-                        'payment_method' => $request->input('payment_type'),
-                        'midtrans_response' => $responseData,
-                    ];
-
-                    if ($request->input('payment_type') === 'bank_transfer' && isset($responseData['va_numbers'])) {
-                        $vaArray = $responseData['va_numbers'];
-                        if (is_array($vaArray) && !empty($vaArray)) {
-                            $vaData = reset($vaArray);
-                            $paymentDetails['va_number'] = $vaData['va_number'] ?? null;
-                            $paymentDetails['bank_va'] = $vaData['bank'] ?? null;
-                        }
-                    }
-
-                    if ($request->input('payment_type') === 'qris' && isset($responseData['qr_string'])) {
-                        $paymentDetails['qr_string'] = $responseData['qr_string'];
-                        $paymentDetails['qr_url'] = $responseData['qr_url'] ?? null;
-                    }
-
-                    $booking->transaksi->update($paymentDetails);
-                }
-            }
-
-            return response()->json($responseData, $response->status());
-        } catch (\Throwable $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal meneruskan pembayaran ke Midtrans: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
      * API Cek Status Transaksi & Booking
      */
     public function checkStatus($idTransaksi)
@@ -990,7 +934,6 @@ class BookingController extends Controller
             ], 400);
         }
 
-        // Lock & Atomic update
         $updated = Booking::where('id_booking', $id)
             ->where(function ($q) use ($nakes) {
                 $q->whereNull('id_tenaga_medis')
