@@ -11,6 +11,15 @@ use Illuminate\Support\Facades\Storage;
 
 class TenagaMedisController extends Controller
 {
+    private function activeTenagaMedis(Request $request): ?TenagaMedis
+    {
+        $user = $request->user();
+
+        return $user ? TenagaMedis::where('id_user', $user->id_user)
+            ->where('status', 'approved')
+            ->first() : null;
+    }
+
     /**
      * Endpoint Pendaftaran Nakes
      */
@@ -222,25 +231,16 @@ class TenagaMedisController extends Controller
      */
     public function show(Request $request)
     {
-        $user = $request->user();
-
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'User tidak ditemukan.'
-            ], 401);
-        }
-
-        $tenagaMedis = TenagaMedis::with(['user', 'pasien', 'kategoriLayanan', 'wilayahLayanan'])
-            ->where('id_user', $user->id_user)
-            ->first();
+        $tenagaMedis = $this->activeTenagaMedis($request);
 
         if (!$tenagaMedis) {
             return response()->json([
                 'success' => false,
-                'message' => 'Data profil Tenaga Medis tidak ditemukan.'
-            ], 404);
+                'message' => 'Hanya Nakes aktif yang dapat mengakses profil.'
+            ], 403);
         }
+
+        $tenagaMedis->load(['user', 'pasien', 'kategoriLayanan', 'wilayahLayanan']);
 
         return response()->json([
             'success' => true,
@@ -253,16 +253,9 @@ class TenagaMedisController extends Controller
      */
     public function update(Request $request)
     {
-        $user = $request->user();
-
-        if (!$user) {
-            return response()->json(['success' => false, 'message' => 'User tidak ditemukan.'], 401);
-        }
-
-        $tenagaMedis = TenagaMedis::where('id_user', $user->id_user)->first();
-
+        $tenagaMedis = $this->activeTenagaMedis($request);
         if (!$tenagaMedis) {
-            return response()->json(['success' => false, 'message' => 'Data Tenaga Medis tidak ditemukan.'], 404);
+            return response()->json(['success' => false, 'message' => 'Hanya Nakes aktif yang dapat memperbarui profil.'], 403);
         }
 
         $validated = $request->validate([
@@ -351,16 +344,9 @@ class TenagaMedisController extends Controller
      */
     public function destroy(Request $request)
     {
-        $user = $request->user();
-
-        if (!$user) {
-            return response()->json(['success' => false, 'message' => 'User tidak ditemukan.'], 401);
-        }
-
-        $tenagaMedis = TenagaMedis::where('id_user', $user->id_user)->first();
-
+        $tenagaMedis = $this->activeTenagaMedis($request);
         if (!$tenagaMedis) {
-            return response()->json(['success' => false, 'message' => 'Data Tenaga Medis tidak ditemukan.'], 404);
+            return response()->json(['success' => false, 'message' => 'Hanya Nakes aktif yang dapat menghapus profil.'], 403);
         }
 
         $singleFiles = ['foto_profile', 'file_ktp', 'ijazah', 'file_skck', 'file_cv', 'file_str', 'file_sip'];

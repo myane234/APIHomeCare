@@ -98,6 +98,16 @@ class TenagaMedis extends Model
         );
     }
 
+    public function jadwalKerja()
+    {
+        return $this->hasMany(JadwalKerja::class, 'id_tenaga_medis', 'id_tenaga_medis');
+    }
+
+    public function pengajuanOperasional()
+    {
+        return $this->hasMany(OperasionalNakes::class, 'id_tenaga_medis', 'id_tenaga_medis');
+    }
+
     public function bank()
     {
         return $this->belongsTo(MasterBank::class, 'id_bank', 'id_bank');

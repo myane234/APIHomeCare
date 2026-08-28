@@ -3,11 +3,14 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TenagaMedisController;
 use App\Http\Controllers\BookingController;
+use App\Http\Controllers\NakesOperasionalController;
 
 Route::middleware(['auth:sanctum', 'role:nakes,tenaga medis'])->group(function () {
     Route::get('/tenaga-medis', [TenagaMedisController::class, 'show']);
     Route::put('/tenaga-medis', [TenagaMedisController::class, 'update']);
     Route::delete('/tenaga-medis', [TenagaMedisController::class, 'destroy']);
+    Route::get('/nakes/data-operasional', [NakesOperasionalController::class, 'index']);
+    Route::post('/nakes/data-operasional', [NakesOperasionalController::class, 'store']);
 
     // Order management for Nakes
     Route::get('/nakes/booking', [BookingController::class, 'nakesIndex']);

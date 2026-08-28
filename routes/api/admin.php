@@ -6,6 +6,7 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AdminTierController;
 use App\Http\Controllers\AdminNakesController;
 use App\Http\Controllers\SuperAdminNakesController;
+use App\Http\Controllers\AdminOperasionalNakesController;
 use App\Http\Controllers\LayananController;
 use App\Http\Controllers\PromoController;
 use App\Http\Controllers\ArtikelController;
@@ -94,6 +95,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/{id}', [SuperAdminNakesController::class, 'show']);
         Route::put('/{id}', [SuperAdminNakesController::class, 'update']);
         Route::delete('/{id}', [SuperAdminNakesController::class, 'destroy']);
+    });
+
+    // Approval perubahan operasional Nakes
+    Route::prefix('admin/operasional-nakes')->group(function () {
+        Route::get('/', [AdminOperasionalNakesController::class, 'index']);
+        Route::get('/{id}', [AdminOperasionalNakesController::class, 'show']);
+        Route::post('/{id}/approve', [AdminOperasionalNakesController::class, 'approve']);
+        Route::post('/{id}/reject', [AdminOperasionalNakesController::class, 'reject']);
     });
 
     // Admin Account & Tier Management

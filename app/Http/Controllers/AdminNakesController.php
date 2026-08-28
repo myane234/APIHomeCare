@@ -25,13 +25,13 @@ class AdminNakesController extends Controller
             ], 401);
         }
 
-        $status = $request->query('status');
+        $status = strtolower((string) $request->query('status', 'pending'));
 
         $query = TenagaMedis::with(['user', 'pasien', 'wilayahLayanan', 'kategoriLayanan'])
             ->orderBy('created_at', 'desc');
 
-        if ($status && in_array(strtolower($status), ['pending', 'pelatihan', 'approved', 'rejected'])) {
-            $query->where('status', strtolower($status));
+        if (in_array($status, ['pending', 'pelatihan', 'approved', 'rejected'], true)) {
+            $query->where('status', $status);
         }
 
         $nakesRequests = $query->get();
