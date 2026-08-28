@@ -15,7 +15,7 @@ class AdminNakesController extends Controller
      * List semua pendaftaran nakes
      */
     /**
-     * List semua pendaftaran nakes (Menampilkan semua data jika tanpa query status)
+     * List semua pendaftaran nakes (Menampilkan semua data kecuali yang approved)
      */
     public function index(Request $request)
     {
@@ -28,15 +28,18 @@ class AdminNakesController extends Controller
             ], 401);
         }
 
-        // Ambil query status tanpa default value 'pending'
+        // Ambil query status jika dikirim
         $status = $request->query('status');
 
         $query = TenagaMedis::with(['user', 'pasien', 'wilayahLayanan', 'kategoriLayanan'])
             ->orderBy('created_at', 'desc');
 
-        // Hanya filter jika query status dikirim dan nilainya valid
+        // Jika query status dikirim dan valid, filter berdasarkan status tersebut
         if ($status && in_array(strtolower((string) $status), ['pending', 'pelatihan', 'approved', 'rejected'], true)) {
             $query->where('status', strtolower((string) $status));
+        } else {
+            // Default: tampilkan semua kecuali status 'approved'
+            $query->where('status', '!=', 'approved');
         }
 
         $nakesRequests = $query->get();
