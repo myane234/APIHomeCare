@@ -27,7 +27,7 @@ class SuperAdminNakesController extends Controller
         if (!$admin || !in_array($tier, ['super admin', 'superadmin'], true)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Akses ditolak. Hanya Super Admin yang dapat mengelola data Nakes.'
+                'message' => 'Akses ditolak. Hanya Admin yang dapat mengelola data Nakes.'
             ], 403);
         }
 

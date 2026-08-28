@@ -763,7 +763,9 @@ class BookingController extends Controller
     public function nakesIndex(Request $request)
     {
         $user = $request->user();
-        $nakes = TenagaMedis::where('id_user', $user?->id_user)->first();
+        $nakes = TenagaMedis::where('id_user', $user?->id_user)
+            ->where('status', 'approved')
+            ->first();
 
         if (!$nakes) {
             return response()->json([
@@ -795,7 +797,9 @@ class BookingController extends Controller
     public function nakesAcceptBooking(Request $request, $id)
     {
         $user = $request->user();
-        $nakes = TenagaMedis::where('id_user', $user?->id_user)->first();
+        $nakes = TenagaMedis::where('id_user', $user?->id_user)
+            ->where('status', 'approved')
+            ->first();
 
         if (!$nakes) {
             return response()->json([
@@ -848,7 +852,9 @@ class BookingController extends Controller
         ]);
 
         $user = $request->user();
-        $nakes = TenagaMedis::where('id_user', $user?->id_user)->first();
+        $nakes = TenagaMedis::where('id_user', $user?->id_user)
+            ->where('status', 'approved')
+            ->first();
 
         if (!$nakes) {
             return response()->json([
