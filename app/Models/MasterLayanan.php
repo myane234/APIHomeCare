@@ -53,8 +53,10 @@ class MasterLayanan extends Model
     {
         if (!$value) return null;
         // Jika sudah berupa URL penuh, kembalikan apa adanya
-        if (str_starts_with($value, 'http')) return $value;
-        return Storage::disk('public')->url($value);
+        if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
+            return $value;
+        }
+        return url(Storage::disk('public')->url($value));
     }
 
     // ---------------------------------------------------------------

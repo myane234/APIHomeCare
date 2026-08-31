@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\GlobalConfig;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Cache;
 
 class GlobalConfigController extends Controller
 {
@@ -13,17 +14,20 @@ class GlobalConfigController extends Controller
      */
     public function getGlobalConfig()
     {
-        $config = GlobalConfig::first();
-        if (!$config) {
-            $config = GlobalConfig::create([
-                'app_name' => 'Smart Home Care',
-                'whatsapp_number' => '6281234567890',
-                'phone_number' => '0211234567',
-                'email' => 'info@smarthomecare.com',
-                'address' => 'Jl. Kesehatan No. 123, Jakarta Selatan',
-                'maintenance_mode' => false,
-            ]);
-        }
+        $config = Cache::rememberForever('global_config', function () {
+            $config = GlobalConfig::first();
+            if (!$config) {
+                $config = GlobalConfig::create([
+                    'app_name' => 'Smart Home Care',
+                    'whatsapp_number' => '6281234567890',
+                    'phone_number' => '0211234567',
+                    'email' => 'info@smarthomecare.com',
+                    'address' => 'Jl. Kesehatan No. 123, Jakarta Selatan',
+                    'maintenance_mode' => false,
+                ]);
+            }
+            return $config;
+        });
 
         return response()->json([
             'success' => true,
@@ -37,6 +41,8 @@ class GlobalConfigController extends Controller
                 'address' => $config->address,
                 'socials' => $config->socials ?? [],
                 'maintenance_mode' => $config->maintenance_mode,
+                'created_by' => $config->created_by,
+                'deleted_by' => $config->deleted_by,
             ]
         ], 200);
     }
@@ -95,7 +101,15 @@ class GlobalConfigController extends Controller
             $validated['maintenance_mode'] = filter_var($request->input('maintenance_mode'), FILTER_VALIDATE_BOOLEAN);
         }
 
+        // Set created_by to authenticated user
+        if ($request->user()) {
+            $validated['created_by'] = $request->user()->id_admin ?? $request->user()->getKey();
+        }
+
         $config->update($validated);
+
+        // Invalidate cache for responsiveness
+        Cache::forget('global_config');
 
         return response()->json([
             'success' => true,
@@ -110,7 +124,39 @@ class GlobalConfigController extends Controller
                 'address' => $config->address,
                 'socials' => $config->socials ?? [],
                 'maintenance_mode' => $config->maintenance_mode,
+                'created_by' => $config->created_by,
+                'deleted_by' => $config->deleted_by,
             ]
+        ], 200);
+    }
+
+    /**
+     * Delete the global config (soft delete)
+     */
+    public function destroy(Request $request)
+    {
+        $config = GlobalConfig::first();
+        if (!$config) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Konfigurasi global tidak ditemukan.'
+            ], 404);
+        }
+
+        if ($request->user()) {
+            $config->update([
+                'deleted_by' => $request->user()->id_admin ?? $request->user()->getKey(),
+            ]);
+        }
+
+        $config->delete();
+
+        // Invalidate cache
+        Cache::forget('global_config');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Konfigurasi global berhasil dihapus.'
         ], 200);
     }
 }
