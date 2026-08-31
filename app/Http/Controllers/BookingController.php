@@ -705,7 +705,7 @@ class BookingController extends Controller
             ]
         ], 200);
     }
-    
+
     /**
      * API Laporan / Ringkasan Transaksi satu Booking.
      */
@@ -977,4 +977,47 @@ class BookingController extends Controller
             'data'    => new BookingResource($booking->load(['pasien', 'layanan', 'tenagaMedis', 'transaksi'])),
         ]);
     }
+
+    public function batalkanBooking($id)
+{
+    $booking = Booking::with('transaksi')->find($id);
+
+    if (!$booking) {
+        return response()->json(['success' => false, 'message' => 'Booking tidak ditemukan.'], 404);
+    }
+
+    // 1. Ubah status booking lokal
+    $booking->status_booking = 'Dibatalkan';
+    $booking->save();
+
+    // 2. Jika ada transaksi dan belum lunas, batalkan juga di Midtrans
+    $transaksi = $booking->transaksi;
+    if ($transaksi && !in_array(strtolower($transaksi->status_transaksi), ['lunas', 'sudah bayar', 'settlement', 'success'])) {
+        
+        $orderId = $transaksi->midtrans_order_id;
+        $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
+        $baseUrl = config('services.midtrans.is_production', false) 
+            ? 'https://api.midtrans.com/v2/' 
+            : 'https://api.sandbox.midtrans.com/v2/';
+
+        try {
+            // Tembak API Cancel Midtrans
+            Http::withBasicAuth($serverKey, '')
+                ->withHeaders(['Accept' => 'application/json', 'Content-Type' => 'application/json'])
+                ->withoutVerifying()
+                ->post($baseUrl . $orderId . '/cancel'); // <-- Perintah Cancel ke Midtrans
+        } catch (\Throwable $e) {
+            // Abaikan jika error jaringan, yang penting data lokal sudah dibatalkan
+        }
+
+        // 3. Update status transaksi lokal
+        $transaksi->status_transaksi = 'Dibatalkan';
+        $transaksi->save();
+    }
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Booking dan pembayaran berhasil dibatalkan.',
+    ]);
+}
 }
