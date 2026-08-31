@@ -608,7 +608,7 @@ class BookingController extends Controller
      * API Menampilkan Payment Details untuk Pembayaran
      * GET /api/booking/{id}/payment-details
      */
-    public function getPaymentDetails($id)
+   public function getPaymentDetails($id)
     {
         $booking = Booking::with(['transaksi'])->find($id);
 
@@ -620,8 +620,45 @@ class BookingController extends Controller
         }
 
         $transaksi = $booking->transaksi;
+        $orderId = $transaksi->midtrans_order_id ?? ('BOOKING-' . $booking->id_booking);
+        $lunasStatuses = ['lunas', 'sudah bayar', 'settlement', 'success'];
 
-        if (in_array(strtolower($transaksi->status_transaksi), ['lunas', 'sudah bayar', 'settlement', 'success'])) {
+        // 1. SYNC KE MIDTRANS: Jika status di DB lokal belum lunas, tarik data terbaru dari Midtrans
+        if (!in_array(strtolower($transaksi->status_transaksi), $lunasStatuses) && $orderId) {
+            $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
+            $baseUrl = config('services.midtrans.is_production', false) 
+                ? 'https://api.midtrans.com/v2/' 
+                : 'https://api.sandbox.midtrans.com/v2/';
+
+            try {
+                $response = Http::withBasicAuth($serverKey, '')
+                    ->withHeaders([
+                        'Accept' => 'application/json',
+                        'Content-Type' => 'application/json',
+                    ])
+                    ->withoutVerifying() // Hapus tanpa verifikasi ini jika nanti di Production dan SSL sudah aman
+                    ->get($baseUrl . $orderId . '/status');
+
+                if ($response->successful()) {
+                    $midtransData = $response->json();
+                    $transactionStatus = $midtransData['transaction_status'] ?? '';
+
+                    // Jika ternyata di Midtrans sudah lunas, langsung update DB lokal
+                    if (in_array($transactionStatus, ['settlement', 'capture'])) {
+                        $transaksi->update([
+                            'status_transaksi' => 'Lunas',
+                            'waktu_bayar' => $midtransData['settlement_time'] ?? now(),
+                        ]);
+                        $transaksi->refresh(); // Perbarui instance transaksi dengan data terbaru
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Abaikan jika terjadi error jaringan (misal timeout), jalankan sisa kode dengan data lokal
+            }
+        }
+
+        // 2. CEK STATUS TERBARU: Jika sudah lunas (dari awal atau setelah di-sync), langsung return lunas
+        if (in_array(strtolower($transaksi->status_transaksi), $lunasStatuses)) {
             return response()->json([
                 'success' => true,
                 'message' => 'Pembayaran untuk booking ini sudah lunas.',
@@ -632,95 +669,28 @@ class BookingController extends Controller
             ], 200);
         }
 
+        // 3. SUSUN PAYMENT DETAILS: Untuk tagihan yang belum dibayar
         $paymentDetails = [];
+        $jumlahTotal = (float) $transaksi->jumlah_total;
+        $jumlahFormat = 'Rp ' . number_format($jumlahTotal, 0, ',', '.');
 
         if ($transaksi->payment_method === 'qris' || ($transaksi->qr_string && $transaksi->qr_url)) {
             $paymentDetails['qris'] = [
                 'qr_string' => $transaksi->qr_string,
                 'qr_url' => $transaksi->qr_url,
-                'jumlah' => (float) $transaksi->jumlah_total,
-                'jumlah_format' => 'Rp ' . number_format((float) $transaksi->jumlah_total, 0, ',', '.'),
+                'jumlah' => $jumlahTotal,
+                'jumlah_format' => $jumlahFormat,
             ];
-        }
-
-        if ($transaksi->payment_method === 'bank_transfer' || ($transaksi->va_number && $transaksi->bank_va)) {
+        } elseif ($transaksi->payment_method === 'bank_transfer' || ($transaksi->va_number && $transaksi->bank_va)) {
             $paymentDetails['virtual_account'] = [
                 'va_number' => $transaksi->va_number,
                 'bank' => strtoupper($transaksi->bank_va),
-                'jumlah' => (float) $transaksi->jumlah_total,
-                'jumlah_format' => 'Rp ' . number_format((float) $transaksi->jumlah_total, 0, ',', '.'),
+                'jumlah' => $jumlahTotal,
+                'jumlah_format' => $jumlahFormat,
             ];
         }
 
-        $orderId = $transaksi->midtrans_order_id ?? ('BOOKING-' . $booking->id_booking);
-
-        if (empty($paymentDetails) && $orderId) {
-            $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
-            $isProduction = config('services.midtrans.is_production', false);
-            $baseUrl = $isProduction 
-                ? 'https://api.midtrans.com/v2/' 
-                : 'https://api.sandbox.midtrans.com/v2/';
-
-            try {
-                $client = Http::withBasicAuth($serverKey, '')
-                    ->withHeaders([
-                        'Accept' => 'application/json',
-                        'Content-Type' => 'application/json',
-                    ]);
-
-                if (config('app.env') === 'local') {
-                    $client->withoutVerifying();
-                }
-
-                $response = $client->get($baseUrl . $orderId . '/status');
-
-                if ($response->successful()) {
-                    $midtransData = $response->json();
-                    $paymentType = $midtransData['payment_type'] ?? null;
-
-                    if (in_array($paymentType, ['qris', 'gopay', 'shopeepay'])) {
-                        $qrUrl = null;
-                        if (isset($midtransData['actions'])) {
-                            foreach ($midtransData['actions'] as $action) {
-                                if (($action['name'] ?? '') === 'generate-qr-code') {
-                                    $qrUrl = $action['url'];
-                                    break;
-                                }
-                            }
-                        }
-                        
-                        $paymentDetails['qris'] = [
-                            'qr_string' => $midtransData['qr_string'] ?? null,
-                            'qr_url' => $qrUrl,
-                            'jumlah' => (float) ($midtransData['gross_amount'] ?? $transaksi->jumlah_total),
-                            'jumlah_format' => 'Rp ' . number_format((float) ($midtransData['gross_amount'] ?? $transaksi->jumlah_total), 0, ',', '.'),
-                        ];
-                    }
-
-                    if (isset($midtransData['va_numbers']) && is_array($midtransData['va_numbers'])) {
-                        $firstVa = $midtransData['va_numbers'][0] ?? null;
-                        if ($firstVa) {
-                            $paymentDetails['virtual_account'] = [
-                                'va_number' => $firstVa['va_number'],
-                                'bank' => strtoupper($firstVa['bank']),
-                                'jumlah' => (float) ($midtransData['gross_amount'] ?? $transaksi->jumlah_total),
-                                'jumlah_format' => 'Rp ' . number_format((float) ($midtransData['gross_amount'] ?? $transaksi->jumlah_total), 0, ',', '.'),
-                            ];
-                        }
-                    } elseif (isset($midtransData['permata_va_number'])) {
-                        $paymentDetails['virtual_account'] = [
-                            'va_number' => $midtransData['permata_va_number'],
-                            'bank' => 'PERMATA',
-                            'jumlah' => (float) ($midtransData['gross_amount'] ?? $transaksi->jumlah_total),
-                            'jumlah_format' => 'Rp ' . number_format((float) ($midtransData['gross_amount'] ?? $transaksi->jumlah_total), 0, ',', '.'),
-                        ];
-                    }
-                }
-            } catch (\Throwable $e) {
-                // Ignore failure
-            }
-        }
-
+        // 4. KEMBALIKAN RESPONSE DETAIL PEMBAYARAN
         return response()->json([
             'success' => true,
             'message' => 'Detail pembayaran berhasil diambil.',
@@ -728,14 +698,14 @@ class BookingController extends Controller
                 'booking_code' => $booking->booking_code,
                 'order_id' => $orderId,
                 'status_transaksi' => $transaksi->status_transaksi,
-                'jumlah_total' => (float) $transaksi->jumlah_total,
-                'jumlah_total_format' => 'Rp ' . number_format((float) $transaksi->jumlah_total, 0, ',', '.'),
+                'jumlah_total' => $jumlahTotal,
+                'jumlah_total_format' => $jumlahFormat,
                 'payment_details' => $paymentDetails,
                 'created_at' => $booking->created_at,
             ]
         ], 200);
     }
-
+    
     /**
      * API Laporan / Ringkasan Transaksi satu Booking.
      */
