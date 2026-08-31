@@ -207,7 +207,7 @@ class BookingController extends Controller
     }
 
     /**
-     * Step 1: API Pasien - Membuat booking baru (Tanpa pemilihan pembayaran).
+     * Step 1: API Pasien - Membuat booking baru.
      * POST /api/booking
      */
     public function store(Request $request)
@@ -277,22 +277,12 @@ class BookingController extends Controller
             $nearestNakes = $nearestList->first();
 
             if ($nearestNakes) {
-                $tenagaMedis = $nearestNakes;
-                $tenagaMedisId = $nearestNakes->id_tenaga_medis;
                 $distance = (float) ($nearestNakes->distance_km ?? 0.0);
                 if ($distance > 1000) $distance = 0.0;
             } else {
-                $tenagaMedis = TenagaMedis::where('status', 'approved')->first();
-                $tenagaMedisId = $tenagaMedis?->id_tenaga_medis;
                 $distance = 0.0;
             }
-        }
-
-        if (!$tenagaMedisId) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Tenaga medis belum tersedia untuk booking.'
-            ], 422);
+            $tenagaMedisId = null; // Biarkan null agar broadcast ke antrean Nakes
         }
 
         // Load Master Tarif
@@ -608,7 +598,7 @@ class BookingController extends Controller
      * API Menampilkan Payment Details untuk Pembayaran
      * GET /api/booking/{id}/payment-details
      */
-   public function getPaymentDetails($id)
+    public function getPaymentDetails($id)
     {
         $booking = Booking::with(['transaksi'])->find($id);
 
@@ -623,7 +613,6 @@ class BookingController extends Controller
         $orderId = $transaksi->midtrans_order_id ?? ('BOOKING-' . $booking->id_booking);
         $lunasStatuses = ['lunas', 'sudah bayar', 'settlement', 'success'];
 
-        // 1. SYNC KE MIDTRANS: Jika status di DB lokal belum lunas, tarik data terbaru dari Midtrans
         if (!in_array(strtolower($transaksi->status_transaksi), $lunasStatuses) && $orderId) {
             $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
             $baseUrl = config('services.midtrans.is_production', false) 
@@ -636,28 +625,26 @@ class BookingController extends Controller
                         'Accept' => 'application/json',
                         'Content-Type' => 'application/json',
                     ])
-                    ->withoutVerifying() // Hapus tanpa verifikasi ini jika nanti di Production dan SSL sudah aman
+                    ->withoutVerifying()
                     ->get($baseUrl . $orderId . '/status');
 
                 if ($response->successful()) {
                     $midtransData = $response->json();
                     $transactionStatus = $midtransData['transaction_status'] ?? '';
 
-                    // Jika ternyata di Midtrans sudah lunas, langsung update DB lokal
                     if (in_array($transactionStatus, ['settlement', 'capture'])) {
                         $transaksi->update([
                             'status_transaksi' => 'Lunas',
                             'waktu_bayar' => $midtransData['settlement_time'] ?? now(),
                         ]);
-                        $transaksi->refresh(); // Perbarui instance transaksi dengan data terbaru
+                        $transaksi->refresh();
                     }
                 }
             } catch (\Throwable $e) {
-                // Abaikan jika terjadi error jaringan (misal timeout), jalankan sisa kode dengan data lokal
+                // Ignore network errors
             }
         }
 
-        // 2. CEK STATUS TERBARU: Jika sudah lunas (dari awal atau setelah di-sync), langsung return lunas
         if (in_array(strtolower($transaksi->status_transaksi), $lunasStatuses)) {
             return response()->json([
                 'success' => true,
@@ -669,7 +656,6 @@ class BookingController extends Controller
             ], 200);
         }
 
-        // 3. SUSUN PAYMENT DETAILS: Untuk tagihan yang belum dibayar
         $paymentDetails = [];
         $jumlahTotal = (float) $transaksi->jumlah_total;
         $jumlahFormat = 'Rp ' . number_format($jumlahTotal, 0, ',', '.');
@@ -690,7 +676,6 @@ class BookingController extends Controller
             ];
         }
 
-        // 4. KEMBALIKAN RESPONSE DETAIL PEMBAYARAN
         return response()->json([
             'success' => true,
             'message' => 'Detail pembayaran berhasil diambil.',
@@ -837,6 +822,288 @@ class BookingController extends Controller
         ]);
     }
 
+    private function getLoggedNakes(Request $request): ?TenagaMedis
+    {
+        $user = $request->user();
+
+        return $user
+            ? TenagaMedis::with(['user', 'pasien', 'kategoriLayanan', 'jadwalKerja', 'wilayahLayanan'])
+                ->where('id_user', $user->id_user)
+                ->where('status', 'approved')
+                ->first()
+            : null;
+    }
+
+    private function timeRangeOverlap(?string $startA, ?string $endA, ?string $startB, ?string $endB): bool
+    {
+        if (!$startA || !$endA || !$startB || !$endB) {
+            return false;
+        }
+
+        try {
+            $aStart = Carbon::parse('2000-01-01 ' . $startA);
+            $aEnd = Carbon::parse('2000-01-01 ' . $endA);
+            $bStart = Carbon::parse('2000-01-01 ' . $startB);
+            $bEnd = Carbon::parse('2000-01-01 ' . $endB);
+
+            return $aStart->lt($bEnd) && $bStart->lt($aEnd);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    private function getNakesOrderEligibility(TenagaMedis $nakes, Booking $booking): array
+    {
+        $reasons = [];
+        $distanceKm = 0.0;
+
+        $booking->loadMissing(['layanan.kategori', 'transaksi']);
+
+        if (!$booking->transaksi) {
+            $reasons[] = 'Booking belum memiliki transaksi.';
+            return [
+                'eligible' => false,
+                'reasons' => $reasons,
+                'distance_km' => 0.0,
+            ];
+        }
+
+        // Cek jika Nakes sudah pernah menolak order ini
+        $catatanPenolakan = is_array($booking->catatan_penolakan)
+            ? $booking->catatan_penolakan
+            : json_decode($booking->catatan_penolakan ?? '[]', true);
+
+        if (is_array($catatanPenolakan)) {
+            $rejectedNakesIds = array_column($catatanPenolakan, 'id_tenaga_medis');
+            if (in_array((int)$nakes->id_tenaga_medis, array_map('intval', $rejectedNakesIds))) {
+                $reasons[] = 'Anda sudah pernah menolak order ini.';
+            }
+        }
+
+        if ($booking->id_tenaga_medis && (int)$booking->id_tenaga_medis !== (int)$nakes->id_tenaga_medis) {
+            $reasons[] = 'Order sudah dialokasikan ke Tenaga Medis lain.';
+        }
+
+        $statusTransaksi = strtolower((string) $booking->transaksi->status_transaksi);
+        if (!in_array($statusTransaksi, ['lunas', 'sudah bayar', 'settlement', 'success'])) {
+            $reasons[] = 'Booking belum berhasil dibayar.';
+        }
+
+        if ($booking->status_booking !== 'Pending') {
+            $reasons[] = 'Booking tidak dalam status menunggu.';
+        }
+
+        $layanan = $booking->layanan;
+        $allowedKategoriIds = $nakes->kategoriLayanan()->pluck('kategori_layanans.id_kategori_layanan')->toArray();
+        $operasional = \App\Models\OperasionalNakes::where('id_tenaga_medis', $nakes->id_tenaga_medis)
+            ->where('status', 'approved')
+            ->first();
+
+        if ($operasional) {
+            $allowedKategoriIds = array_unique(array_merge($allowedKategoriIds, (array) ($operasional->kategori_layanan ?? [])));
+        }
+
+        if ($layanan && $layanan->id_kategori_layanan && !in_array($layanan->id_kategori_layanan, $allowedKategoriIds)) {
+            $reasons[] = 'Kategori layanan tidak sesuai dengan spesialisasi nakes.';
+        }
+
+        $bookingDate = $booking->tanggal_kunjungan ? Carbon::parse($booking->tanggal_kunjungan) : null;
+        $bookingJam = $booking->jam_kunjungan;
+        $hasSchedule = false;
+
+        if ($bookingDate && $bookingJam) {
+            $dayName = $bookingDate->locale('id')->translatedFormat('l');
+            $bookingStart = Carbon::parse($bookingDate->format('Y-m-d') . ' ' . $bookingJam);
+            $bookingEnd = $bookingStart->copy()->addMinutes((int) ($layanan->durasi_menit ?? 60));
+
+            foreach ($nakes->jadwalKerja as $jadwal) {
+                if (($jadwal->hari ?? null) === $dayName) {
+                    if ($this->timeRangeOverlap($jadwal->jam_mulai, $jadwal->jam_selesai, $bookingJam, $bookingEnd->format('H:i'))) {
+                        $hasSchedule = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!$hasSchedule && $operasional) {
+                foreach ($operasional->waktu_layanan ?? [] as $slot) {
+                    if (($slot['hari'] ?? null) === $dayName) {
+                        if ($this->timeRangeOverlap($slot['jam_mulai'] ?? null, $slot['jam_selesai'] ?? null, $bookingJam, $bookingEnd->format('H:i'))) {
+                            $hasSchedule = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!$hasSchedule) {
+            $reasons[] = 'Jadwal nakes tidak tersedia pada waktu booking.';
+        }
+
+        if ($nakes->latitude && $nakes->longitude && $booking->latitude_kunjungan && $booking->longitude_kunjungan) {
+            $distanceKm = $this->calculateDistance(
+                (float) $nakes->latitude,
+                (float) $nakes->longitude,
+                (float) $booking->latitude_kunjungan,
+                (float) $booking->longitude_kunjungan
+            );
+
+            if ($distanceKm > 10) {
+                $reasons[] = 'Lokasi pasien berada di luar radius layanan 10 km.';
+            }
+        } else {
+            $reasons[] = 'Lokasi nakes atau pasien belum lengkap.';
+        }
+
+        // Cek Bentrok Order Nakes
+        $bookingConflict = Booking::where('id_tenaga_medis', $nakes->id_tenaga_medis)
+            ->whereDate('tanggal_kunjungan', $booking->tanggal_kunjungan)
+            ->whereNotIn('status_booking', ['Selesai', 'Dibatalkan'])
+            ->where('id_booking', '!=', $booking->id_booking)
+            ->with(['layanan'])
+            ->get();
+
+        $bookingStart = $booking->tanggal_kunjungan && $booking->jam_kunjungan
+            ? Carbon::parse($booking->tanggal_kunjungan . ' ' . $booking->jam_kunjungan)
+            : null;
+        $bookingEnd = $bookingStart ? $bookingStart->copy()->addMinutes((int) ($layanan->durasi_menit ?? 60)) : null;
+
+        foreach ($bookingConflict as $conflict) {
+            if (!$conflict->jam_kunjungan || !$bookingStart || !$bookingEnd) {
+                continue;
+            }
+
+            $conflictStart = Carbon::parse($conflict->tanggal_kunjungan . ' ' . $conflict->jam_kunjungan);
+            $conflictEnd = $conflictStart->copy()->addMinutes((int) ($conflict->layanan?->durasi_menit ?? 60));
+
+            if ($bookingStart->lt($conflictEnd) && $conflictStart->lt($bookingEnd)) {
+                $reasons[] = 'Nakes sudah memiliki order pada waktu yang sama.';
+                break;
+            }
+        }
+
+        return [
+            'eligible' => empty($reasons),
+            'reasons' => array_values(array_unique($reasons)),
+            'distance_km' => round((float) $distanceKm, 2),
+        ];
+    }
+
+    private function getNakesArrivalEstimate(TenagaMedis $nakes, Booking $booking): array
+    {
+        if (!$nakes->latitude || !$nakes->longitude || !$booking->latitude_kunjungan || !$booking->longitude_kunjungan) {
+            return [
+                'distance_km' => 0.0,
+                'durasi_menit' => 0,
+                'label' => 'Lokasi belum lengkap',
+            ];
+        }
+
+        $distanceKm = $this->calculateDistance(
+            (float) $nakes->latitude,
+            (float) $nakes->longitude,
+            (float) $booking->latitude_kunjungan,
+            (float) $booking->longitude_kunjungan
+        );
+
+        $durasiMenit = max(10, (int) ceil(($distanceKm / 25) * 60));
+
+        return [
+            'distance_km' => round((float) $distanceKm, 2),
+            'durasi_menit' => $durasiMenit,
+            'label' => 'Sekitar ' . $durasiMenit . ' menit',
+        ];
+    }
+
+    public function nakesOrderQueue(Request $request)
+    {
+        $nakes = $this->getLoggedNakes($request);
+
+        if (!$nakes) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hanya Tenaga Medis yang aktif yang dapat melihat order.'
+            ], 403);
+        }
+
+        $bookings = Booking::with(['pasien', 'layanan.kategori', 'tenagaMedis', 'transaksi'])
+            ->where('status_booking', 'Pending')
+            ->orderByDesc('created_at')
+            ->get();
+
+        $eligibleOrders = [];
+        $ineligibleOrders = [];
+
+        foreach ($bookings as $booking) {
+            $eligibility = $this->getNakesOrderEligibility($nakes, $booking);
+            $arrive = $this->getNakesArrivalEstimate($nakes, $booking);
+            $payload = [
+                'booking' => new BookingResource($booking),
+                'eligibility' => $eligibility,
+                'estimasi_sampai' => $arrive,
+            ];
+
+            if ($eligibility['eligible']) {
+                $eligibleOrders[] = $payload;
+            } else {
+                $ineligibleOrders[] = $payload;
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Daftar order booking yang siap ditawarkan ke nakes.',
+            'total' => count($eligibleOrders),
+            'data' => $eligibleOrders,
+            'ineligible' => $ineligibleOrders,
+        ]);
+    }
+
+    public function nakesOrderDetail(Request $request, $id)
+    {
+        $nakes = $this->getLoggedNakes($request);
+
+        if (!$nakes) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hanya Tenaga Medis yang aktif yang dapat melihat detail order.'
+            ], 403);
+        }
+
+        $booking = Booking::with(['pasien', 'layanan.kategori', 'tenagaMedis', 'transaksi'])->find($id);
+
+        if (!$booking) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking tidak ditemukan.'
+            ], 404);
+        }
+
+        $eligibility = $this->getNakesOrderEligibility($nakes, $booking);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Detail order booking nakes.',
+            'data' => [
+                'booking' => new BookingResource($booking),
+                'nakes' => [
+                    'id_tenaga_medis' => $nakes->id_tenaga_medis,
+                    'nama_lengkap' => $nakes->nama_lengkap,
+                    'jenis_tenaga_medis' => $nakes->jenis_tenaga_medis,
+                    'no_telp' => $nakes->no_telp,
+                ],
+                'assigned_nakes' => $booking->tenagaMedis ? [
+                    'id_tenaga_medis' => $booking->tenagaMedis->id_tenaga_medis,
+                    'nama_lengkap' => $booking->tenagaMedis->nama_lengkap,
+                    'jenis_tenaga_medis' => $booking->tenagaMedis->jenis_tenaga_medis,
+                ] : null,
+                'eligibility' => $eligibility,
+                'estimasi_sampai' => $this->getNakesArrivalEstimate($nakes, $booking),
+            ],
+        ]);
+    }
+
     /**
      * API Nakes: Menampilkan daftar booking.
      */
@@ -872,14 +1139,12 @@ class BookingController extends Controller
     }
 
     /**
-     * API Nakes: Terima Order Booking (Atomic Update untuk cegah race condition).
+     * API Nakes: Terima Order Booking.
+     * Mengkalkulasi ulang biaya transport Nakes penerima dan mencatat Biaya Tambahan jika jarak lebih jauh.
      */
     public function nakesAcceptBooking(Request $request, $id)
     {
-        $user = $request->user();
-        $nakes = TenagaMedis::where('id_user', $user?->id_user)
-            ->where('status', 'approved')
-            ->first();
+        $nakes = $this->getLoggedNakes($request);
 
         if (!$nakes) {
             return response()->json([
@@ -888,7 +1153,7 @@ class BookingController extends Controller
             ], 403);
         }
 
-        $booking = Booking::find($id);
+        $booking = Booking::with(['pasien', 'layanan.kategori', 'tenagaMedis', 'transaksi'])->find($id);
 
         if (!$booking) {
             return response()->json([
@@ -904,31 +1169,176 @@ class BookingController extends Controller
             ], 400);
         }
 
-        $updated = Booking::where('id_booking', $id)
-            ->where(function ($q) use ($nakes) {
-                $q->whereNull('id_tenaga_medis')
-                  ->orWhere('id_tenaga_medis', $nakes->id_tenaga_medis);
-            })
-            ->whereNotIn('status_booking', ['Selesai', 'Dibatalkan'])
-            ->update([
-                'id_tenaga_medis' => $nakes->id_tenaga_medis,
-                'status_booking' => 'DiPerjalanan',
-            ]);
-
-        if (!$updated) {
+        $eligibility = $this->getNakesOrderEligibility($nakes, $booking);
+        if (!$eligibility['eligible']) {
             return response()->json([
                 'success' => false,
-                'message' => 'Order ini telah diambil oleh tenaga medis lain.'
-            ], 400);
+                'message' => 'Order tidak dapat diterima oleh nakes. Cek kriteria kategori, jadwal, area, atau konflik order.',
+                'data' => [
+                    'booking' => new BookingResource($booking),
+                    'eligibility' => $eligibility,
+                ],
+            ], 422);
         }
 
-        $booking->refresh()->load(['pasien', 'layanan', 'tenagaMedis', 'transaksi']);
+        DB::beginTransaction();
+        try {
+            $updated = Booking::where('id_booking', $id)
+                ->where(function ($q) use ($nakes) {
+                    $q->whereNull('id_tenaga_medis')
+                      ->orWhere('id_tenaga_medis', $nakes->id_tenaga_medis);
+                })
+                ->where('status_booking', 'Pending')
+                ->update([
+                    'id_tenaga_medis' => $nakes->id_tenaga_medis,
+                    'status_booking' => 'DiPerjalanan',
+                ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Order berhasil diterima. Status booking diperbarui menjadi DiPerjalanan.',
-            'data'    => new BookingResource($booking),
-        ]);
+            if (!$updated) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Order ini telah diambil oleh tenaga medis lain atau sudah tidak menunggu.'
+                ], 400);
+            }
+
+            // Recalculate Biaya Transport untuk Nakes yang menerima
+            $transaksi = $booking->transaksi;
+            if ($transaksi && $nakes->latitude && $nakes->longitude) {
+                $actualDistance = $this->calculateDistance(
+                    (float)$nakes->latitude, (float)$nakes->longitude,
+                    (float)$booking->latitude_kunjungan, (float)$booking->longitude_kunjungan
+                );
+
+                $actualTransportCost = 0.0;
+                if (!$booking->layanan?->include_transport) {
+                    $idKota = $request->input('id_kota');
+                    $transportMaster = $idKota ? MasterTarifTransport::where('id_kota', $idKota)->first() : null;
+                    if ($transportMaster) {
+                        $actualTransportCost = (float)$transportMaster->tarif_awal + ($actualDistance * (float)$transportMaster->tarif_per_kilometer);
+                    } else {
+                        $actualTransportCost = $actualDistance > 0 ? (10000.0 + ($actualDistance * 3000.0)) : 0.0;
+                    }
+                }
+                $actualTransportCost = (int) round($actualTransportCost);
+                $originalSt = (float) $transaksi->st;
+
+                // Hitung jika ada biaya tambahan transport
+                $biayaTambahan = max(0, $actualTransportCost - $originalSt);
+
+                // Sesuaikan Hak Nakes (Nakes berhak mendapat biaya transport aktual)
+                $feeNakesBase = (float) $transaksi->hak_nakes - $originalSt;
+                $newHakNakes = $feeNakesBase + $actualTransportCost;
+                $newProfitHc = (float) $transaksi->profit_hc - $biayaTambahan;
+
+                $transaksi->update([
+                    'hak_nakes' => $newHakNakes,
+                    'profit_hc' => $newProfitHc,
+                ]);
+            }
+
+            DB::commit();
+
+            $booking->refresh()->load(['pasien', 'layanan', 'tenagaMedis', 'transaksi']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order berhasil diterima. Status booking diperbarui menjadi DiPerjalanan.',
+                'data' => [
+                    'booking' => new BookingResource($booking),
+                    'eligibility' => $eligibility,
+                    'estimasi_sampai' => $this->getNakesArrivalEstimate($nakes, $booking),
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menerima order: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * API Nakes: Tolak Order Booking.
+     * Jika transaksi sudah LUNAS, booking tidak dibatalkan melainkan kembali di-broadcast ke Nakes lain.
+     */
+    public function nakesRejectBooking(Request $request, $id)
+    {
+        $nakes = $this->getLoggedNakes($request);
+
+        if (!$nakes) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hanya Tenaga Medis yang aktif yang dapat menolak order.'
+            ], 403);
+        }
+
+        $booking = Booking::with(['pasien', 'layanan', 'tenagaMedis', 'transaksi'])->find($id);
+
+        if (!$booking) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking tidak ditemukan.'
+            ], 404);
+        }
+
+        if ((int) $booking->id_tenaga_medis !== (int) $nakes->id_tenaga_medis && !is_null($booking->id_tenaga_medis)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda tidak memiliki hak untuk menolak order ini.'
+            ], 403);
+        }
+
+        $statusTransaksi = strtolower((string) $booking->transaksi?->status_transaksi);
+        $isPaid = in_array($statusTransaksi, ['lunas', 'sudah bayar', 'settlement', 'success']);
+
+        // Catat Nakes yang menolak
+        $catatanPenolakan = is_array($booking->catatan_penolakan)
+            ? $booking->catatan_penolakan
+            : json_decode($booking->catatan_penolakan ?? '[]', true);
+
+        if (!is_array($catatanPenolakan)) {
+            $catatanPenolakan = [];
+        }
+
+        $catatanPenolakan[] = [
+            'id_tenaga_medis' => $nakes->id_tenaga_medis,
+            'nama_nakes' => $nakes->nama_lengkap,
+            'alasan' => $request->input('alasan', 'Nakes menolak order pada waktu ini.'),
+            'rejected_at' => now()->toDateTimeString(),
+        ];
+
+        $booking->catatan_penolakan = json_encode($catatanPenolakan);
+
+        if ($isPaid) {
+            // Jika sudah LUNAS: kembalikan ke status Broadcast (Pending) agar Nakes lain bisa terima
+            $booking->id_tenaga_medis = null;
+            $booking->status_booking = 'Pending';
+            $booking->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order berhasil ditolak. Booking telah dikembalikan ke antrean broadcast untuk Nakes lain.',
+                'data' => [
+                    'booking' => new BookingResource($booking),
+                    'alasan' => $request->input('alasan', 'Nakes menolak order pada waktu ini.'),
+                ],
+            ]);
+        } else {
+            // Jika BELUM BAYAR: batalkan booking sepenuhnya
+            $booking->status_booking = 'Dibatalkan';
+            $booking->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order berhasil ditolak dan dibatalkan.',
+                'data' => [
+                    'booking' => new BookingResource($booking),
+                    'alasan' => $request->input('alasan', 'Nakes menolak order pada waktu ini.'),
+                ],
+            ]);
+        }
     }
 
     /**
@@ -979,45 +1389,40 @@ class BookingController extends Controller
     }
 
     public function batalkanBooking($id)
-{
-    $booking = Booking::with('transaksi')->find($id);
+    {
+        $booking = Booking::with('transaksi')->find($id);
 
-    if (!$booking) {
-        return response()->json(['success' => false, 'message' => 'Booking tidak ditemukan.'], 404);
-    }
-
-    // 1. Ubah status booking lokal
-    $booking->status_booking = 'Dibatalkan';
-    $booking->save();
-
-    // 2. Jika ada transaksi dan belum lunas, batalkan juga di Midtrans
-    $transaksi = $booking->transaksi;
-    if ($transaksi && !in_array(strtolower($transaksi->status_transaksi), ['lunas', 'sudah bayar', 'settlement', 'success'])) {
-        
-        $orderId = $transaksi->midtrans_order_id;
-        $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
-        $baseUrl = config('services.midtrans.is_production', false) 
-            ? 'https://api.midtrans.com/v2/' 
-            : 'https://api.sandbox.midtrans.com/v2/';
-
-        try {
-            // Tembak API Cancel Midtrans
-            Http::withBasicAuth($serverKey, '')
-                ->withHeaders(['Accept' => 'application/json', 'Content-Type' => 'application/json'])
-                ->withoutVerifying()
-                ->post($baseUrl . $orderId . '/cancel'); // <-- Perintah Cancel ke Midtrans
-        } catch (\Throwable $e) {
-            // Abaikan jika error jaringan, yang penting data lokal sudah dibatalkan
+        if (!$booking) {
+            return response()->json(['success' => false, 'message' => 'Booking tidak ditemukan.'], 404);
         }
 
-        // 3. Update status transaksi lokal
-        $transaksi->status_transaksi = 'Dibatalkan';
-        $transaksi->save();
-    }
+        $booking->status_booking = 'Dibatalkan';
+        $booking->save();
 
-    return response()->json([
-        'success' => true,
-        'message' => 'Booking dan pembayaran berhasil dibatalkan.',
-    ]);
-}
+        $transaksi = $booking->transaksi;
+        if ($transaksi && !in_array(strtolower($transaksi->status_transaksi), ['lunas', 'sudah bayar', 'settlement', 'success'])) {
+            $orderId = $transaksi->midtrans_order_id;
+            $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
+            $baseUrl = config('services.midtrans.is_production', false) 
+                ? 'https://api.midtrans.com/v2/' 
+                : 'https://api.sandbox.midtrans.com/v2/';
+
+            try {
+                Http::withBasicAuth($serverKey, '')
+                    ->withHeaders(['Accept' => 'application/json', 'Content-Type' => 'application/json'])
+                    ->withoutVerifying()
+                    ->post($baseUrl . $orderId . '/cancel');
+            } catch (\Throwable $e) {
+                // Ignore network errors
+            }
+
+            $transaksi->status_transaksi = 'Dibatalkan';
+            $transaksi->save();
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Booking dan pembayaran berhasil dibatalkan.',
+        ]);
+    }
 }

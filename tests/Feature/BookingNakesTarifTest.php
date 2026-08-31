@@ -294,6 +294,14 @@ class BookingNakesTarifTest extends TestCase
             'status_booking' => 'Pending',
         ]);
 
+        Transaksi::create([
+            'id_booking' => $booking->id_booking,
+            'midtrans_order_id' => 'BOOKING-' . $booking->id_booking . '-paid',
+            'jumlah_total' => 50000,
+            'status_transaksi' => 'Lunas',
+            'metode_pembayaran' => 'qris',
+        ]);
+
         // Nakes login & accepts order
         $this->actingAs($nakesUser, 'sanctum');
 
@@ -312,5 +320,105 @@ class BookingNakesTarifTest extends TestCase
         $statusResponse->assertStatus(200)
             ->assertJsonPath('success', true)
             ->assertJsonPath('data.status_booking', 'Tindakan');
+    }
+
+    public function test_nakes_order_queue_and_detail_require_paid_category_schedule_and_area(): void
+    {
+        Role::firstOrCreate(['nama_role' => 'pasien']);
+        $pasienUser = Users::create(['email' => 'pasien_order_queue@example.com', 'password' => bcrypt('password'), 'is_active' => true]);
+        $pasienUser->roles()->attach('pasien');
+        $pasien = Pasien::create(['id_user' => $pasienUser->id_user, 'nama_lengkap' => 'Pasien Queue', 'nik' => '5555555555555555', 'jenis_kelamin' => 'L', 'alamat_utama' => 'Jl. Queue']);
+
+        Role::firstOrCreate(['nama_role' => 'tenaga medis']);
+        Role::firstOrCreate(['nama_role' => 'nakes']);
+        $nakesUser = Users::create(['email' => 'nakes_queue@example.com', 'password' => bcrypt('password'), 'is_active' => true]);
+        $nakesUser->roles()->attach(['tenaga medis', 'nakes']);
+        $nakesPasien = Pasien::create(['id_user' => $nakesUser->id_user, 'nama_lengkap' => 'Nakes Queue', 'nik' => '6666666666666666', 'jenis_kelamin' => 'P', 'alamat_utama' => 'Jl. Nakes']);
+        $nakes = TenagaMedis::create($this->createTenagaMedisData([
+            'id_user' => $nakesUser->id_user,
+            'id_pasien' => $nakesPasien->id_pasien,
+            'id_wilayah_layanan' => $this->provinsiId,
+            'nama_lengkap' => 'Nakes Queue Owner',
+            'nama_panggilan' => 'Queue',
+            'nik' => '6666666666666666',
+            'latitude' => -6.2100000,
+            'longitude' => 106.8200000,
+        ]));
+
+        $kategori = KategoriLayanan::create(['nama_kategori' => 'Home Care']);
+        $nakes->kategoriLayanan()->attach($kategori->id_kategori_layanan);
+
+        $layanan = MasterLayanan::create([
+            'id_kategori_layanan' => $kategori->id_kategori_layanan,
+            'nama_layanan' => 'Home Care Visit',
+            'harga' => 100000.00,
+            'tipe_layanan' => 'tindakan',
+            'durasi_menit' => 90,
+        ]);
+
+        $booking = Booking::create([
+            'booking_code' => 'B-2608270002',
+            'id_pasien' => $pasien->id_pasien,
+            'id_layanan' => $layanan->id_layanan,
+            'tanggal_kunjungan' => '2026-09-01',
+            'jam_kunjungan' => '09:00',
+            'alamat_kunjungan' => 'Jl. Pasien',
+            'latitude_kunjungan' => -6.2000000,
+            'longitude_kunjungan' => 106.8160000,
+            'status_booking' => 'Pending',
+        ]);
+
+        Transaksi::create([
+            'id_booking' => $booking->id_booking,
+            'midtrans_order_id' => 'BOOKING-' . $booking->id_booking . '-queue',
+            'jumlah_total' => 100000,
+            'status_transaksi' => 'Lunas',
+            'metode_pembayaran' => 'bank_transfer',
+        ]);
+
+        \App\Models\JadwalKerja::create([
+            'id_tenaga_medis' => $nakes->id_tenaga_medis,
+            'hari' => 'Selasa',
+            'jam_mulai' => '08:00',
+            'jam_selesai' => '17:00',
+        ]);
+
+        \App\Models\OperasionalNakes::create([
+            'id_tenaga_medis' => $nakes->id_tenaga_medis,
+            'id_wilayah_layanan' => $this->provinsiId,
+            'kategori_layanan' => [$kategori->id_kategori_layanan],
+            'waktu_layanan' => [[
+                'hari' => 'Selasa',
+                'jam_mulai' => '08:00',
+                'jam_selesai' => '17:00',
+            ]],
+            'status' => 'approved',
+        ]);
+
+        $this->actingAs($nakesUser, 'sanctum');
+
+        $queueResponse = $this->getJson('/api/nakes/orders');
+        $queueResponse->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonCount(1, 'data');
+
+        $detailResponse = $this->getJson('/api/nakes/order/' . $booking->id_booking);
+        $detailResponse->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.booking.id_booking', $booking->id_booking)
+            ->assertJsonPath('data.nakes.id_tenaga_medis', $nakes->id_tenaga_medis)
+            ->assertJsonPath('data.estimasi_sampai.km', 0.0);
+
+        $acceptResponse = $this->postJson('/api/nakes/order/' . $booking->id_booking . '/accept');
+        $acceptResponse->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.status_booking', 'DiPerjalanan');
+
+        $rejectResponse = $this->postJson('/api/nakes/order/' . $booking->id_booking . '/reject', [
+            'alasan' => 'Nakes sedang ada jadwal lain',
+        ]);
+        $rejectResponse->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.status_booking', 'Dibatalkan');
     }
 }
