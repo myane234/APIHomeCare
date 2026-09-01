@@ -12,6 +12,7 @@
         "laravel/socialite": "^5.28",
         "laravel/tinker": "^3.0",
         "midtrans/midtrans-php": "^2.6",
+        "resend/resend-laravel": "^1.4",
         "resend/resend-php": "^1.12"
     },
     "require-dev": {
