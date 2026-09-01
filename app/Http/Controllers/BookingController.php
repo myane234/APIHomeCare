@@ -21,10 +21,29 @@ use Illuminate\Support\Facades\Http;
 class BookingController extends Controller
 {
     /**
-     * API Pasien: Menampilkan daftar booking milik pasien yang sedang login.
+     * API Pasien: Menampilkan daftar booking milik pasien yang sedang login dengan pagination.
+     * 
+     * Query Parameters:
+     * - page: Halaman (default: 1)
+     * - per_page: Jumlah data per halaman (default: 10)
+     * - status_booking: Filter by status (Pending, DiPerjalanan, Tindakan, Selesai, Dibatalkan)
+     * - tanggal_dari: Filter dari tanggal (format: Y-m-d)
+     * - tanggal_sampai: Filter sampai tanggal (format: Y-m-d)
+     * - sort_by: Urutkan by field (created_at, tanggal_kunjungan, status_booking) default: created_at
+     * - sort_order: Arah urutan (asc/desc) default: desc
      */
     public function index(Request $request)
     {
+        $request->validate([
+            'page' => 'nullable|integer|min:1',
+            'per_page' => 'nullable|integer|min:1|max:100',
+            'status_booking' => 'nullable|in:Pending,DiPerjalanan,Tindakan,Selesai,Dibatalkan',
+            'tanggal_dari' => 'nullable|date',
+            'tanggal_sampai' => 'nullable|date',
+            'sort_by' => 'nullable|in:created_at,tanggal_kunjungan,status_booking',
+            'sort_order' => 'nullable|in:asc,desc',
+        ]);
+
         $user = $request->user();
         $pasien = $user?->pasien;
 
@@ -36,26 +55,48 @@ class BookingController extends Controller
             ], 404);
         }
 
+        $perPage = $request->input('per_page', 10);
+        $sortBy = $request->input('sort_by', 'created_at');
+        $sortOrder = $request->input('sort_order', 'desc');
+
         $query = Booking::with(['pasien', 'layanan', 'tenagaMedis', 'transaksi'])
             ->where('id_pasien', $pasien->id_pasien);
 
+        // Filter by status
         if ($request->filled('status_booking')) {
             $query->where('status_booking', $request->input('status_booking'));
         }
+
+        // Filter by tanggal kunjungan - dari
         if ($request->filled('tanggal_dari')) {
             $query->whereDate('tanggal_kunjungan', '>=', $request->input('tanggal_dari'));
         }
+
+        // Filter by tanggal kunjungan - sampai
         if ($request->filled('tanggal_sampai')) {
             $query->whereDate('tanggal_kunjungan', '<=', $request->input('tanggal_sampai'));
         }
 
-        $bookings = $query->orderByDesc('created_at')->get();
+        // Apply sorting
+        $query->orderBy($sortBy, $sortOrder);
+
+        // Get paginated data
+        $bookings = $query->paginate($perPage);
 
         return response()->json([
             'success' => true,
             'message' => 'Daftar booking pasien',
-            'total'   => $bookings->count(),
-            'data'    => BookingResource::collection($bookings),
+            'pagination' => [
+                'total' => $bookings->total(),
+                'count' => $bookings->count(),
+                'per_page' => $bookings->perPage(),
+                'current_page' => $bookings->currentPage(),
+                'total_pages' => $bookings->lastPage(),
+                'has_more_pages' => $bookings->hasMorePages(),
+                'from' => $bookings->firstItem(),
+                'to' => $bookings->lastItem(),
+            ],
+            'data'    => BookingResource::collection($bookings->items()),
         ]);
     }
 
