@@ -21,6 +21,7 @@ class BookingResource extends JsonResource
             // ─── Identitas Booking ───────────────────────────────────────
             'id_booking'        => $this->id_booking,
             'booking_code'      => $this->booking_code,
+            'medical_record_number' => $this->medical_record_number,
             'status_booking'    => $this->status_booking,
             'status_label'      => $this->statusLabel(),
             'status_color'      => $this->statusColor(),

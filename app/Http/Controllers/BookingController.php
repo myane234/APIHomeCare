@@ -60,39 +60,94 @@ class BookingController extends Controller
     }
 
     /**
-     * API Admin: Menampilkan SELURUH booking.
+     * API Admin: Menampilkan SELURUH booking dengan pagination.
+     * 
+     * Query Parameters:
+     * - page: Halaman (default: 1)
+     * - per_page: Jumlah data per halaman (default: 15)
+     * - status_booking: Filter by status
+     * - tanggal_dari: Filter dari tanggal (format: Y-m-d)
+     * - tanggal_sampai: Filter sampai tanggal (format: Y-m-d)
+     * - id_pasien: Filter by pasien ID
+     * - id_tenaga_medis: Filter by nakes ID
+     * - bulan: Filter by bulan (1-12) - harus pairing dengan tahun
+     * - tahun: Filter by tahun
+     * - sort_by: Urutkan by field (created_at, tanggal_kunjungan, status_booking) default: created_at
+     * - sort_order: Arah urutan (asc/desc) default: desc
      */
     public function adminIndex(Request $request)
     {
+        $request->validate([
+            'page' => 'nullable|integer|min:1',
+            'per_page' => 'nullable|integer|min:1|max:100',
+            'status_booking' => 'nullable|in:Pending,DiPerjalanan,Tindakan,Selesai,Dibatalkan',
+            'tanggal_dari' => 'nullable|date',
+            'tanggal_sampai' => 'nullable|date',
+            'id_pasien' => 'nullable|integer',
+            'id_tenaga_medis' => 'nullable|integer',
+            'bulan' => 'nullable|integer|min:1|max:12',
+            'tahun' => 'nullable|integer|min:2000|max:2100',
+            'sort_by' => 'nullable|in:created_at,tanggal_kunjungan,status_booking',
+            'sort_order' => 'nullable|in:asc,desc',
+        ]);
+
+        $perPage = $request->input('per_page', 15);
+        $sortBy = $request->input('sort_by', 'created_at');
+        $sortOrder = $request->input('sort_order', 'desc');
+
         $query = Booking::with(['pasien', 'layanan', 'tenagaMedis', 'transaksi']);
 
+        // Filter by status
         if ($request->filled('status_booking')) {
             $query->where('status_booking', $request->input('status_booking'));
         }
+
+        // Filter by tanggal kunjungan - dari
         if ($request->filled('tanggal_dari')) {
             $query->whereDate('tanggal_kunjungan', '>=', $request->input('tanggal_dari'));
         }
+
+        // Filter by tanggal kunjungan - sampai
         if ($request->filled('tanggal_sampai')) {
             $query->whereDate('tanggal_kunjungan', '<=', $request->input('tanggal_sampai'));
         }
+
+        // Filter by pasien
         if ($request->filled('id_pasien')) {
             $query->where('id_pasien', $request->input('id_pasien'));
         }
+
+        // Filter by nakes
         if ($request->filled('id_tenaga_medis')) {
             $query->where('id_tenaga_medis', $request->input('id_tenaga_medis'));
         }
+
+        // Filter by bulan & tahun
         if ($request->filled('bulan') && $request->filled('tahun')) {
             $query->whereMonth('tanggal_kunjungan', $request->input('bulan'))
                   ->whereYear('tanggal_kunjungan', $request->input('tahun'));
         }
 
-        $bookings = $query->orderByDesc('created_at')->get();
+        // Apply sorting
+        $query->orderBy($sortBy, $sortOrder);
+
+        // Get paginated data
+        $bookings = $query->paginate($perPage);
 
         return response()->json([
             'success'   => true,
             'message'   => 'Daftar booking (admin)',
-            'total'     => $bookings->count(),
-            'data'      => BookingResource::collection($bookings),
+            'pagination' => [
+                'total' => $bookings->total(),
+                'count' => $bookings->count(),
+                'per_page' => $bookings->perPage(),
+                'current_page' => $bookings->currentPage(),
+                'total_pages' => $bookings->lastPage(),
+                'has_more_pages' => $bookings->hasMorePages(),
+                'from' => $bookings->firstItem(),
+                'to' => $bookings->lastItem(),
+            ],
+            'data'      => BookingResource::collection($bookings->items()),
         ]);
     }
 
@@ -408,8 +463,11 @@ class BookingController extends Controller
             $nextSequence = $todayCount + 1; 
             $bookingCode = $prefix . str_pad($nextSequence, 7, '0', STR_PAD_LEFT);
 
+            $medicalRecordNumber = Booking::generateMedicalRecordNumber($pasien->id_pasien);
+
             $booking = Booking::create([
                 'booking_code' => $bookingCode,
+                'medical_record_number' => $medicalRecordNumber,
                 'id_pasien' => $pasien->id_pasien,
                 'id_layanan' => $layanan->id_layanan,
                 'id_tenaga_medis' => $tenagaMedisId,
@@ -450,6 +508,7 @@ class BookingController extends Controller
                 'data' => [
                     'id_booking' => $booking->id_booking,
                     'booking_code' => $booking->booking_code,
+                    'medical_record_number' => $booking->medical_record_number,
                     'order_id' => $orderId,
                     'jumlah_total' => $totalTagihanPasien,
                     'distance_km' => round($distance, 2),

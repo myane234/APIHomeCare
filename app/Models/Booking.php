@@ -14,6 +14,7 @@ class Booking extends Model
 
     protected $fillable = [
         'booking_code',
+        'medical_record_number',
         'id_pasien',
         'id_layanan',
         'id_tenaga_medis',
@@ -24,6 +25,11 @@ class Booking extends Model
         'latitude_kunjungan',
         'longitude_kunjungan',
         'status_booking',
+        'catatan_penolakan',
+    ];
+
+    protected $casts = [
+        'catatan_penolakan' => 'json',
     ];
 
     public function pasien()
@@ -44,5 +50,26 @@ class Booking extends Model
     public function transaksi()
     {
         return $this->hasOne(Transaksi::class, 'id_booking', 'id_booking');
+    }
+
+    /**
+     * Generate nomor rekam medis dengan format P-YY-XXXX
+     * P = Pasien
+     * YY = 2 digit tahun terakhir (26 untuk 2026)
+     * XXXX = nomor urut per pasien per tahun
+     */
+    public static function generateMedicalRecordNumber($idPasien): string
+    {
+        $year = now()->year;
+        $yearLast2 = str_pad($year % 100, 2, '0', STR_PAD_LEFT);
+        
+        // Hitung nomor urut booking pasien di tahun ini
+        $sequence = self::where('id_pasien', $idPasien)
+            ->whereYear('created_at', $year)
+            ->count() + 1;
+        
+        $sequenceStr = str_pad($sequence, 4, '0', STR_PAD_LEFT);
+        
+        return "P-{$yearLast2}-{$sequenceStr}";
     }
 }
