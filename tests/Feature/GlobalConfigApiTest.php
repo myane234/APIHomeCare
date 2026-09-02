@@ -58,11 +58,15 @@ class GlobalConfigApiTest extends TestCase
                     'address',
                     'socials',
                     'maintenance_mode',
+                    'created_by',
+                    'deleted_by',
+                    'is_responsive',
                 ]
             ]);
 
         $this->assertEquals('Smart Home Care', $response->json('data.app_name'));
         $this->assertFalse($response->json('data.maintenance_mode'));
+        $this->assertTrue($response->json('data.is_responsive'));
         $this->assertIsArray($response->json('data.socials'));
     }
 
@@ -107,6 +111,7 @@ class GlobalConfigApiTest extends TestCase
             'address' => 'Alamat Baru',
             'socials' => $socials,
             'maintenance_mode' => true,
+            'is_responsive' => false,
         ]);
 
         $response->assertStatus(200)
@@ -115,6 +120,8 @@ class GlobalConfigApiTest extends TestCase
 
         $this->assertEquals('Home Care Baru', $response->json('data.app_name'));
         $this->assertTrue($response->json('data.maintenance_mode'));
+        $this->assertFalse($response->json('data.is_responsive'));
+        $this->assertEquals($this->adminUser->id_admin, $response->json('data.created_by'));
         $this->assertEquals($socials, $response->json('data.socials'));
 
         $this->assertNotNull($response->json('data.app_logo'));
@@ -134,5 +141,27 @@ class GlobalConfigApiTest extends TestCase
         ]);
         $responseStringified->assertStatus(200);
         $this->assertEquals($socials, $responseStringified->json('data.socials'));
+    }
+
+    public function test_admin_can_delete_global_config()
+    {
+        $this->actingAs($this->adminUser, 'sanctum');
+
+        // Ensure a global config exists
+        $config = GlobalConfig::create([
+            'app_name' => 'Smart Home Care',
+        ]);
+
+        $response = $this->deleteJson('/api/global-config');
+
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Konfigurasi global berhasil dihapus.');
+
+        // Verify it was soft deleted
+        $this->assertSoftDeleted('global_configs', [
+            'id' => $config->id,
+            'deleted_by' => $this->adminUser->id_admin,
+        ]);
     }
 }

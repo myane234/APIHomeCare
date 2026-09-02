@@ -4,11 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Storage;
 
 class GlobalConfig extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $table = 'global_configs';
 
@@ -22,6 +23,8 @@ class GlobalConfig extends Model
         'address',
         'socials',
         'maintenance_mode',
+        'created_by',
+        'deleted_by',
     ];
 
     protected $casts = [
