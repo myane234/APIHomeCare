@@ -12,6 +12,44 @@ use Midtrans\Transaction;
 
 class TransaksiController extends Controller
 {
+    /**
+     * Daftar Transaksi Pasien
+     *
+     * Menampilkan daftar transaksi/booking pasien yang login dengan pagination dan filter.
+     *
+     * @group Transaksi
+     * @authenticated
+     *
+     * @queryParam page integer Halaman yang diminta. Default: 1. Example: 1
+     * @queryParam per_page integer Jumlah data per halaman. Default: 10, Max: 100. Example: 15
+     * @queryParam status_booking string Filter status booking. Values: Pending, DiPerjalanan, Tindakan, Selesai, Dibatalkan. Example: Selesai
+     * @queryParam tanggal_dari date Filter dari tanggal (Y-m-d). Example: 2026-09-01
+     * @queryParam tanggal_sampai date Filter sampai tanggal (Y-m-d). Example: 2026-09-30
+     * @queryParam sort_by string Urutkan by. Values: created_at, tanggal_kunjungan, status_booking. Default: created_at. Example: tanggal_kunjungan
+     * @queryParam sort_order string Arah urutan. Values: asc, desc. Default: desc. Example: asc
+     *
+     * @response 200 {
+     *   "success": true,
+     *   "message": "Daftar booking pasien",
+     *   "pagination": {
+     *     "total": 42,
+     *     "count": 10,
+     *     "per_page": 10,
+     *     "current_page": 1,
+     *     "total_pages": 5,
+     *     "has_more_pages": true,
+     *     "from": 1,
+     *     "to": 10
+     *   },
+     *   "data": []
+     * }
+     *
+     * @response 404 {
+     *   "success": false,
+     *   "message": "User pasien tidak ditemukan.",
+     *   "data": []
+     * }
+     */
     public function index(Request $request)
     {
         return response()->json([
@@ -20,6 +58,46 @@ class TransaksiController extends Controller
         ]);
     }
 
+    /**
+     * Buat Transaksi Baru
+     *
+     * Membuat transaksi baru dan mendapatkan token pembayaran Midtrans untuk proses checkout.
+     *
+     * @group Transaksi
+     * @authenticated
+     *
+     * @bodyParam id_booking integer required ID booking yang akan dibayar. Example: 42
+     * @bodyParam metode_pembayaran string required Metode pembayaran. Values: bank_transfer, gopay, shopeepay, qris, bca_klikbca. Example: bank_transfer
+     *
+     * @response 200 {
+     *   "success": true,
+     *   "message": "Token pembayaran Midtrans",
+     *   "token": "xxxx-xxxx-xxxx-xxxx-midtrans-snap-token",
+     *   "redirect_url": "https://app.sandbox.midtrans.com/snap/v1/web/...",
+     *   "data": {
+     *     "id_transaksi": 42,
+     *     "order_id": "BOOKING-42-20260902001",
+     *     "jumlah_total": 160000,
+     *     "jumlah_total_format": "Rp 160.000",
+     *     "status_transaksi": "Pending",
+     *     "metode_pembayaran": "bank_transfer"
+     *   }
+     * }
+     *
+     * @response 404 {
+     *   "success": false,
+     *   "message": "Booking tidak ditemukan.",
+     *   "data": []
+     * }
+     *
+     * @response 422 {
+     *   "message": "The given data was invalid.",
+     *   "errors": {
+     *     "id_booking": ["The id_booking field is required."],
+     *     "metode_pembayaran": ["The metode_pembayaran field is required."]
+     *   }
+     * }
+     */
     public function store(Request $request)
     {
         return response()->json([
@@ -29,6 +107,52 @@ class TransaksiController extends Controller
         ]);
     }
 
+    /**
+     * Konfirmasi Status Pembayaran
+     *
+     * Mengkonfirmasi dan memverifikasi status pembayaran dari Midtrans. Endpoint ini akan sync dengan Midtrans untuk mendapatkan status transaksi terbaru.
+     *
+     * @group Transaksi
+     * @authenticated
+     *
+     * @bodyParam id_booking integer required ID booking yang akan dikonfirmasi. Example: 42
+     * @bodyParam order_id string required Order ID dari Midtrans. Format: BOOKING-{id}-{timestamp}. Example: BOOKING-42-20260902001
+     *
+     * @response 200 {
+     *   "success": true,
+     *   "message": "Status transaksi telah diperbarui.",
+     *   "data": {
+     *     "id_booking": 42,
+     *     "booking_code": "B-260902-0000001",
+     *     "transaction_status": "settlement",
+     *     "booking_status": "Diproses",
+     *     "status_transaksi": "Lunas",
+     *     "waktu_bayar": "02 Sep 2026, 10:15 WIB",
+     *     "jumlah_total": 160000,
+     *     "jumlah_total_format": "Rp 160.000"
+     *   }
+     * }
+     *
+     * @response 404 {
+     *   "success": false,
+     *   "message": "Transaksi booking tidak ditemukan.",
+     *   "data": []
+     * }
+     *
+     * @response 422 {
+     *   "message": "The given data was invalid.",
+     *   "errors": {
+     *     "id_booking": ["The id_booking field is required."],
+     *     "order_id": ["The order_id field is required."]
+     *   }
+     * }
+     *
+     * @response 500 {
+     *   "success": false,
+     *   "message": "Gagal memverifikasi status pembayaran.",
+     *   "error": "Midtrans error message"
+     * }
+     */
     public function confirm(Request $request)
     {
         $validate = $request->validate([
@@ -84,6 +208,37 @@ class TransaksiController extends Controller
         }
     }
 
+    /**
+     * Midtrans Webhook Callback
+     *
+     * Endpoint webhook untuk menerima callback dari Midtrans setelah transaksi selesai. 
+     * Endpoint ini PUBLIC (tanpa auth). Midtrans akan mengirim notifikasi pembayaran ke endpoint ini.
+     *
+     * @group Transaksi
+     * @unauthenticated
+     *
+     * @bodyParam transaction_time string Waktu transaksi dari Midtrans. Example: 2026-09-02 10:15:30
+     * @bodyParam transaction_status string Status transaksi. Values: settlement, capture, deny, cancel, expire. Example: settlement
+     * @bodyParam order_id string Order ID dari Midtrans. Format: BOOKING-{id}-{timestamp}. Example: BOOKING-42-20260902001
+     * @bodyParam gross_amount string Jumlah transaksi. Example: 160000.00
+     * @bodyParam signature_key string Signature key untuk verifikasi. Example: xxxx-xxxx-xxxx
+     * @bodyParam fraud_status string Status fraud detection. Example: accept
+     * @bodyParam bank string Bank yang digunakan untuk transfer. Example: bca
+     *
+     * @response 200 {
+     *   "status": "success"
+     * }
+     *
+     * @response 400 {
+     *   "status": "error",
+     *   "message": "Order ID tidak ditemukan."
+     * }
+     *
+     * @response 404 {
+     *   "status": "error",
+     *   "message": "Booking tidak ditemukan."
+     * }
+     */
     public function callback(Request $request)
     {
         Config::$serverKey = config('services.midtrans.server_key');
