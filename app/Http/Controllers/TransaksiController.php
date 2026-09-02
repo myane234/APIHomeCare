@@ -52,9 +52,63 @@ class TransaksiController extends Controller
      */
     public function index(Request $request)
     {
+        $request->validate([
+            'page' => 'nullable|integer|min:1',
+            'per_page' => 'nullable|integer|min:1|max:100',
+            'status_booking' => 'nullable|in:Pending,DiPerjalanan,Tindakan,Selesai,Dibatalkan',
+            'tanggal_dari' => 'nullable|date',
+            'tanggal_sampai' => 'nullable|date',
+            'sort_by' => 'nullable|in:created_at,tanggal_kunjungan,status_booking',
+            'sort_order' => 'nullable|in:asc,desc',
+        ]);
+
+        $user = $request->user();
+        $pasien = $user?->pasien;
+
+        if (!$pasien) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User pasien tidak ditemukan.',
+                'data' => []
+            ], 404);
+        }
+
+        $perPage = $request->input('per_page', 10);
+        $sortBy = $request->input('sort_by', 'created_at');
+        $sortOrder = $request->input('sort_order', 'desc');
+
+        $query = Booking::with(['pasien', 'layanan', 'tenagaMedis', 'transaksi'])
+            ->where('id_pasien', $pasien->id_pasien);
+
+        if ($request->filled('status_booking')) {
+            $query->where('status_booking', $request->input('status_booking'));
+        }
+
+        if ($request->filled('tanggal_dari')) {
+            $query->whereDate('tanggal_kunjungan', '>=', $request->input('tanggal_dari'));
+        }
+
+        if ($request->filled('tanggal_sampai')) {
+            $query->whereDate('tanggal_kunjungan', '<=', $request->input('tanggal_sampai'));
+        }
+
+        $query->orderBy($sortBy, $sortOrder);
+        $bookings = $query->paginate($perPage);
+
         return response()->json([
             'success' => true,
-            'message' => 'Daftar transaksi'
+            'message' => 'Daftar transaksi pasien',
+            'pagination' => [
+                'total' => $bookings->total(),
+                'count' => $bookings->count(),
+                'per_page' => $bookings->perPage(),
+                'current_page' => $bookings->currentPage(),
+                'total_pages' => $bookings->lastPage(),
+                'has_more_pages' => $bookings->hasMorePages(),
+                'from' => $bookings->firstItem(),
+                'to' => $bookings->lastItem(),
+            ],
+            'data' => BookingResource::collection($bookings->items()),
         ]);
     }
 
