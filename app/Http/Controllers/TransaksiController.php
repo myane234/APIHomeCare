@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Log;
 use Midtrans\Config;
 use Midtrans\Notification;
 use Midtrans\Transaction;
+use App\Http\Resources\BookingResource;
 
 class TransaksiController extends Controller
 {
