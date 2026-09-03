@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 
 /**
@@ -218,6 +219,48 @@ class BookingController extends Controller
     }
 
     /**
+     * Mengambil koordinat dari input atau geocoding alamat tanpa menyimpan hasilnya.
+     */
+    private function resolveCoordinates($latitude, $longitude, ?string $address): ?array
+    {
+        if ($latitude !== null && $longitude !== null && (float) $latitude !== 0.0 && (float) $longitude !== 0.0) {
+            return [
+                'latitude' => (float) $latitude,
+                'longitude' => (float) $longitude,
+            ];
+        }
+
+        if (!$address) {
+            return null;
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'Accept' => 'application/json',
+                'User-Agent' => config('app.name', 'Citra API') . '/address-geocoder',
+            ])->timeout(5)->get('https://nominatim.openstreetmap.org/search', [
+                'q' => $address . ', Indonesia',
+                'format' => 'jsonv2',
+                'limit' => 1,
+                'countrycodes' => 'id',
+            ]);
+
+            $result = $response->successful() ? $response->json()[0] ?? null : null;
+
+            if ($result && isset($result['lat'], $result['lon'])) {
+                return [
+                    'latitude' => (float) $result['lat'],
+                    'longitude' => (float) $result['lon'],
+                ];
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Address geocoding failed: ' . $e->getMessage());
+        }
+
+        return null;
+    }
+
+    /**
      * Mencari Tenaga Medis terdekat berdasarkan lokasi pasien & kategori layanan.
      */
     public function findNearestNakes($patientLat, $patientLng, $idLayanan = null, $idKategoriLayanan = null)
@@ -321,8 +364,8 @@ class BookingController extends Controller
             'tanggal_kunjungan' => 'required|date',
             'jam_kunjungan' => 'required',
             'alamat_kunjungan' => 'nullable|string',
-            'latitude_kunjungan' => 'required|numeric',
-            'longitude_kunjungan' => 'required|numeric',
+            'latitude_kunjungan' => 'nullable|numeric',
+            'longitude_kunjungan' => 'nullable|numeric',
             'catatan' => 'nullable|string',
             'id_promo' => 'nullable',
             'id_kota' => 'nullable',
@@ -349,8 +392,21 @@ class BookingController extends Controller
         $idLayanan = is_array($validate['id_layanan']) ? ($validate['id_layanan'][0] ?? null) : $validate['id_layanan'];
         $layanan = MasterLayanan::with(['masterTarif', 'bhpItems'])->findOrFail($idLayanan);
 
-        $patientLat = (float) $validate['latitude_kunjungan'];
-        $patientLng = (float) $validate['longitude_kunjungan'];
+        $patientCoordinates = $this->resolveCoordinates(
+            $validate['latitude_kunjungan'] ?? null,
+            $validate['longitude_kunjungan'] ?? null,
+            $alamatKunjungan
+        );
+
+        if (!$patientCoordinates) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Alamat kunjungan tidak dapat ditemukan di peta. Periksa kembali alamatnya.'
+            ], 422);
+        }
+
+        $patientLat = $patientCoordinates['latitude'];
+        $patientLng = $patientCoordinates['longitude'];
 
         $tenagaMedisId = $validate['id_tenaga_medis'] ?? null;
         if (is_array($tenagaMedisId)) {
@@ -1064,12 +1120,23 @@ class BookingController extends Controller
             $reasons[] = 'Jadwal nakes tidak tersedia pada waktu booking.';
         }
 
-        if ($nakes->latitude && $nakes->longitude && $booking->latitude_kunjungan && $booking->longitude_kunjungan) {
+        $nakesCoordinates = $this->resolveCoordinates(
+            $nakes->latitude,
+            $nakes->longitude,
+            $nakes->alamat_lengkap
+        );
+        $bookingCoordinates = $this->resolveCoordinates(
+            $booking->latitude_kunjungan,
+            $booking->longitude_kunjungan,
+            $booking->alamat_kunjungan
+        );
+
+        if ($nakesCoordinates && $bookingCoordinates) {
             $distanceKm = $this->calculateDistance(
-                (float) $nakes->latitude,
-                (float) $nakes->longitude,
-                (float) $booking->latitude_kunjungan,
-                (float) $booking->longitude_kunjungan
+                $nakesCoordinates['latitude'],
+                $nakesCoordinates['longitude'],
+                $bookingCoordinates['latitude'],
+                $bookingCoordinates['longitude']
             );
 
             if ($distanceKm > 10) {
@@ -1327,10 +1394,23 @@ class BookingController extends Controller
 
             // Recalculate Biaya Transport untuk Nakes yang menerima
             $transaksi = $booking->transaksi;
-            if ($transaksi && $nakes->latitude && $nakes->longitude) {
+            $nakesCoordinates = $this->resolveCoordinates(
+                $nakes->latitude,
+                $nakes->longitude,
+                $nakes->alamat_lengkap
+            );
+            $bookingCoordinates = $this->resolveCoordinates(
+                $booking->latitude_kunjungan,
+                $booking->longitude_kunjungan,
+                $booking->alamat_kunjungan
+            );
+
+            if ($transaksi && $nakesCoordinates && $bookingCoordinates) {
                 $actualDistance = $this->calculateDistance(
-                    (float)$nakes->latitude, (float)$nakes->longitude,
-                    (float)$booking->latitude_kunjungan, (float)$booking->longitude_kunjungan
+                    $nakesCoordinates['latitude'],
+                    $nakesCoordinates['longitude'],
+                    $bookingCoordinates['latitude'],
+                    $bookingCoordinates['longitude']
                 );
 
                 $actualTransportCost = 0.0;

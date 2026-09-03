@@ -10,6 +10,7 @@ use Midtrans\Config;
 use Midtrans\Notification;
 use Midtrans\Transaction;
 use App\Http\Resources\BookingResource;
+use App\Http\Resources\TransaksiDetailResource;
 
 class TransaksiController extends Controller
 {
@@ -114,6 +115,52 @@ class TransaksiController extends Controller
     }
 
     /**
+     * Detail transaksi pasien berdasarkan booking.
+     *
+     * @group Transaksi
+     * @authenticated
+     *
+     * @urlParam id_booking integer required ID booking yang ingin dilihat. Example: 42
+     */
+    public function show($id_booking, Request $request)
+    {
+        $pasien = $request->user()?->pasien;
+
+        if (!$pasien) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User pasien tidak ditemukan.',
+                'data' => [],
+            ], 404);
+        }
+
+        $booking = Booking::with([
+            'pasien',
+            'layanan.kategori',
+            'layanan.bhpItems',
+            'tenagaMedis',
+            'transaksi',
+        ])
+            ->where('id_booking', $id_booking)
+            ->where('id_pasien', $pasien->id_pasien)
+            ->first();
+
+        if (!$booking) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Transaksi booking tidak ditemukan.',
+                'data' => [],
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Detail transaksi pasien berhasil diambil.',
+            'data' => new TransaksiDetailResource($booking),
+        ]);
+    }
+
+    /**
      * Buat Transaksi Baru
      *
      * Membuat transaksi baru dan mendapatkan token pembayaran Midtrans untuk proses checkout.
@@ -153,14 +200,14 @@ class TransaksiController extends Controller
      *   }
      * }
      */
-    public function store(Request $request)
-    {
-        return response()->json([
-            'success' => true,
-            'message' => 'Token pembayaran Midtrans',
-            'token' => 'dummy-midtrans-token'
-        ]);
-    }
+    // public function store(Request $request)
+    // {
+    //     return response()->json([
+    //         'success' => true,
+    //         'message' => 'Token pembayaran Midtrans',
+    //         'token' => 'dummy-midtrans-token'
+    //     ]);
+    // }
 
     /**
      * Konfirmasi Status Pembayaran
