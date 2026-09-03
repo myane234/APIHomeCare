@@ -81,9 +81,8 @@ class LayananController extends Controller
             });
         }
 
-        // Mapping hasil query untuk mengubah path gambar menjadi URL penuh
+        // Mapping hasil query
         $hasil = $query->get()->map(function ($item) {
-            $item->foto_layanan = $item->foto_layanan ? url(Storage::url($item->foto_layanan)) : null;
             // Map the relation back to property so frontend doesn't break if expecting string
             $item->kategori_layanan = $item->kategori ? $item->kategori->nama_kategori : null;
             return $item;
@@ -120,9 +119,6 @@ class LayananController extends Controller
         }
 
         $layanan = MasterLayanan::create($validated);
-        
-        // Ubah format response agar mengembalikan URL penuh gambar
-        $layanan->foto_layanan = url(Storage::url($layanan->foto_layanan));
 
         return response()->json($layanan, 201);
     }
@@ -133,9 +129,6 @@ class LayananController extends Controller
     public function show($id)
     {
         $layanan = MasterLayanan::query()->findOrFail($id);
-        
-        // Ubah path menjadi URL penuh sebelum di-return
-        $layanan->foto_layanan = $layanan->foto_layanan ? url(Storage::url($layanan->foto_layanan)) : null;
         
         return response()->json($layanan, 200);
     }
@@ -161,8 +154,9 @@ class LayananController extends Controller
         // Handle jika ada upload foto baru untuk menggantikan foto lama
         if ($request->hasFile('foto_layanan')) {
             // Hapus foto lama dari storage biar gak menuh-menuhin server
-            if ($layanan->foto_layanan) {
-                Storage::disk('public')->delete($layanan->foto_layanan);
+            $rawFoto = $layanan->getRawOriginal('foto_layanan');
+            if ($rawFoto) {
+                Storage::disk('public')->delete($rawFoto);
             }
             
             $path = $request->file('foto_layanan')->store('layanan', 'public');
@@ -171,9 +165,6 @@ class LayananController extends Controller
 
         $layanan->fill($validated);
         $layanan->save();
-
-        // Kembalikan URL penuh gambar terbaru
-        $layanan->foto_layanan = url(Storage::url($layanan->foto_layanan));
 
         return response()->json($layanan, 200);
     }
@@ -185,8 +176,9 @@ class LayananController extends Controller
     {
         $layanan = MasterLayanan::query()->findOrFail($id);
         
-        if ($layanan->foto_layanan) {
-            Storage::disk('public')->delete($layanan->foto_layanan);
+        $rawFoto = $layanan->getRawOriginal('foto_layanan');
+        if ($rawFoto) {
+            Storage::disk('public')->delete($rawFoto);
         }
         
         $layanan->delete();

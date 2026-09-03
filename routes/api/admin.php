@@ -174,21 +174,16 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/mapping-layanan-bhp/{id_layanan}', [MappingLayananBhpController::class, 'show']);
     Route::post('/mapping-layanan-bhp/{id_layanan}/sync', [MappingLayananBhpController::class, 'sync']);
 
-    // Master Wilayah - Provinsi
+    // Master Wilayah - Provinsi (Mutating endpoints require auth, GET endpoints are in public.php)
     Route::prefix('wilayah-layanan')->group(function () {
-        Route::get('/', [WilayahLayananController::class, 'index']);
-        Route::get('/{id}', [WilayahLayananController::class, 'show']);
         Route::post('/', [WilayahLayananController::class, 'store']);
         Route::put('/{wilayahLayanan}', [WilayahLayananController::class, 'update']);
         Route::delete('/{wilayahLayanan}', [WilayahLayananController::class, 'destroy']);
         Route::patch('/{wilayahLayanan}/toggle-status', [WilayahLayananController::class, 'toggleStatus']);
     });
 
-    // Master Wilayah - Kota / Kabupaten
+    // Master Wilayah - Kota / Kabupaten (Mutating endpoints require auth, GET endpoints are in public.php)
     Route::prefix('kota-kabupaten')->group(function () {
-        Route::get('/', [KotaKabupatenController::class, 'index']);
-        Route::get('/provinsi/{id_provinsi}', [KotaKabupatenController::class, 'getByProvinsi']);
-        Route::get('/{id}', [KotaKabupatenController::class, 'show']);
         Route::post('/', [KotaKabupatenController::class, 'store']);
         Route::put('/{id}', [KotaKabupatenController::class, 'update']);
         Route::delete('/{id}', [KotaKabupatenController::class, 'destroy']);
@@ -203,17 +198,18 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Template Notifikasi CRUD
     Route::apiResource('/notification-templates', NotificationTemplateController::class);
 
-    // Master Bank - Admin CRUD
+    // Master Bank - Admin CRUD (GET /banks/admin for admin view, public GET /banks is in public.php)
     Route::prefix('banks')->group(function () {
-        Route::get('/', [\App\Http\Controllers\MasterBankController::class, 'adminIndex']);
+        Route::get('/admin', [\App\Http\Controllers\MasterBankController::class, 'adminIndex']);
         Route::post('/', [\App\Http\Controllers\MasterBankController::class, 'store']);
         Route::put('/{id}', [\App\Http\Controllers\MasterBankController::class, 'update']);
         Route::patch('/{id}/toggle-status', [\App\Http\Controllers\MasterBankController::class, 'toggleStatus']);
         Route::delete('/{id}', [\App\Http\Controllers\MasterBankController::class, 'destroy']);
     });
 
-    // Global Config - Admin Update
+    // Global Config - Admin Update & Delete
     Route::post('/global-config', [\App\Http\Controllers\GlobalConfigController::class, 'updateGlobalConfig']);
+    Route::delete('/global-config', [\App\Http\Controllers\GlobalConfigController::class, 'destroy']);
 
     // SEO Config - Admin Update
     Route::post('/seo-config', [\App\Http\Controllers\SeoConfigController::class, 'updateSeoConfig']);
