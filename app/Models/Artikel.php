@@ -31,6 +31,14 @@ class Artikel extends Model
     }
 
     /**
+     * Relasi many-to-many ke Tag.
+     */
+    public function tags()
+    {
+        return $this->belongsToMany(Tag::class, 'artikel_tags', 'artikel_id', 'tag_id')->withTimestamps();
+    }
+
+    /**
      * Accessor untuk mendapatkan nama kategori sebagai string demi backward compatibility.
      */
     public function getKategoriArtikelAttribute()

@@ -12,6 +12,7 @@ use App\Http\Controllers\KotaKabupatenController;
 use App\Http\Controllers\KategoriPembayaranController;
 use App\Http\Controllers\MetodePembayaranController;
 use App\Http\Controllers\MasterUniversitasController;
+use App\Http\Controllers\TagController;
 
 Route::get('/layanan', [LayananController::class, 'index']);
 Route::get('/layanan/kategori', [KategoriLayananController::class, 'index']);
@@ -23,6 +24,9 @@ Route::get('/promo/{promo}', [PromoController::class, 'show']);
 
 Route::get('/artikel', [ArtikelController::class, 'index']);
 Route::get('/artikel/{artikel}', [ArtikelController::class, 'show']);
+
+Route::get('/tags', [TagController::class, 'index']);
+Route::get('/tags/{id}', [TagController::class, 'show']);
 
 Route::get('/pasien', [PasienController::class, 'index']);
 

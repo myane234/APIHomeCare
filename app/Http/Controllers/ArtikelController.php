@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Artikel;
+use App\Models\Tag;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * @group CMS Artikel
@@ -14,45 +16,78 @@ use Illuminate\Support\Facades\Storage;
 class ArtikelController extends Controller
 {
     /**
-     * Mengambil daftar artikel. Mendukung dua cara pemanggilan:
-     * 1. **Tanpa Query**: Mengambil semua artikel.
-     * 2. **Filter Kategori**: Menyaring berdasarkan kategori_artikel.
+     * Mengambil daftar artikel. Mendukung:
+     * 1. **Paginasi**: `per_page=10` (default 10), `page=1`. Gunakan `per_page=all` untuk mengambil semua data.
+     * 2. **Filter Kategori**: `kategori_artikel` (nama/id).
+     * 3. **Filter Tag**: `tag` (nama/slug) atau `tag_id`.
+     * 4. **Pencarian**: `search` / `q`.
+     * 5. **Pengurutan**: `sort_by=views`.
      *
      * @queryParam kategori_artikel string Saring artikel berdasarkan kategori. Must be one of: Tips Kesehatan, Kegiatan. Example: Tips Kesehatan
-     *
-     * @response scenario="Semua Data" {
-     *   "success": true,
-     *   "message": "Berhasil mengambil data Artikel",
-     *   "data": [
-     *     {
-     *       "id": 1,
-     *       "judul_artikel": "Cara Menjaga Kesehatan di Rumah",
-     *       "kategori_artikel": "Tips Kesehatan",
-     *       "isi_artikel": "Lorem ipsum...",
-     *       "gambar_artikel": "http://localhost/storage/artikel/foto.jpg"
-     *     }
-     *   ]
-     * }
+     * @queryParam tag string Saring artikel berdasarkan tag (nama atau slug). Example: lansia
+     * @queryParam per_page integer|string Jumlah artikel per halaman (default 10). Kirim 'all' untuk tanpa paginasi. Example: 10
+     * @queryParam page integer Halaman yang ingin dibuka. Example: 1
+     * @queryParam search string Kata kunci pencarian judul atau isi artikel. Example: kesehatan
      */
     public function index(Request $request)
     {
-        $query = Artikel::with('kategori');
+        $query = Artikel::with(['kategori', 'tags']);
 
-        if ($request->has('kategori_artikel')) {
+        // Filter Kategori
+        if ($request->filled('kategori_artikel')) {
             $query->whereHas('kategori', function($q) use ($request) {
                 $q->where('nama_kategori', $request->kategori_artikel)
                   ->orWhere('id_kategori_artikel', $request->kategori_artikel);
             });
+        } elseif ($request->filled('id_kategori_artikel')) {
+            $query->where('id_kategori_artikel', $request->id_kategori_artikel);
         }
 
+        // Filter Tag
+        if ($request->filled('tag')) {
+            $tagParam = $request->tag;
+            $query->whereHas('tags', function($q) use ($tagParam) {
+                $q->where('nama_tag', $tagParam)
+                  ->orWhere('slug', $tagParam)
+                  ->orWhere('tags.id_tag', $tagParam);
+            });
+        } elseif ($request->filled('tag_id')) {
+            $tagId = $request->tag_id;
+            $query->whereHas('tags', function($q) use ($tagId) {
+                $q->where('tags.id_tag', $tagId);
+            });
+        }
+
+        // Pencarian (Search)
+        if ($request->filled('search') || $request->filled('q')) {
+            $searchTerm = $request->input('search', $request->input('q'));
+            $query->where(function($q) use ($searchTerm) {
+                $q->where('judul_artikel', 'like', '%' . $searchTerm . '%')
+                  ->orWhere('isi_artikel', 'like', '%' . $searchTerm . '%');
+            });
+        }
+
+        // Pengurutan (Sorting)
         if ($request->has('sort_by') && $request->sort_by === 'views') {
             $query->orderBy('views', 'desc');
+        } else {
+            $query->orderBy('created_at', 'desc');
+        }
+
+        // Pagination
+        $perPage = $request->input('per_page', 10);
+
+        if ($perPage === 'all') {
+            $data = $query->get();
+        } else {
+            $perPage = (int) $perPage > 0 ? (int) $perPage : 10;
+            $data = $query->paginate($perPage);
         }
 
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengambil data Artikel',
-            'data'    => $query->get(),
+            'data'    => $data,
         ], 200);
     }
 
@@ -73,7 +108,8 @@ class ArtikelController extends Controller
             'judul_artikel'       => ['required', 'string', 'max:255'],
             'id_kategori_artikel' => ['required', 'exists:kategori_artikels,id_kategori_artikel'],
             'isi_artikel'         => ['required', 'string'],
-            'gambar_artikel'      => ['required', 'image', 'mimes:jpeg,png,jpg', 'max:2048'],
+            'gambar_artikel'      => ['required', 'image', 'mimes:jpeg,png,jpg,webp', 'max:2048'],
+            'tags'                => ['nullable'],
         ]);
 
         if ($request->hasFile('gambar_artikel')) {
@@ -82,7 +118,12 @@ class ArtikelController extends Controller
         }
 
         $artikel = Artikel::create($validated);
-        $artikel->load('kategori');
+
+        if ($request->has('tags')) {
+            $this->processTags($artikel, $request->tags);
+        }
+
+        $artikel->load(['kategori', 'tags']);
 
         return response()->json([
             'success' => true,
@@ -96,7 +137,7 @@ class ArtikelController extends Controller
      */
     public function show($id)
     {
-        $artikel = Artikel::with('kategori')->findOrFail($id);
+        $artikel = Artikel::with(['kategori', 'tags'])->findOrFail($id);
         $artikel->increment('views');
 
         return response()->json([
@@ -125,7 +166,8 @@ class ArtikelController extends Controller
             'judul_artikel'       => ['sometimes', 'required', 'string', 'max:255'],
             'id_kategori_artikel' => ['sometimes', 'required', 'exists:kategori_artikels,id_kategori_artikel'],
             'isi_artikel'         => ['sometimes', 'required', 'string'],
-            'gambar_artikel'      => ['sometimes', 'required', 'image', 'mimes:jpeg,png,jpg', 'max:2048'],
+            'gambar_artikel'      => ['sometimes', 'required', 'image', 'mimes:jpeg,png,jpg,webp', 'max:2048'],
+            'tags'                => ['nullable'],
         ]);
 
         if ($request->hasFile('gambar_artikel')) {
@@ -141,7 +183,12 @@ class ArtikelController extends Controller
 
         $artikel->fill($validated);
         $artikel->save();
-        $artikel->load('kategori');
+
+        if ($request->has('tags')) {
+            $this->processTags($artikel, $request->tags);
+        }
+
+        $artikel->load(['kategori', 'tags']);
 
         return response()->json([
             'success' => true,
@@ -199,5 +246,44 @@ class ArtikelController extends Controller
             'message' => 'Gambar berhasil diupload',
             'urls'    => $urls,
         ], 200);
+    }
+
+    /**
+     * Helper untuk memproses input tag (array ID/nama, string dipisah koma, atau JSON string).
+     */
+    private function processTags(Artikel $artikel, $tagsInput)
+    {
+        if (is_null($tagsInput)) {
+            return;
+        }
+
+        if (is_string($tagsInput)) {
+            $decoded = json_decode($tagsInput, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                $tagsInput = $decoded;
+            } else {
+                $tagsInput = array_map('trim', explode(',', $tagsInput));
+            }
+        }
+
+        if (!is_array($tagsInput)) {
+            return;
+        }
+
+        $tagIds = [];
+        foreach ($tagsInput as $item) {
+            if (is_numeric($item)) {
+                $tagIds[] = (int) $item;
+            } elseif (is_string($item) && trim($item) !== '') {
+                $name = trim($item);
+                $tag = Tag::firstOrCreate(
+                    ['nama_tag' => $name],
+                    ['slug' => Str::slug($name)]
+                );
+                $tagIds[] = $tag->id_tag;
+            }
+        }
+
+        $artikel->tags()->sync(array_unique($tagIds));
     }
 }

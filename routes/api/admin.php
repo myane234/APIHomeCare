@@ -18,6 +18,7 @@ use App\Http\Controllers\WilayahLayananController;
 use App\Http\Controllers\KotaKabupatenController;
 use App\Http\Controllers\KategoriLayananController;
 use App\Http\Controllers\KategoriArtikelController;
+use App\Http\Controllers\TagController;
 use App\Http\Controllers\KategoriPembayaranController;
 use App\Http\Controllers\MetodePembayaranController;
 use App\Http\Controllers\TarifTransportController;
@@ -56,6 +57,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/artikel/upload-images', [ArtikelController::class, 'uploadImages']);
     Route::put('/artikel/{artikel}', [ArtikelController::class, 'update']);
     Route::delete('/artikel/{artikel}', [ArtikelController::class, 'destroy']);
+
+    // Management Tag Artikel
+    Route::post('/tags', [TagController::class, 'store']);
+    Route::put('/tags/{id}', [TagController::class, 'update']);
+    Route::delete('/tags/{id}', [TagController::class, 'destroy']);
 
     // Kategori Layanan CRUD
     Route::post('/layanan/kategori', [KategoriLayananController::class, 'store']);
