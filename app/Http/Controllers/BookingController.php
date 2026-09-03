@@ -235,22 +235,50 @@ class BookingController extends Controller
         }
 
         try {
-            $response = Http::withHeaders([
+            $headers = [
                 'Accept' => 'application/json',
                 'User-Agent' => config('app.name', 'Citra API') . '/address-geocoder',
-            ])->timeout(5)->get('https://nominatim.openstreetmap.org/search', [
-                'q' => $address . ', Indonesia',
-                'format' => 'jsonv2',
-                'limit' => 1,
-                'countrycodes' => 'id',
-            ]);
+            ];
 
-            $result = $response->successful() ? $response->json()[0] ?? null : null;
+            // Coba alamat lengkap terlebih dahulu, lalu versi yang lebih longgar.
+            $queries = array_values(array_unique([
+                trim($address) . ', Indonesia',
+                trim($address) . ', Jakarta, Indonesia',
+                preg_replace('/\s+No\.?\s*\d+[A-Za-z\/-]*/i', '', trim($address)) . ', Indonesia',
+            ]));
 
-            if ($result && isset($result['lat'], $result['lon'])) {
+            foreach ($queries as $query) {
+                $response = Http::withHeaders($headers)->timeout(5)->get(
+                    'https://nominatim.openstreetmap.org/search',
+                    [
+                        'q' => $query,
+                        'format' => 'jsonv2',
+                        'limit' => 1,
+                        'countrycodes' => 'id',
+                    ]
+                );
+
+                $result = $response->successful() ? $response->json()[0] ?? null : null;
+                if ($result && isset($result['lat'], $result['lon'])) {
+                    return [
+                        'latitude' => (float) $result['lat'],
+                        'longitude' => (float) $result['lon'],
+                    ];
+                }
+            }
+
+            // Fallback provider untuk alamat jalan yang tidak terdaftar di Nominatim.
+            $response = Http::withHeaders($headers)->timeout(5)->get(
+                'https://photon.komoot.io/api/',
+                ['q' => trim($address) . ', Indonesia', 'limit' => 1]
+            );
+            $feature = $response->successful() ? $response->json()['features'][0] ?? null : null;
+            $coordinates = $feature['geometry']['coordinates'] ?? null;
+
+            if (is_array($coordinates) && count($coordinates) >= 2) {
                 return [
-                    'latitude' => (float) $result['lat'],
-                    'longitude' => (float) $result['lon'],
+                    'latitude' => (float) $coordinates[1],
+                    'longitude' => (float) $coordinates[0],
                 ];
             }
         } catch (\Throwable $e) {
