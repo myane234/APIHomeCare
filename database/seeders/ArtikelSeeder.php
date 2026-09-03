@@ -3,9 +3,11 @@
 namespace Database\Seeders;
 
 use App\Models\Artikel;
+use App\Models\KategoriArtikel;
+use App\Models\Tag;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Storage;
-use App\Models\KategoriArtikel;
+use Illuminate\Support\Str;
 
 class ArtikelSeeder extends Seeder
 {
@@ -30,30 +32,35 @@ class ArtikelSeeder extends Seeder
                 'judul_artikel' => '5 Cara Menjaga Kesehatan Lansia di Rumah',
                 'kategori_artikel' => 'Tips Kesehatan',
                 'source_image' => 'hero/hero-2.jpg',
+                'tags' => ['Lansia', 'Nutrisi', 'Kesehatan'],
                 'isi_artikel' => "Menjaga kesehatan lansia di rumah memerlukan perhatian khusus. Beberapa langkah yang dapat dilakukan antara lain: menjaga pola makan bergizi seimbang, memastikan aktivitas fisik ringan tetap berjalan seperti jalan santai, mengelola kepatuhan minum obat secara teratur, menjaga keamanan lingkungan rumah untuk mencegah jatuh (seperti memasang pegangan di kamar mandi), serta melakukan kontrol kesehatan secara rutin bersama tim medis Home Care.",
             ],
             [
                 'judul_artikel' => 'Manfaat Fisioterapi Pasca Stroke Sejak Dini',
                 'kategori_artikel' => 'Tips Kesehatan',
                 'source_image' => 'about/Stroke rehabilitation.jpg',
+                'tags' => ['Stroke', 'Fisioterapi', 'Rehabilitasi'],
                 'isi_artikel' => "Stroke dapat menyebabkan kelemahan anggota gerak. Melakukan fisioterapi sejak dini sangat penting untuk merangsang kembali jalur saraf motorik yang terganggu (neuroplastisitas). Dengan latihan teratur di bawah bimbingan fisioterapis profesional, pasien dapat dilatih untuk berjalan kembali, memegang benda, meningkatkan keseimbangan tubuh, serta mengembalikan kemandirian dalam melakukan aktivitas sehari-hari di rumah.",
             ],
             [
                 'judul_artikel' => 'Pentingnya Perawatan Tali Pusat Bayi Baru Lahir yang Benar',
                 'kategori_artikel' => 'Tips Kesehatan',
                 'source_image' => 'layanan/ibu-anak/tali-pusar.png',
+                'tags' => ['Bayi', 'Ibu & Anak', 'Perawatan'],
                 'isi_artikel' => "Merawat tali pusat bayi baru lahir seringkali membuat orang tua khawatir. Kunci utama perawatan tali pusat adalah menjaganya tetap bersih dan kering. Hindari membungkus tali pusat dengan ramuan tradisional atau alkohol. Gunakan kasa steril jika diperlukan dan biarkan terpapar udara agar cepat kering dan lepas dengan sendirinya (puput) secara alami tanpa menimbulkan infeksi.",
             ],
             [
                 'judul_artikel' => 'Smart Home Care Mengadakan CSR Pemeriksaan Kesehatan Gratis',
                 'kategori_artikel' => 'Kegiatan',
                 'source_image' => 'tentang-kami/HeroTentangKami.jpeg',
+                'tags' => ['CSR', 'Pemeriksaan', 'Kegiatan'],
                 'isi_artikel' => "Sebagai wujud kepedulian terhadap kesehatan masyarakat, Smart Home Care menyelenggarakan kegiatan Corporate Social Responsibility (CSR) berupa pemeriksaan kesehatan gratis. Kegiatan ini meliputi pemeriksaan tekanan darah, cek gula darah sewaktu, pemeriksaan asam urat, serta konsultasi gratis dengan perawat kami. Acara ini dihadiri oleh ratusan warga sekitar yang sangat antusias menjaga kesehatan mereka sejak dini.",
             ],
             [
                 'judul_artikel' => 'Ekspansi Layanan Smart Home Care Kini Hadir di Kota Baru',
                 'kategori_artikel' => 'Kegiatan',
                 'source_image' => 'tentang-kami/kenapaSmartHomeCare.jpeg',
+                'tags' => ['Ekspansi', 'Layanan', 'Berita'],
                 'isi_artikel' => "Guna memenuhi kebutuhan masyarakat akan layanan medis berkualitas di rumah, Smart Home Care secara resmi membuka kantor cabang baru. Dengan hadirnya cabang baru ini, kami berkomitmen untuk memberikan pelayanan home care seperti perawatan luka modern, fisioterapi, bidan home care, serta pemasangan alat medis dengan respon yang lebih cepat dan jangkauan wilayah yang lebih luas untuk keluarga Anda.",
             ],
         ];
@@ -75,7 +82,7 @@ class ArtikelSeeder extends Seeder
                 'nama_kategori' => $article['kategori_artikel'],
             ])->id_kategori_artikel;
 
-            Artikel::updateOrCreate(
+            $createdArticle = Artikel::updateOrCreate(
                 ['judul_artikel' => $article['judul_artikel']],
                 [
                     'id_kategori_artikel' => $idKategori,
@@ -83,6 +90,19 @@ class ArtikelSeeder extends Seeder
                     'gambar_artikel' => $gambarPath,
                 ]
             );
+
+            // Sync tags
+            if (isset($article['tags']) && is_array($article['tags'])) {
+                $tagIds = [];
+                foreach ($article['tags'] as $tagName) {
+                    $tag = Tag::firstOrCreate(
+                        ['nama_tag' => $tagName],
+                        ['slug' => Str::slug($tagName)]
+                    );
+                    $tagIds[] = $tag->id_tag;
+                }
+                $createdArticle->tags()->sync($tagIds);
+            }
         }
     }
 }
