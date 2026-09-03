@@ -58,18 +58,27 @@ class Booking extends Model
      * YY = 2 digit tahun terakhir (26 untuk 2026)
      * XXXX = nomor urut per pasien per tahun
      */
-    public static function generateMedicalRecordNumber($idPasien): string
-    {
-        $year = now()->year;
-        $yearLast2 = str_pad($year % 100, 2, '0', STR_PAD_LEFT);
-        
-        // Hitung nomor urut booking pasien di tahun ini
-        $sequence = self::where('id_pasien', $idPasien)
-            ->whereYear('created_at', $year)
-            ->count() + 1;
-        
-        $sequenceStr = str_pad($sequence, 4, '0', STR_PAD_LEFT);
-        
-        return "P-{$yearLast2}-{$sequenceStr}";
+    public static function generateMedicalRecordNumber(): string
+{
+    $year = now()->year;
+    $yearLast2 = str_pad($year % 100, 2, '0', STR_PAD_LEFT);
+    $prefix = "P-{$yearLast2}-";
+
+
+    $lastBooking = self::where('medical_record_number', 'LIKE', $prefix . '%')
+        ->orderBy('id_booking', 'desc')
+        ->lockForUpdate()
+        ->first();
+
+    if ($lastBooking && $lastBooking->medical_record_number) {
+        $lastSequence = (int) substr($lastBooking->medical_record_number, -4);
+        $sequence = $lastSequence + 1;
+    } else {
+        $sequence = 1;
     }
+
+    $sequenceStr = str_pad($sequence, 4, '0', STR_PAD_LEFT);
+
+    return "{$prefix}{$sequenceStr}";
+}
 }

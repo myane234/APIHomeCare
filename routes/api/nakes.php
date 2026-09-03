@@ -27,10 +27,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/nakes/pakta-integritas/download', [TenagaMedisController::class, 'downloadPaktaIntegritas']);
 
     // Alternate direct endpoints for accepting order & updating status
-    Route::get('/nakes/orders', [BookingController::class, 'nakesOrderQueue']);
-    Route::get('/nakes/order/{id}', [BookingController::class, 'nakesOrderDetail']);
-    Route::post('/nakes/order/{id}/accept', [BookingController::class, 'nakesAcceptBooking']);
-    Route::post('/nakes/order/{id}/reject', [BookingController::class, 'nakesRejectBooking']);
-    Route::post('/nakes/order/{id}/status', [BookingController::class, 'nakesUpdateStatus']);
+    // Route::get('/nakes/orders', [BookingController::class, 'nakesOrderQueue']);
+    // Route::get('/nakes/order/{id}', [BookingController::class, 'nakesOrderDetail']);
+    // Route::post('/nakes/order/{id}/accept', [BookingController::class, 'nakesAcceptBooking']);
+    // Route::post('/nakes/order/{id}/reject', [BookingController::class, 'nakesRejectBooking']);
+    // Route::post('/nakes/order/{id}/status', [BookingController::class, 'nakesUpdateStatus']);
 });
 

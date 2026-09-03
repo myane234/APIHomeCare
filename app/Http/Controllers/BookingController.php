@@ -14,6 +14,8 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 
 /**
  * @group Booking Management
@@ -498,14 +500,32 @@ class BookingController extends Controller
 
         DB::beginTransaction();
 
-        try {
-            $prefix = 'B-' . date('ymd');
-            $todayCount = Booking::whereDate('created_at', now()->toDateString())->count();
-            $nextSequence = $todayCount + 1; 
-            $bookingCode = $prefix . str_pad($nextSequence, 7, '0', STR_PAD_LEFT);
+       try {
+    return Cache::lock('create_booking_lock', 10)->block(5, function () use ($validate, $pasien, $layanan, $tenagaMedisId, $alamatKunjungan, $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $hppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance) {
 
-            $medicalRecordNumber = Booking::generateMedicalRecordNumber($pasien->id_pasien);
+        return DB::transaction(function () use ($validate, $pasien, $layanan, $tenagaMedisId, $alamatKunjungan, $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $hppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance) {
 
+            // 1. Generate booking_code secara aman (Format: B-YYMMDDXXXXXXX)
+            $prefixBooking = 'B-' . date('ymd');
+
+            $lastBookingToday = Booking::where('booking_code', 'LIKE', $prefixBooking . '%')
+                ->orderBy('id_booking', 'desc')
+                ->lockForUpdate()
+                ->first();
+
+            if ($lastBookingToday && $lastBookingToday->booking_code) {
+                $lastSeq = (int) substr($lastBookingToday->booking_code, -7);
+                $nextSequence = $lastSeq + 1;
+            } else {
+                $nextSequence = 1;
+            }
+
+            $bookingCode = $prefixBooking . str_pad($nextSequence, 7, '0', STR_PAD_LEFT);
+
+            // 2. Generate medical_record_number secara aman
+            $medicalRecordNumber = Booking::generateMedicalRecordNumber();
+
+            // 3. Simpan data Booking
             $booking = Booking::create([
                 'booking_code' => $bookingCode,
                 'medical_record_number' => $medicalRecordNumber,
@@ -520,6 +540,7 @@ class BookingController extends Controller
                 'status_booking' => 'Pending',
             ]);
 
+            // 4. Simpan data Transaksi
             $orderId = 'BOOKING-' . $booking->id_booking . '-' . time();
 
             $transaction = Transaksi::create([
@@ -541,8 +562,6 @@ class BookingController extends Controller
                 'profit_hc' => $estimasiProfitHomeCare,
             ]);
 
-            DB::commit();
-
             return response()->json([
                 'success' => true,
                 'message' => 'Booking berhasil dibuat. Silakan lanjutkan ke pemilihan metode pembayaran.',
@@ -555,14 +574,19 @@ class BookingController extends Controller
                     'distance_km' => round($distance, 2),
                 ]
             ], 201);
-        } catch (\Throwable $e) {
-            DB::rollBack();
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal membuat booking: ' . $e->getMessage(),
-            ], 500);
-        }
+        });
+    });
+} catch (LockTimeoutException $e) {
+    return response()->json([
+        'success' => false,
+        'message' => 'Server sedang sibuk memproses booking lain. Silakan coba beberapa detik lagi.',
+    ], 429);
+} catch (\Throwable $e) {
+    return response()->json([
+        'success' => false,
+        'message' => 'Gagal membuat booking: ' . $e->getMessage(),
+    ], 500);
+}
     }
 
     /**
