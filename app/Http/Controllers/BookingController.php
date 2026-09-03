@@ -241,10 +241,19 @@ class BookingController extends Controller
             ];
 
             // Coba alamat lengkap terlebih dahulu, lalu versi yang lebih longgar.
+            $cleanAddress = trim($address);
+            $hasCountry = (bool) preg_match('/\bIndonesia\b/i', $cleanAddress);
+            $addressWithCountry = $hasCountry ? $cleanAddress : $cleanAddress . ', Indonesia';
+            $addressWithoutHouseNumber = preg_replace(
+                '/\s+No\.?\s*\d+[A-Za-z\/-]*/i',
+                '',
+                $cleanAddress
+            );
+
             $queries = array_values(array_unique([
-                trim($address) . ', Indonesia',
-                trim($address) . ', Jakarta, Indonesia',
-                preg_replace('/\s+No\.?\s*\d+[A-Za-z\/-]*/i', '', trim($address)) . ', Indonesia',
+                $addressWithCountry,
+                $cleanAddress . ', Depok, Jawa Barat, Indonesia',
+                $addressWithoutHouseNumber . ', Indonesia',
             ]));
 
             foreach ($queries as $query) {
