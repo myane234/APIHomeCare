@@ -1065,6 +1065,25 @@ class BookingController extends Controller
             ], true);
     }
 
+    private function hasRejectedOrder(Booking $booking, TenagaMedis $nakes): bool
+    {
+        $rejections = is_array($booking->catatan_penolakan)
+            ? $booking->catatan_penolakan
+            : json_decode($booking->catatan_penolakan ?? '[]', true);
+
+        if (!is_array($rejections)) {
+            return false;
+        }
+
+        foreach ($rejections as $rejection) {
+            if ((int) ($rejection['id_tenaga_medis'] ?? 0) === (int) $nakes->id_tenaga_medis) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function timeRangeOverlap(?string $startA, ?string $endA, ?string $startB, ?string $endB): bool
     {
         if (!$startA || !$endA || !$startB || !$endB) {
@@ -1295,6 +1314,10 @@ class BookingController extends Controller
             ->orderByDesc('created_at')
             ->get();
 
+        $bookings = $bookings
+            ->reject(fn (Booking $booking) => $this->hasRejectedOrder($booking, $nakes))
+            ->values();
+
         $eligibleOrders = [];
         $ineligibleOrders = [];
 
@@ -1340,6 +1363,13 @@ class BookingController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Booking tidak ditemukan.'
+            ], 404);
+        }
+
+        if ($this->hasRejectedOrder($booking, $nakes)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Order ini sudah Anda tolak dan tidak tersedia lagi.',
             ], 404);
         }
 
@@ -1403,6 +1433,10 @@ class BookingController extends Controller
             ->orderByDesc('created_at')
             ->get();
 
+        $bookings = $bookings
+            ->reject(fn (Booking $booking) => $this->hasRejectedOrder($booking, $nakes))
+            ->values();
+
         return response()->json([
             'success' => true,
             'message' => 'Daftar order / booking untuk Tenaga Medis',
@@ -1440,6 +1474,13 @@ class BookingController extends Controller
                 'success' => false,
                 'message' => 'Order ini sudah ' . strtolower($booking->status_booking) . ' dan tidak dapat diterima.'
             ], 400);
+        }
+
+        if ($this->hasRejectedOrder($booking, $nakes)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Order ini sudah Anda tolak dan tidak dapat diterima kembali.',
+            ], 422);
         }
 
         if (!$this->isPaidTransaction($booking->transaksi)) {
