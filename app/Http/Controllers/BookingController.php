@@ -1054,6 +1054,17 @@ class BookingController extends Controller
             : null;
     }
 
+    private function isPaidTransaction(?Transaksi $transaksi): bool
+    {
+        return $transaksi
+            && in_array(strtolower((string) $transaksi->status_transaksi), [
+                'lunas',
+                'sudah bayar',
+                'settlement',
+                'success',
+            ], true);
+    }
+
     private function timeRangeOverlap(?string $startA, ?string $endA, ?string $startB, ?string $endB): bool
     {
         if (!$startA || !$endA || !$startB || !$endB) {
@@ -1278,6 +1289,9 @@ class BookingController extends Controller
 
         $bookings = Booking::with(['pasien', 'layanan.kategori', 'tenagaMedis', 'transaksi'])
             ->where('status_booking', 'Pending')
+            ->whereHas('transaksi', function ($query) {
+                $query->whereRaw("LOWER(status_transaksi) IN ('lunas', 'sudah bayar', 'settlement', 'success')");
+            })
             ->orderByDesc('created_at')
             ->get();
 
@@ -1329,6 +1343,13 @@ class BookingController extends Controller
             ], 404);
         }
 
+        if (!$this->isPaidTransaction($booking->transaksi)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Detail order belum tersedia karena pembayaran belum selesai.',
+            ], 404);
+        }
+
         $eligibility = $this->getNakesOrderEligibility($nakes, $booking);
 
         return response()->json([
@@ -1376,6 +1397,9 @@ class BookingController extends Controller
                 $q->where('id_tenaga_medis', $nakes->id_tenaga_medis)
                   ->orWhereNull('id_tenaga_medis');
             })
+            ->whereHas('transaksi', function ($query) {
+                $query->whereRaw("LOWER(status_transaksi) IN ('lunas', 'sudah bayar', 'settlement', 'success')");
+            })
             ->orderByDesc('created_at')
             ->get();
 
@@ -1416,6 +1440,13 @@ class BookingController extends Controller
                 'success' => false,
                 'message' => 'Order ini sudah ' . strtolower($booking->status_booking) . ' dan tidak dapat diterima.'
             ], 400);
+        }
+
+        if (!$this->isPaidTransaction($booking->transaksi)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Order belum dapat diterima karena pembayaran belum selesai.',
+            ], 422);
         }
 
         $eligibility = $this->getNakesOrderEligibility($nakes, $booking);
