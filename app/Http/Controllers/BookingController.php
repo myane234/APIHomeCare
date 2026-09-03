@@ -230,7 +230,7 @@ class BookingController extends Controller
             ];
         }
 
-        if (!$address) {
+        if (!is_string($address) || trim($address) === '') {
             return null;
         }
 
@@ -1143,7 +1143,17 @@ class BookingController extends Controller
                 $reasons[] = 'Lokasi pasien berada di luar radius layanan 10 km.';
             }
         } else {
-            $reasons[] = 'Lokasi nakes atau pasien belum lengkap.';
+            if (!$nakesCoordinates) {
+                $reasons[] = empty(trim((string) $nakes->alamat_lengkap))
+                    ? 'Alamat nakes belum diisi.'
+                    : 'Alamat nakes tidak dapat ditemukan di peta.';
+            }
+
+            if (!$bookingCoordinates) {
+                $reasons[] = empty(trim((string) $booking->alamat_kunjungan))
+                    ? 'Alamat pasien belum diisi.'
+                    : 'Alamat pasien tidak dapat ditemukan di peta.';
+            }
         }
 
         // Cek Bentrok Order Nakes
