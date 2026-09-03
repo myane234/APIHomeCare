@@ -498,7 +498,6 @@ class BookingController extends Controller
         $feeMidtrans = (float) env('FEE_MIDTRANS', 4000.0);
         $estimasiProfitHomeCare = ($tarifLayananJasaMedis - $feeNakesNominalBase) + ($tarifBahanHabisPakai - $hppBhp) + $biayaAdministrasiAplikasi - $feeMidtrans;
 
-        DB::beginTransaction();
 
        try {
     return Cache::lock('create_booking_lock', 10)->block(5, function () use ($validate, $pasien, $layanan, $tenagaMedisId, $alamatKunjungan, $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $hppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance) {
