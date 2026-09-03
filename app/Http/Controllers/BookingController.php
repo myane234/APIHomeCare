@@ -234,96 +234,67 @@ class BookingController extends Controller
             return null;
         }
 
-        $headers = [
-            'Accept' => 'application/json',
-            'User-Agent' => config('app.name', 'Citra API') . '/address-geocoder',
-        ];
-
-        $cleanAddress = preg_replace('/\s+/', ' ', trim($address));
-        $addressWithoutHouseNumber = trim((string) preg_replace(
-            '/\s+No\.?\s*\d+[A-Za-z\/-]*/i',
-            '',
-            $cleanAddress
-        ));
-        $queries = array_values(array_unique(array_filter([
-            $cleanAddress,
-            $cleanAddress . ', Indonesia',
-            $cleanAddress . ', Depok, Jawa Barat, Indonesia',
-            $addressWithoutHouseNumber . ', Indonesia',
-        ])));
-
-        // Tiap query berdiri sendiri agar satu timeout tidak menghentikan fallback.
-        foreach ($queries as $query) {
-            try {
-                $response = Http::withHeaders($headers)
-                    ->acceptJson()
-                    ->retry(2, 250)
-                    ->timeout(8)
-                    ->get('https://nominatim.openstreetmap.org/search', [
-                        'q' => $query,
-                        'format' => 'jsonv2',
-                        'limit' => 1,
-                        'countrycodes' => 'id',
-                    ]);
-
-                $result = $response->successful() ? ($response->json()[0] ?? null) : null;
-                if ($result && isset($result['lat'], $result['lon'])) {
-                    return [
-                        'latitude' => (float) $result['lat'],
-                        'longitude' => (float) $result['lon'],
-                    ];
-                }
-            } catch (\Throwable $e) {
-                Log::notice('Nominatim geocoding attempt failed: ' . $e->getMessage());
-            }
-        }
-
-        try {
-            $response = Http::withHeaders($headers)
-                ->acceptJson()
-                ->retry(2, 250)
-                ->timeout(8)
-                ->get('https://photon.komoot.io/api/', [
-                    'q' => $cleanAddress . ', Indonesia',
-                    'limit' => 1,
-                ]);
-            $feature = $response->successful() ? ($response->json()['features'][0] ?? null) : null;
-            $coordinates = $feature['geometry']['coordinates'] ?? null;
-
-            if (is_array($coordinates) && count($coordinates) >= 2) {
-                return [
-                    'latitude' => (float) $coordinates[1],
-                    'longitude' => (float) $coordinates[0],
-                ];
-            }
-        } catch (\Throwable $e) {
-            Log::notice('Photon geocoding failed: ' . $e->getMessage());
+        $key = config('services.locationiq.key');
+        if (!$key) {
+            Log::error('LocationIQ key is not configured.');
+            return null;
         }
 
         try {
             $response = Http::acceptJson()
                 ->retry(2, 250)
-                ->timeout(8)
-                ->get('https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates', [
-                    'SingleLine' => $cleanAddress,
-                    'countryCode' => 'IDN',
-                    'maxLocations' => 1,
-                    'f' => 'json',
+                ->timeout(10)
+                ->get('https://us1.locationiq.com/v1/search', [
+                    'key' => $key,
+                    'q' => trim($address),
+                    'format' => 'json',
+                    'countrycodes' => 'id',
+                    'limit' => 1,
                 ]);
-            $candidate = $response->successful() ? ($response->json()['candidates'][0] ?? null) : null;
-            $location = $candidate['location'] ?? null;
 
-            if (isset($location['y'], $location['x'])) {
+            $result = $response->successful() ? ($response->json()[0] ?? null) : null;
+            if ($result && isset($result['lat'], $result['lon'])) {
                 return [
-                    'latitude' => (float) $location['y'],
-                    'longitude' => (float) $location['x'],
+                    'latitude' => (float) $result['lat'],
+                    'longitude' => (float) $result['lon'],
                 ];
             }
         } catch (\Throwable $e) {
-            Log::notice('ArcGIS geocoding failed: ' . $e->getMessage());
+            Log::error('LocationIQ geocoding failed: ' . $e->getMessage());
         }
 
         return null;
+    }
+
+    /**
+     * Isi hanya koordinat yang kosong dari hasil geocoding.
+     */
+    private function storeMissingCoordinates(
+        $model,
+        ?array $coordinates,
+        string $latitudeColumn = 'latitude',
+        string $longitudeColumn = 'longitude'
+    ): void
+    {
+        if (!$coordinates) {
+            return;
+        }
+
+        $changed = false;
+
+        if ($model->{$latitudeColumn} === null || (float) $model->{$latitudeColumn} === 0.0) {
+            $model->{$latitudeColumn} = $coordinates['latitude'];
+            $changed = true;
+        }
+
+        if ($model->{$longitudeColumn} === null || (float) $model->{$longitudeColumn} === 0.0) {
+            $model->{$longitudeColumn} = $coordinates['longitude'];
+            $changed = true;
+        }
+
+        if ($changed) {
+            $model->save();
+        }
     }
 
     /**
@@ -473,6 +444,10 @@ class BookingController extends Controller
 
         $patientLat = $patientCoordinates['latitude'];
         $patientLng = $patientCoordinates['longitude'];
+
+        // Simpan koordinat hasil geocoding agar request berikutnya tidak perlu mencari ulang.
+        $validate['latitude_kunjungan'] = $patientLat;
+        $validate['longitude_kunjungan'] = $patientLng;
 
         $tenagaMedisId = $validate['id_tenaga_medis'] ?? null;
         if (is_array($tenagaMedisId)) {
@@ -1195,6 +1170,14 @@ class BookingController extends Controller
             $booking->latitude_kunjungan,
             $booking->longitude_kunjungan,
             $booking->alamat_kunjungan
+        );
+
+        $this->storeMissingCoordinates($nakes, $nakesCoordinates);
+        $this->storeMissingCoordinates(
+            $booking,
+            $bookingCoordinates,
+            'latitude_kunjungan',
+            'longitude_kunjungan'
         );
 
         if ($nakesCoordinates && $bookingCoordinates) {

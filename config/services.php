@@ -41,6 +41,10 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    
+    'locationiq' => [
+    'key' => env('LOCATIONIQ_KEY'),
+    ],
 
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
