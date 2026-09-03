@@ -234,54 +234,60 @@ class BookingController extends Controller
             return null;
         }
 
-        try {
-            $headers = [
-                'Accept' => 'application/json',
-                'User-Agent' => config('app.name', 'Citra API') . '/address-geocoder',
-            ];
+        $headers = [
+            'Accept' => 'application/json',
+            'User-Agent' => config('app.name', 'Citra API') . '/address-geocoder',
+        ];
 
-            // Coba alamat lengkap terlebih dahulu, lalu versi yang lebih longgar.
-            $cleanAddress = trim($address);
-            $hasCountry = (bool) preg_match('/\bIndonesia\b/i', $cleanAddress);
-            $addressWithCountry = $hasCountry ? $cleanAddress : $cleanAddress . ', Indonesia';
-            $addressWithoutHouseNumber = preg_replace(
-                '/\s+No\.?\s*\d+[A-Za-z\/-]*/i',
-                '',
-                $cleanAddress
-            );
+        $cleanAddress = preg_replace('/\s+/', ' ', trim($address));
+        $addressWithoutHouseNumber = trim((string) preg_replace(
+            '/\s+No\.?\s*\d+[A-Za-z\/-]*/i',
+            '',
+            $cleanAddress
+        ));
+        $queries = array_values(array_unique(array_filter([
+            $cleanAddress,
+            $cleanAddress . ', Indonesia',
+            $cleanAddress . ', Depok, Jawa Barat, Indonesia',
+            $addressWithoutHouseNumber . ', Indonesia',
+        ])));
 
-            $queries = array_values(array_unique([
-                $addressWithCountry,
-                $cleanAddress . ', Depok, Jawa Barat, Indonesia',
-                $addressWithoutHouseNumber . ', Indonesia',
-            ]));
-
-            foreach ($queries as $query) {
-                $response = Http::withHeaders($headers)->timeout(5)->get(
-                    'https://nominatim.openstreetmap.org/search',
-                    [
+        // Tiap query berdiri sendiri agar satu timeout tidak menghentikan fallback.
+        foreach ($queries as $query) {
+            try {
+                $response = Http::withHeaders($headers)
+                    ->acceptJson()
+                    ->retry(2, 250)
+                    ->timeout(8)
+                    ->get('https://nominatim.openstreetmap.org/search', [
                         'q' => $query,
                         'format' => 'jsonv2',
                         'limit' => 1,
                         'countrycodes' => 'id',
-                    ]
-                );
+                    ]);
 
-                $result = $response->successful() ? $response->json()[0] ?? null : null;
+                $result = $response->successful() ? ($response->json()[0] ?? null) : null;
                 if ($result && isset($result['lat'], $result['lon'])) {
                     return [
                         'latitude' => (float) $result['lat'],
                         'longitude' => (float) $result['lon'],
                     ];
                 }
+            } catch (\Throwable $e) {
+                Log::notice('Nominatim geocoding attempt failed: ' . $e->getMessage());
             }
+        }
 
-            // Fallback provider untuk alamat jalan yang tidak terdaftar di Nominatim.
-            $response = Http::withHeaders($headers)->timeout(5)->get(
-                'https://photon.komoot.io/api/',
-                ['q' => trim($address) . ', Indonesia', 'limit' => 1]
-            );
-            $feature = $response->successful() ? $response->json()['features'][0] ?? null : null;
+        try {
+            $response = Http::withHeaders($headers)
+                ->acceptJson()
+                ->retry(2, 250)
+                ->timeout(8)
+                ->get('https://photon.komoot.io/api/', [
+                    'q' => $cleanAddress . ', Indonesia',
+                    'limit' => 1,
+                ]);
+            $feature = $response->successful() ? ($response->json()['features'][0] ?? null) : null;
             $coordinates = $feature['geometry']['coordinates'] ?? null;
 
             if (is_array($coordinates) && count($coordinates) >= 2) {
@@ -291,7 +297,30 @@ class BookingController extends Controller
                 ];
             }
         } catch (\Throwable $e) {
-            Log::warning('Address geocoding failed: ' . $e->getMessage());
+            Log::notice('Photon geocoding failed: ' . $e->getMessage());
+        }
+
+        try {
+            $response = Http::acceptJson()
+                ->retry(2, 250)
+                ->timeout(8)
+                ->get('https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates', [
+                    'SingleLine' => $cleanAddress,
+                    'countryCode' => 'IDN',
+                    'maxLocations' => 1,
+                    'f' => 'json',
+                ]);
+            $candidate = $response->successful() ? ($response->json()['candidates'][0] ?? null) : null;
+            $location = $candidate['location'] ?? null;
+
+            if (isset($location['y'], $location['x'])) {
+                return [
+                    'latitude' => (float) $location['y'],
+                    'longitude' => (float) $location['x'],
+                ];
+            }
+        } catch (\Throwable $e) {
+            Log::notice('ArcGIS geocoding failed: ' . $e->getMessage());
         }
 
         return null;
@@ -1160,7 +1189,7 @@ class BookingController extends Controller
         $nakesCoordinates = $this->resolveCoordinates(
             $nakes->latitude,
             $nakes->longitude,
-            $nakes->alamat_lengkap
+            $nakes->alamat_lengkap ?: $nakes->pasien?->alamat_utama
         );
         $bookingCoordinates = $this->resolveCoordinates(
             $booking->latitude_kunjungan,
@@ -1176,19 +1205,19 @@ class BookingController extends Controller
                 $bookingCoordinates['longitude']
             );
 
-            if ($distanceKm > 10) {
-                $reasons[] = 'Lokasi pasien berada di luar radius layanan 10 km.';
+            if ($distanceKm > 30) {
+                $reasons[] = 'Lokasi pasien berada di luar radius layanan 30 km.';
             }
         } else {
             if (!$nakesCoordinates) {
-                $reasons[] = empty(trim((string) $nakes->alamat_lengkap))
-                    ? 'Alamat nakes belum diisi.'
+                $reasons[] = empty(trim((string) ($nakes->alamat_lengkap ?: $nakes->pasien?->alamat_utama)))
+                    ? 'Alamat nakes wajib diisi.'
                     : 'Alamat nakes tidak dapat ditemukan di peta.';
             }
 
             if (!$bookingCoordinates) {
                 $reasons[] = empty(trim((string) $booking->alamat_kunjungan))
-                    ? 'Alamat pasien belum diisi.'
+                    ? 'Alamat pasien wajib diisi.'
                     : 'Alamat pasien tidak dapat ditemukan di peta.';
             }
         }
@@ -1444,7 +1473,7 @@ class BookingController extends Controller
             $nakesCoordinates = $this->resolveCoordinates(
                 $nakes->latitude,
                 $nakes->longitude,
-                $nakes->alamat_lengkap
+                $nakes->alamat_lengkap ?: $nakes->pasien?->alamat_utama
             );
             $bookingCoordinates = $this->resolveCoordinates(
                 $booking->latitude_kunjungan,
