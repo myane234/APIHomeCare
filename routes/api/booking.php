@@ -9,6 +9,8 @@ Route::get('/booking/nakes-terdekat', [BookingController::class, 'getNearestNake
 Route::middleware(['auth:sanctum'])->group(function () {
     // Booking Endpoints
     Route::post('/booking', [BookingController::class, 'store']);
+    Route::get('/booking/terkini', [BookingController::class, 'pasienActiveTracking']);
+    Route::get('/pasien/booking-aktif', [BookingController::class, 'pasienActiveTracking']);
     Route::get('/booking', [BookingController::class, 'index']);
     Route::post('/booking/{id}/cancel', [BookingController::class, 'batalkanBooking']);
     Route::get('/booking/transaksi/{id_transaksi}', [BookingController::class, 'checkStatus']);

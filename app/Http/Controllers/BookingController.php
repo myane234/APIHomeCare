@@ -105,6 +105,96 @@ class BookingController extends Controller
     }
 
     /**
+     * API Pasien: Menampilkan booking terkini/aktif beserta lokasi realtime nakes & estimasi perjalanan.
+     * GET /api/booking/terkini atau /api/pasien/booking-aktif
+     */
+    public function pasienActiveTracking(Request $request)
+    {
+        $user = $request->user();
+        $pasien = $user?->pasien;
+
+        if (!$pasien) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User pasien tidak ditemukan.',
+                'data' => null
+            ], 404);
+        }
+
+
+        $activeBooking = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi', 'bookingBhp.bhpItem'])
+            ->where('id_pasien', $pasien->id_pasien)
+            ->whereIn('status_booking', ['Pending', 'DiPerjalanan', 'Tindakan'])
+            ->orderByDesc('created_at')
+            ->first();
+
+
+        if (!$activeBooking) {
+            $activeBooking = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi', 'bookingBhp.bhpItem'])
+                ->where('id_pasien', $pasien->id_pasien)
+                ->orderByDesc('created_at')
+                ->first();
+        }
+
+        if (!$activeBooking) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Belum ada transaksi / booking pasien.',
+                'data' => null,
+            ]);
+        }
+
+        $nakes = $activeBooking->tenagaMedis;
+        $trackingData = null;
+
+        if ($nakes && $nakes->latitude && $nakes->longitude && $activeBooking->latitude_kunjungan && $activeBooking->longitude_kunjungan) {
+            $distanceKm = $this->calculateDistance(
+                (float) $nakes->latitude,
+                (float) $nakes->longitude,
+                (float) $activeBooking->latitude_kunjungan,
+                (float) $activeBooking->longitude_kunjungan
+            );
+
+
+            $estimasiMenit = max(5, (int) round(($distanceKm / 25) * 60));
+
+            $trackingData = [
+                'jarak_km' => $distanceKm,
+                'estimasi_menit_sampai' => $estimasiMenit,
+                'lokasi_nakes' => [
+                    'latitude' => (float) $nakes->latitude,
+                    'longitude' => (float) $nakes->longitude,
+                    'alamat' => $nakes->alamat_lengkap,
+                ],
+                'lokasi_kunjungan' => [
+                    'latitude' => (float) $activeBooking->latitude_kunjungan,
+                    'longitude' => (float) $activeBooking->longitude_kunjungan,
+                    'alamat' => $activeBooking->alamat_kunjungan,
+                ],
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Data booking & tracking nakes terkini',
+            'data' => [
+                'booking' => new BookingResource($activeBooking),
+                'tenaga_medis_tracking' => $nakes ? [
+                    'id_tenaga_medis' => $nakes->id_tenaga_medis,
+                    'nama_lengkap' => $nakes->nama_lengkap,
+                    'nama_panggilan' => $nakes->nama_panggilan,
+                    'jenis_tenaga_medis' => $nakes->jenis_tenaga_medis,
+                    'foto_profile' => $nakes->foto_profile,
+                    'no_telp' => $nakes->no_telp,
+                    'latitude' => $nakes->latitude ? (float) $nakes->latitude : null,
+                    'longitude' => $nakes->longitude ? (float) $nakes->longitude : null,
+                ] : null,
+                'tracking_info' => $trackingData,
+            ],
+        ]);
+    }
+
+    /**
      * API Admin: Menampilkan SELURUH booking dengan pagination.
      * 
      * Query Parameters:
