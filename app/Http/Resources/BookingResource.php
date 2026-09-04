@@ -56,13 +56,30 @@ class BookingResource extends JsonResource
                 'alamat_utama'  => $this->pasien?->alamat_utama,
             ]),
 
-            // ─── Layanan ─────────────────────────────────────────────────
+            // ─── Layanan Utama (backward compat) ─────────────────────────
             'layanan'           => $this->when($this->relationLoaded('layanan') && $this->layanan, [
                 'id_layanan'    => $this->layanan?->id_layanan,
                 'nama_layanan'  => $this->layanan?->nama_layanan,
                 'tipe_layanan'  => $this->layanan?->tipe_layanan,
                 'foto_layanan'  => $this->layanan?->foto_layanan,
             ]),
+
+            // ─── Semua Layanan dalam Booking (multi-layanan) ─────────────
+            // Tersedia jika layananItems di-eager load.
+            // Jika booking lama (single layanan), array ini kosong — gunakan 'layanan' di atas.
+            'layanan_items'     => $this->when(
+                $this->relationLoaded('layananItems'),
+                fn() => $this->layananItems->map(fn($item) => [
+                    'id_layanan'        => $item->id_layanan,
+                    'nama_layanan'      => $item->layanan?->nama_layanan,
+                    'tipe_layanan'      => $item->layanan?->tipe_layanan,
+                    'foto_layanan'      => $item->layanan?->foto_layanan,
+                    'urutan'            => $item->urutan,
+                    'sl'                => (float) $item->sl,
+                    'sb'                => (float) $item->sb,
+                    'hak_nakes_layanan' => (float) $item->hak_nakes_layanan,
+                ])->values()
+            ),
 
             // ─── Tenaga Medis ────────────────────────────────────────────
             'tenaga_medis'      => $this->when($this->relationLoaded('tenagaMedis'), function () {

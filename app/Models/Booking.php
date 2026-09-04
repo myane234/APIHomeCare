@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+
 class Booking extends Model
 {
     use HasFactory;
@@ -50,6 +51,16 @@ class Booking extends Model
     public function transaksi()
     {
         return $this->hasOne(Transaksi::class, 'id_booking', 'id_booking');
+    }
+
+    /**
+     * Detail per-layanan dalam booking (multi-layanan).
+     * Diurutkan berdasarkan kolom `urutan` (layanan utama = 1).
+     */
+    public function layananItems()
+    {
+        return $this->hasMany(BookingLayanan::class, 'id_booking', 'id_booking')
+                    ->orderBy('urutan');
     }
 
     /**

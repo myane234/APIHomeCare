@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\BookingResource;
 use App\Models\Booking;
+use App\Models\BookingLayanan;
 use App\Models\MasterLayanan;
 use App\Models\TenagaMedis;
 use App\Models\Transaksi;
@@ -62,7 +63,7 @@ class BookingController extends Controller
         $sortBy = $request->input('sort_by', 'created_at');
         $sortOrder = $request->input('sort_order', 'desc');
 
-        $query = Booking::with(['pasien', 'layanan', 'tenagaMedis', 'transaksi'])
+        $query = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi'])
             ->where('id_pasien', $pasien->id_pasien);
 
         // Filter by status
@@ -139,7 +140,7 @@ class BookingController extends Controller
         $sortBy = $request->input('sort_by', 'created_at');
         $sortOrder = $request->input('sort_order', 'desc');
 
-        $query = Booking::with(['pasien', 'layanan', 'tenagaMedis', 'transaksi']);
+        $query = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi']);
 
         // Filter by status
         if ($request->filled('status_booking')) {
@@ -394,19 +395,43 @@ class BookingController extends Controller
             return $this->charge($request);
         }
 
+        // ── Validasi input ────────────────────────────────────────────────────
+        // Mendukung dua format:
+        //   (a) layanan_ids: [1, 2, 3]   ← format multi-layanan baru
+        //   (b) id_layanan: 1             ← format lama (single), untuk backward compat
         $validate = $request->validate([
-            'id_layanan' => 'required',
-            'id_kategori_tarif' => 'nullable|exists:master_kategori_tarif,id_kategori_tarif',
-            'id_tenaga_medis' => 'nullable',
-            'tanggal_kunjungan' => 'required|date',
-            'jam_kunjungan' => 'required',
-            'alamat_kunjungan' => 'nullable|string',
-            'latitude_kunjungan' => 'nullable|numeric',
-            'longitude_kunjungan' => 'nullable|numeric',
-            'catatan' => 'nullable|string',
-            'id_promo' => 'nullable',
-            'id_kota' => 'nullable',
+            'layanan_ids'             => 'nullable|array|min:1',
+            'layanan_ids.*'           => 'integer|exists:master_layanan,id_layanan',
+            'id_layanan'              => 'nullable',          // backward compat
+            'id_kategori_tarif'       => 'nullable|exists:master_kategori_tarif,id_kategori_tarif',
+            'id_tenaga_medis'         => 'nullable',
+            'tanggal_kunjungan'       => 'required|date',
+            'jam_kunjungan'           => 'required',
+            'alamat_kunjungan'        => 'nullable|string',
+            'latitude_kunjungan'      => 'nullable|numeric',
+            'longitude_kunjungan'     => 'nullable|numeric',
+            'catatan'                 => 'nullable|string',
+            'id_promo'                => 'nullable',
+            'id_kota'                 => 'nullable',
         ]);
+
+        // ── Normalisasi: susun daftar layanan_ids ─────────────────────────────
+        if (!empty($validate['layanan_ids'])) {
+            $layananIds = array_values(array_unique(array_map('intval', $validate['layanan_ids'])));
+        } else {
+            // Fallback ke id_layanan tunggal (backward compat)
+            $rawId = is_array($validate['id_layanan'] ?? null)
+                ? ($validate['id_layanan'][0] ?? null)
+                : ($validate['id_layanan'] ?? null);
+
+            if (!$rawId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Layanan wajib dipilih. Gunakan layanan_ids[] atau id_layanan.',
+                ], 422);
+            }
+            $layananIds = [(int) $rawId];
+        }
 
         $user = $request->user();
         $pasien = $user?->pasien;
@@ -426,9 +451,20 @@ class BookingController extends Controller
             ], 422);
         }
 
-        $idLayanan = is_array($validate['id_layanan']) ? ($validate['id_layanan'][0] ?? null) : $validate['id_layanan'];
-        $layanan = MasterLayanan::with(['masterTarif', 'bhpItems'])->findOrFail($idLayanan);
+        // ── Load semua layanan yang dipesan ──────────────────────────────────
+        $semuaLayanan = MasterLayanan::with(['masterTarif', 'bhpItems'])
+            ->whereIn('id_layanan', $layananIds)
+            ->get()
+            ->keyBy('id_layanan');
 
+        if ($semuaLayanan->count() !== count($layananIds)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Salah satu layanan tidak ditemukan.',
+            ], 422);
+        }
+
+        // ── Resolve koordinat pasien ──────────────────────────────────────────
         $patientCoordinates = $this->resolveCoordinates(
             $validate['latitude_kunjungan'] ?? null,
             $validate['longitude_kunjungan'] ?? null,
@@ -444,17 +480,21 @@ class BookingController extends Controller
 
         $patientLat = $patientCoordinates['latitude'];
         $patientLng = $patientCoordinates['longitude'];
-
-        // Simpan koordinat hasil geocoding agar request berikutnya tidak perlu mencari ulang.
-        $validate['latitude_kunjungan'] = $patientLat;
+        $validate['latitude_kunjungan']  = $patientLat;
         $validate['longitude_kunjungan'] = $patientLng;
 
+        // ── Resolve tenaga medis & hitung jarak ──────────────────────────────
         $tenagaMedisId = $validate['id_tenaga_medis'] ?? null;
         if (is_array($tenagaMedisId)) {
             $tenagaMedisId = $tenagaMedisId[0] ?? null;
         }
 
-        $distance = 0.0;
+        $distance    = 0.0;
+        $idKota      = $request->input('id_kota');
+        $idKategoriTarif = $request->input('id_kategori_tarif');
+
+        // Layanan pertama dipakai untuk lookup nakes terdekat (jika tidak ada preferensi)
+        $idLayananPrimary = $layananIds[0];
 
         if ($tenagaMedisId) {
             $tenagaMedis = TenagaMedis::where('status', 'approved')->find($tenagaMedisId);
@@ -465,236 +505,336 @@ class BookingController extends Controller
                 ], 422);
             }
             if ($tenagaMedis->latitude && $tenagaMedis->longitude) {
-                $distance = $this->calculateDistance($patientLat, $patientLng, (float)$tenagaMedis->latitude, (float)$tenagaMedis->longitude);
+                $distance = $this->calculateDistance(
+                    $patientLat, $patientLng,
+                    (float)$tenagaMedis->latitude, (float)$tenagaMedis->longitude
+                );
             }
         } else {
-            $nearestList = $this->findNearestNakes($patientLat, $patientLng, $idLayanan);
+            $nearestList  = $this->findNearestNakes($patientLat, $patientLng, $idLayananPrimary);
             $nearestNakes = $nearestList->first();
-
             if ($nearestNakes) {
                 $distance = (float) ($nearestNakes->distance_km ?? 0.0);
                 if ($distance > 1000) $distance = 0.0;
-            } else {
-                $distance = 0.0;
             }
-            $tenagaMedisId = null; // Biarkan null agar broadcast ke antrean Nakes
+            $tenagaMedisId = null;
         }
 
-        // Load Master Tarif
-        $idKota = $request->input('id_kota');
-        $idKategoriTarif = $request->input('id_kategori_tarif');
+        // ── Helper: cari master tarif untuk satu layanan ─────────────────────
+        $cariMasterTarif = function (int $idLayananTarget) use ($idKota, $idKategoriTarif): ?MasterTarif {
+            $matchLayanan = function ($q) use ($idLayananTarget) {
+                $q->where('id_layanan', $idLayananTarget)
+                  ->orWhereHas('layananTermasuk', function ($q2) use ($idLayananTarget) {
+                      $q2->where('master_layanan.id_layanan', $idLayananTarget);
+                  });
+            };
 
-        $idLayananTarget = $layanan->id_layanan;
-        $matchLayanan = function($q) use ($idLayananTarget) {
-            $q->where('id_layanan', $idLayananTarget)
-              ->orWhereHas('layananTermasuk', function($q2) use ($idLayananTarget) {
-                  $q2->where('master_layanan.id_layanan', $idLayananTarget);
-              });
+            $query = MasterTarif::with(['komponenTarif', 'kategoriTarif', 'layananTermasuk'])
+                ->where('is_active', true)
+                ->where($matchLayanan);
+
+            if ($idKategoriTarif) {
+                $query->where('id_kategori_tarif', $idKategoriTarif);
+            }
+
+            // Coba kota dulu, lalu fallback nasional
+            $tarif = (clone $query)->when($idKota, fn($q) => $q->where('id_kota', $idKota))->first();
+            if (!$tarif) {
+                $tarif = (clone $query)->whereNull('id_kota')->first();
+            }
+            if (!$tarif) {
+                $tarif = MasterTarif::with(['komponenTarif', 'kategoriTarif'])
+                    ->where('is_active', true)
+                    ->where($matchLayanan)
+                    ->first();
+            }
+            return $tarif;
         };
 
-        $masterTarifQuery = MasterTarif::with(['komponenTarif', 'kategoriTarif', 'layananTermasuk'])
-            ->where('is_active', true)
-            ->where($matchLayanan);
+        // ── Kalkulasi per-layanan ─────────────────────────────────────────────
+        $kategoriTarifObj = $idKategoriTarif
+            ? MasterKategoriTarif::find($idKategoriTarif)
+            : null;
 
-        if ($idKategoriTarif) {
-            $masterTarifQuery->where('id_kategori_tarif', $idKategoriTarif);
-        }
+        // Akan diisi dari master tarif layanan pertama (untuk komponen admin/PPN)
+        $masterTarifPrimary = null;
 
-        $masterTarif = (clone $masterTarifQuery)
-            ->when($idKota, fn($q) => $q->where('id_kota', $idKota))
-            ->first();
+        // Akumulator total
+        $totalSl          = 0.0;
+        $totalSb          = 0.0;
+        $totalHppBhp      = 0.0;
+        $totalFeeNakesBase = 0.0;  // tanpa transport
 
-        if (!$masterTarif) {
-            $masterTarif = (clone $masterTarifQuery)
-                ->whereNull('id_kota')
-                ->first();
-        }
+        // Array per-layanan untuk disimpan ke booking_layanan
+        $perLayananData = [];
 
-        if (!$masterTarif) {
-            $masterTarif = MasterTarif::with(['komponenTarif', 'kategoriTarif'])
-                ->where('is_active', true)
-                ->where($matchLayanan)
-                ->first();
-        }
+        foreach ($layananIds as $urutan => $idLyn) {
+            /** @var MasterLayanan $layanan */
+            $layanan      = $semuaLayanan->get($idLyn);
+            $masterTarif  = $cariMasterTarif($idLyn);
 
-        // Kalkulasi Tarif
-        $tarifLayananJasaMedis = (float) $layanan->harga;
-        $kategoriTarifObj = $idKategoriTarif 
-            ? MasterKategoriTarif::find($idKategoriTarif) 
-            : ($masterTarif?->kategoriTarif ?? MasterKategoriTarif::where('is_default', true)->first());
+            // Simpan master tarif layanan pertama untuk komponen global nanti
+            if ($urutan === 0) {
+                $masterTarifPrimary = $masterTarif;
 
-        if ($kategoriTarifObj && (float)$kategoriTarifObj->biaya_tambahan > 0) {
-            $tarifLayananJasaMedis += (float) $kategoriTarifObj->biaya_tambahan;
-        }
-
-        $tarifBahanHabisPakai = 0.0;
-        $hppBhp = 0.0;
-        foreach ($layanan->bhpItems as $bhpItem) {
-            $qty = (int) ($bhpItem->pivot->qty_default ?? 1);
-            $hargaJual = (float) $bhpItem->harga_jual;
-            $hargaModal = (float) $bhpItem->harga_modal;
-            $tarifBahanHabisPakai += $hargaJual * $qty;
-            $hppBhp += $hargaModal * $qty;
-        }
-
-        $tarifTransportasiFinal = 0.0;
-        if (!$layanan->include_transport) {
-            $transportMaster = null;
-            if ($idKota) {
-                $transportMaster = MasterTarifTransport::where('id_kota', $idKota)->first();
+                // Jika kategori tarif belum ada dari request, ambil dari master tarif pertama
+                if (!$kategoriTarifObj) {
+                    $kategoriTarifObj = $masterTarif?->kategoriTarif
+                        ?? MasterKategoriTarif::where('is_default', true)->first();
+                }
             }
+
+            // SL: harga layanan + biaya tambahan kategori tarif (berlaku sama untuk semua layanan)
+            $sl = (float) $layanan->harga;
+            if ($kategoriTarifObj && (float)$kategoriTarifObj->biaya_tambahan > 0) {
+                $sl += (float) $kategoriTarifObj->biaya_tambahan;
+            }
+
+            // SB & HPP BHP layanan ini
+            $sb     = 0.0;
+            $hppBhp = 0.0;
+            foreach ($layanan->bhpItems as $bhpItem) {
+                $qty        = (int) ($bhpItem->pivot->qty_default ?? 1);
+                $sb         += (float) $bhpItem->harga_jual  * $qty;
+                $hppBhp     += (float) $bhpItem->harga_modal * $qty;
+            }
+
+            // Fee Nakes layanan ini (tanpa transport)
+            $feeType = $masterTarif?->fee_nakes_tipe ?? 'persen';
+            $feeVal  = (float) ($masterTarif?->fee_nakes_nilai ?? 80.0);
+
+            if ($feeType === 'nominal') {
+                $feeNakesLyn = (float) ($masterTarif?->fee_nakes_nominal > 0
+                    ? $masterTarif->fee_nakes_nominal
+                    : $feeVal);
+            } else {
+                $feeNakesLyn = $sl * ($feeVal / 100);
+            }
+
+            $totalSl           += $sl;
+            $totalSb           += $sb;
+            $totalHppBhp       += $hppBhp;
+            $totalFeeNakesBase += $feeNakesLyn;
+
+            $perLayananData[] = [
+                'id_layanan'         => $idLyn,
+                'urutan'             => $urutan + 1,
+                'sl'                 => round($sl,      2),
+                'sb'                 => round($sb,      2),
+                'hpp_bhp'            => round($hppBhp,  2),
+                'hak_nakes_layanan'  => round($feeNakesLyn, 2),
+            ];
+        }
+
+        // ── Transport (dihitung sekali — satu kunjungan) ─────────────────────
+        // Transport tidak dikenakan jika SEMUA layanan include transport
+        $semuaIncludeTransport = $semuaLayanan->every(fn($l) => (bool) $l->include_transport);
+        $tarifTransportasiFinal = 0.0;
+
+        if (!$semuaIncludeTransport) {
+            $transportMaster = $idKota
+                ? MasterTarifTransport::where('id_kota', $idKota)->first()
+                : null;
+
             if ($transportMaster) {
-                $tarifTransportasiFinal = (float)$transportMaster->tarif_awal + ($distance * (float)$transportMaster->tarif_per_kilometer);
+                $tarifTransportasiFinal = (float)$transportMaster->tarif_awal
+                    + ($distance * (float)$transportMaster->tarif_per_kilometer);
             } else {
                 $tarifTransportasiFinal = $distance > 0 ? (10000.0 + ($distance * 3000.0)) : 0.0;
             }
         }
 
+        // ── Komponen Tarif global (admin/PPN) — dari master tarif layanan pertama ──
         $biayaAdministrasiAplikasi = 0.0;
-        $persentasePpnPajak = 0.0;
-        $nominalPpnPajak = 0.0;
+        $persentasePpnPajak        = 0.0;
+        $nominalPpnPajak           = 0.0;
 
-        $komponenList = ($masterTarif && $masterTarif->komponenTarif->isNotEmpty())
-            ? $masterTarif->komponenTarif
+        $komponenList = ($masterTarifPrimary && $masterTarifPrimary->komponenTarif->isNotEmpty())
+            ? $masterTarifPrimary->komponenTarif
             : \App\Models\MasterKomponenBiaya::where('is_active', true)->get();
 
-        if ($komponenList) {
-            foreach ($komponenList as $komponen) {
-                if (!$komponen->is_active) continue;
+        foreach ($komponenList as $komponen) {
+            if (!$komponen->is_active) continue;
 
-                if (in_array($komponen->tipe_komponen, ['admin_aplikasi', 'lainnya'])) {
-                    if ($komponen->jenis_nilai === 'nominal') {
-                        $biayaAdministrasiAplikasi += (float) $komponen->nilai;
-                    } elseif ($komponen->jenis_nilai === 'persen') {
-                        $biayaAdministrasiAplikasi += $tarifLayananJasaMedis * ((float)$komponen->nilai / 100);
-                    }
-                } elseif ($komponen->tipe_komponen === 'pajak') {
-                    if ($komponen->jenis_nilai === 'persen') {
-                        $persentasePpnPajak += (float) $komponen->nilai;
-                    } elseif ($komponen->jenis_nilai === 'nominal') {
-                        $nominalPpnPajak += (float) $komponen->nilai;
-                    }
+            if (in_array($komponen->tipe_komponen, ['admin_aplikasi', 'lainnya'])) {
+                if ($komponen->jenis_nilai === 'nominal') {
+                    $biayaAdministrasiAplikasi += (float) $komponen->nilai;
+                } elseif ($komponen->jenis_nilai === 'persen') {
+                    // Persentase dihitung dari total SL seluruh layanan
+                    $biayaAdministrasiAplikasi += $totalSl * ((float)$komponen->nilai / 100);
+                }
+            } elseif ($komponen->tipe_komponen === 'pajak') {
+                if ($komponen->jenis_nilai === 'persen') {
+                    $persentasePpnPajak += (float) $komponen->nilai;
+                } elseif ($komponen->jenis_nilai === 'nominal') {
+                    $nominalPpnPajak += (float) $komponen->nilai;
                 }
             }
         }
 
         if ($persentasePpnPajak > 0 && $nominalPpnPajak == 0) {
-            $nominalPpnPajak = ($tarifLayananJasaMedis + $tarifBahanHabisPakai + $tarifTransportasiFinal) * ($persentasePpnPajak / 100);
+            $nominalPpnPajak = ($totalSl + $totalSb + $tarifTransportasiFinal) * ($persentasePpnPajak / 100);
         }
 
-        $feeType = $masterTarif?->fee_nakes_tipe ?? 'persen';
-        $feeVal = (float) ($masterTarif?->fee_nakes_nilai ?? 80.0);
+        // ── Hak Nakes total = sum fee per layanan + transport ────────────────
+        $nominalHakNakes = $totalFeeNakesBase + $tarifTransportasiFinal;
 
-        if ($feeType === 'nominal') {
-            $feeNakesNominalBase = (float) ($masterTarif?->fee_nakes_nominal > 0 ? $masterTarif->fee_nakes_nominal : $feeVal);
-            $persentaseBagianNakes = $tarifLayananJasaMedis > 0 ? min(100, ($feeNakesNominalBase / $tarifLayananJasaMedis) * 100) : 80.0;
-        } else {
-            $persentaseBagianNakes = $feeVal;
-            $feeNakesNominalBase = $tarifLayananJasaMedis * ($persentaseBagianNakes / 100);
-        }
+        // Persentase rata-rata fee nakes (untuk disimpan di transaksi, informatif)
+        $persentaseBagianNakes = $totalSl > 0
+            ? min(100, ($totalFeeNakesBase / $totalSl) * 100)
+            : 80.0;
 
-        $nominalHakNakes = $feeNakesNominalBase + $tarifTransportasiFinal;
-
-        // Rounding ke IDR
-        $tarifLayananJasaMedis = (int) round($tarifLayananJasaMedis);
-        $tarifBahanHabisPakai = (int) round($tarifBahanHabisPakai);
+        // ── Rounding ke IDR ──────────────────────────────────────────────────
+        $tarifLayananJasaMedis  = (int) round($totalSl);
+        $tarifBahanHabisPakai   = (int) round($totalSb);
         $tarifTransportasiFinal = (int) round($tarifTransportasiFinal);
         $biayaAdministrasiAplikasi = (int) round($biayaAdministrasiAplikasi);
-        $nominalPpnPajak = (int) round($nominalPpnPajak);
-        $totalTagihanPasien = $tarifLayananJasaMedis + $tarifBahanHabisPakai + $tarifTransportasiFinal + $biayaAdministrasiAplikasi + $nominalPpnPajak;
+        $nominalPpnPajak        = (int) round($nominalPpnPajak);
+        $totalHppBhp            = round($totalHppBhp, 2);
+        $nominalHakNakes        = round($nominalHakNakes, 2);
+
+        $totalTagihanPasien = $tarifLayananJasaMedis + $tarifBahanHabisPakai
+            + $tarifTransportasiFinal + $biayaAdministrasiAplikasi + $nominalPpnPajak;
 
         $feeMidtrans = (float) env('FEE_MIDTRANS', 4000.0);
-        $estimasiProfitHomeCare = ($tarifLayananJasaMedis - $feeNakesNominalBase) + ($tarifBahanHabisPakai - $hppBhp) + $biayaAdministrasiAplikasi - $feeMidtrans;
+        $estimasiProfitHomeCare = ($tarifLayananJasaMedis - $totalFeeNakesBase)
+            + ($tarifBahanHabisPakai - $totalHppBhp)
+            + $biayaAdministrasiAplikasi - $feeMidtrans;
 
+        // ── Simpan ke DB (dalam lock + transaksi) ────────────────────────────
+        try {
+            return Cache::lock('create_booking_lock', 10)->block(5, function ()
+                use (
+                    $validate, $pasien, $layananIds, $semuaLayanan, $perLayananData,
+                    $tenagaMedisId, $alamatKunjungan,
+                    $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai,
+                    $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak,
+                    $persentasePpnPajak, $persentaseBagianNakes,
+                    $feeMidtrans, $totalHppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance
+                ) {
+                return DB::transaction(function ()
+                    use (
+                        $validate, $pasien, $layananIds, $semuaLayanan, $perLayananData,
+                        $tenagaMedisId, $alamatKunjungan,
+                        $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai,
+                        $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak,
+                        $persentasePpnPajak, $persentaseBagianNakes,
+                        $feeMidtrans, $totalHppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance
+                    ) {
 
-       try {
-    return Cache::lock('create_booking_lock', 10)->block(5, function () use ($validate, $pasien, $layanan, $tenagaMedisId, $alamatKunjungan, $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $hppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance) {
+                    // 1. Generate booking_code (Format: B-YYMMDDXXXXXXX)
+                    $prefixBooking = 'B-' . date('ymd');
+                    $lastBookingToday = Booking::where('booking_code', 'LIKE', $prefixBooking . '%')
+                        ->orderBy('id_booking', 'desc')
+                        ->lockForUpdate()
+                        ->first();
 
-        return DB::transaction(function () use ($validate, $pasien, $layanan, $tenagaMedisId, $alamatKunjungan, $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $hppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance) {
+                    $nextSequence = $lastBookingToday
+                        ? ((int) substr($lastBookingToday->booking_code, -7)) + 1
+                        : 1;
 
-            // 1. Generate booking_code secara aman (Format: B-YYMMDDXXXXXXX)
-            $prefixBooking = 'B-' . date('ymd');
+                    $bookingCode = $prefixBooking . str_pad($nextSequence, 7, '0', STR_PAD_LEFT);
 
-            $lastBookingToday = Booking::where('booking_code', 'LIKE', $prefixBooking . '%')
-                ->orderBy('id_booking', 'desc')
-                ->lockForUpdate()
-                ->first();
+                    // 2. Generate medical_record_number
+                    $medicalRecordNumber = Booking::generateMedicalRecordNumber();
 
-            if ($lastBookingToday && $lastBookingToday->booking_code) {
-                $lastSeq = (int) substr($lastBookingToday->booking_code, -7);
-                $nextSequence = $lastSeq + 1;
-            } else {
-                $nextSequence = 1;
-            }
+                    // 3. Simpan Booking — id_layanan diisi layanan pertama (backward compat)
+                    $booking = Booking::create([
+                        'booking_code'          => $bookingCode,
+                        'medical_record_number' => $medicalRecordNumber,
+                        'id_pasien'             => $pasien->id_pasien,
+                        'id_layanan'            => $layananIds[0],   // primary layanan
+                        'id_tenaga_medis'       => $tenagaMedisId,
+                        'tanggal_kunjungan'     => $validate['tanggal_kunjungan'],
+                        'jam_kunjungan'         => $validate['jam_kunjungan'],
+                        'alamat_kunjungan'      => $alamatKunjungan,
+                        'latitude_kunjungan'    => $validate['latitude_kunjungan'],
+                        'longitude_kunjungan'   => $validate['longitude_kunjungan'],
+                        'status_booking'        => 'Pending',
+                    ]);
 
-            $bookingCode = $prefixBooking . str_pad($nextSequence, 7, '0', STR_PAD_LEFT);
+                    // 4. Simpan detail per-layanan ke booking_layanan
+                    foreach ($perLayananData as $item) {
+                        BookingLayanan::create([
+                            'id_booking'         => $booking->id_booking,
+                            'id_layanan'         => $item['id_layanan'],
+                            'urutan'             => $item['urutan'],
+                            'sl'                 => $item['sl'],
+                            'sb'                 => $item['sb'],
+                            'hpp_bhp'            => $item['hpp_bhp'],
+                            'hak_nakes_layanan'  => $item['hak_nakes_layanan'],
+                        ]);
+                    }
 
-            // 2. Generate medical_record_number secara aman
-            $medicalRecordNumber = Booking::generateMedicalRecordNumber();
+                    // 5. Simpan Transaksi
+                    $orderId = 'BOOKING-' . $booking->id_booking . '-' . time();
 
-            // 3. Simpan data Booking
-            $booking = Booking::create([
-                'booking_code' => $bookingCode,
-                'medical_record_number' => $medicalRecordNumber,
-                'id_pasien' => $pasien->id_pasien,
-                'id_layanan' => $layanan->id_layanan,
-                'id_tenaga_medis' => $tenagaMedisId,
-                'tanggal_kunjungan' => $validate['tanggal_kunjungan'],
-                'jam_kunjungan' => $validate['jam_kunjungan'],
-                'alamat_kunjungan' => $alamatKunjungan,
-                'latitude_kunjungan' => $validate['latitude_kunjungan'],
-                'longitude_kunjungan' => $validate['longitude_kunjungan'],
-                'status_booking' => 'Pending',
-            ]);
+                    Transaksi::create([
+                        'id_booking'        => $booking->id_booking,
+                        'midtrans_order_id' => $orderId,
+                        'jumlah_total'      => $totalTagihanPasien,
+                        'metode_pembayaran' => 'Pending',
+                        'status_transaksi'  => 'Belum Bayar',
+                        'sl'                => $tarifLayananJasaMedis,
+                        'sb'                => $tarifBahanHabisPakai,
+                        'st'                => $tarifTransportasiFinal,
+                        'ba'                => $biayaAdministrasiAplikasi,
+                        'ppn'               => $nominalPpnPajak,
+                        'persen_ppn'        => $persentasePpnPajak,
+                        'persen_fee_nakes'  => $persentaseBagianNakes,
+                        'fee_midtrans'      => $feeMidtrans,
+                        'hpp_bhp'           => $totalHppBhp,
+                        'hak_nakes'         => $nominalHakNakes,
+                        'profit_hc'         => $estimasiProfitHomeCare,
+                    ]);
 
-            // 4. Simpan data Transaksi
-            $orderId = 'BOOKING-' . $booking->id_booking . '-' . time();
+                    // 6. Bangun info layanan untuk response
+                    $layananResponse = array_map(function ($item) use ($semuaLayanan) {
+                        $l = $semuaLayanan->get($item['id_layanan']);
+                        return [
+                            'id_layanan'  => $item['id_layanan'],
+                            'nama_layanan'=> $l?->nama_layanan,
+                            'sl'          => (int) round($item['sl']),
+                            'sb'          => (int) round($item['sb']),
+                        ];
+                    }, $perLayananData);
 
-            $transaction = Transaksi::create([
-                'id_booking' => $booking->id_booking,
-                'midtrans_order_id' => $orderId,
-                'jumlah_total' => $totalTagihanPasien,
-                'metode_pembayaran' => 'Pending',
-                'status_transaksi' => 'Belum Bayar',
-                'sl' => $tarifLayananJasaMedis,
-                'sb' => $tarifBahanHabisPakai,
-                'st' => $tarifTransportasiFinal,
-                'ba' => $biayaAdministrasiAplikasi,
-                'ppn' => $nominalPpnPajak,
-                'persen_ppn' => $persentasePpnPajak,
-                'persen_fee_nakes' => $persentaseBagianNakes,
-                'fee_midtrans' => $feeMidtrans,
-                'hpp_bhp' => $hppBhp,
-                'hak_nakes' => $nominalHakNakes,
-                'profit_hc' => $estimasiProfitHomeCare,
-            ]);
-
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Booking berhasil dibuat. Silakan lanjutkan ke pemilihan metode pembayaran.',
+                        'data'    => [
+                            'id_booking'            => $booking->id_booking,
+                            'booking_code'          => $booking->booking_code,
+                            'medical_record_number' => $booking->medical_record_number,
+                            'order_id'              => $orderId,
+                            'layanan'               => $layananResponse,
+                            'rincian_biaya'         => [
+                                'total_sl'  => $tarifLayananJasaMedis,
+                                'total_sb'  => $tarifBahanHabisPakai,
+                                'st'        => $tarifTransportasiFinal,
+                                'ba'        => $biayaAdministrasiAplikasi,
+                                'ppn'       => $nominalPpnPajak,
+                            ],
+                            'jumlah_total'  => $totalTagihanPasien,
+                            'distance_km'   => round($distance, 2),
+                        ],
+                    ], 201);
+                });
+            });
+        } catch (LockTimeoutException $e) {
             return response()->json([
-                'success' => true,
-                'message' => 'Booking berhasil dibuat. Silakan lanjutkan ke pemilihan metode pembayaran.',
-                'data' => [
-                    'id_booking' => $booking->id_booking,
-                    'booking_code' => $booking->booking_code,
-                    'medical_record_number' => $booking->medical_record_number,
-                    'order_id' => $orderId,
-                    'jumlah_total' => $totalTagihanPasien,
-                    'distance_km' => round($distance, 2),
-                ]
-            ], 201);
-        });
-    });
-} catch (LockTimeoutException $e) {
-    return response()->json([
-        'success' => false,
-        'message' => 'Server sedang sibuk memproses booking lain. Silakan coba beberapa detik lagi.',
-    ], 429);
-} catch (\Throwable $e) {
-    return response()->json([
-        'success' => false,
-        'message' => 'Gagal membuat booking: ' . $e->getMessage(),
-    ], 500);
-}
+                'success' => false,
+                'message' => 'Server sedang sibuk memproses booking lain. Silakan coba beberapa detik lagi.',
+            ], 429);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal membuat booking: ' . $e->getMessage(),
+            ], 500);
+        }
     }
+
+
 
     /**
      * Step 2: API Direct Midtrans Charge (Eksekusi Pembayaran via Core API)
@@ -813,7 +953,7 @@ class BookingController extends Controller
      */
     public function show($id)
     {
-        $booking = Booking::with(['pasien', 'layanan', 'tenagaMedis', 'transaksi'])->find($id);
+        $booking = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi'])->find($id);
 
         if (!$booking) {
             return response()->json([
@@ -931,13 +1071,30 @@ class BookingController extends Controller
      */
     public function laporan($id)
     {
-        $booking = Booking::with(['pasien', 'layanan', 'tenagaMedis', 'transaksi'])->find($id);
+        $booking = Booking::with([
+            'pasien',
+            'layanan',
+            'tenagaMedis',
+            'transaksi',
+            'layananItems.layanan',   // ← multi-layanan detail
+        ])->find($id);
 
         if (!$booking) {
             return response()->json(['success' => false, 'message' => 'Booking tidak ditemukan.'], 404);
         }
 
         $t = $booking->transaksi;
+
+        // Rincian per-layanan (hanya ada jika booking multi-layanan)
+        $rincianPerLayanan = $booking->layananItems->map(fn($item) => [
+            'nama_layanan'      => $item->layanan?->nama_layanan,
+            'urutan'            => $item->urutan,
+            'sl'                => (float) $item->sl,
+            'sl_format'         => 'Rp ' . number_format((float)$item->sl, 0, ',', '.'),
+            'sb'                => (float) $item->sb,
+            'sb_format'         => 'Rp ' . number_format((float)$item->sb, 0, ',', '.'),
+            'hak_nakes_layanan' => (float) $item->hak_nakes_layanan,
+        ])->values()->all();
 
         return response()->json([
             'success'   => true,
@@ -961,14 +1118,18 @@ class BookingController extends Controller
                     'nama'          => $booking->tenagaMedis?->nama_lengkap,
                     'jenis'         => $booking->tenagaMedis?->jenis_tenaga_medis,
                 ],
-                'layanan'           => [
+                // Layanan utama (backward compat) + daftar semua layanan
+                'layanan'               => [
                     'nama'          => $booking->layanan?->nama_layanan,
                 ],
+                'layanan_items'         => $rincianPerLayanan,
+                'jumlah_layanan'        => count($rincianPerLayanan) ?: 1,
+                // Rincian biaya agregat (total semua layanan)
                 'rincian_biaya'     => $t ? [
-                    ['label' => 'Tarif Layanan (SL)',      'nilai' => (float)$t->sl,  'format' => 'Rp ' . number_format((float)$t->sl, 0, ',', '.')],
-                    ['label' => 'Bahan Habis Pakai (SB)',  'nilai' => (float)$t->sb,  'format' => 'Rp ' . number_format((float)$t->sb, 0, ',', '.')],
-                    ['label' => 'Biaya Transportasi (ST)', 'nilai' => (float)$t->st,  'format' => 'Rp ' . number_format((float)$t->st, 0, ',', '.')],
-                    ['label' => 'Biaya Admin Aplikasi',    'nilai' => (float)$t->ba,  'format' => 'Rp ' . number_format((float)$t->ba, 0, ',', '.')],
+                    ['label' => 'Total Tarif Layanan (SL)',   'nilai' => (float)$t->sl,  'format' => 'Rp ' . number_format((float)$t->sl, 0, ',', '.')],
+                    ['label' => 'Bahan Habis Pakai (SB)',     'nilai' => (float)$t->sb,  'format' => 'Rp ' . number_format((float)$t->sb, 0, ',', '.')],
+                    ['label' => 'Biaya Transportasi (ST)',    'nilai' => (float)$t->st,  'format' => 'Rp ' . number_format((float)$t->st, 0, ',', '.')],
+                    ['label' => 'Biaya Admin Aplikasi',       'nilai' => (float)$t->ba,  'format' => 'Rp ' . number_format((float)$t->ba, 0, ',', '.')],
                     ['label' => 'PPN (' . (float)$t->persen_ppn . '%)', 'nilai' => (float)$t->ppn, 'format' => 'Rp ' . number_format((float)$t->ppn, 0, ',', '.')],
                 ] : [],
                 'jumlah_total'          => $t ? (float)$t->jumlah_total : 0,
@@ -990,6 +1151,7 @@ class BookingController extends Controller
         ]);
     }
 
+
     /**
      * API Update Status Booking oleh Admin/Nakes
      */
@@ -999,7 +1161,7 @@ class BookingController extends Controller
             'status_booking' => 'required|string|in:Pending,DiPerjalanan,Tindakan,Selesai,Dibatalkan',
         ]);
 
-        $booking = Booking::with(['pasien', 'layanan', 'tenagaMedis', 'transaksi'])->find($id);
+        $booking = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi'])->find($id);
 
         if (!$booking) {
             return response()->json([
@@ -1023,7 +1185,12 @@ class BookingController extends Controller
      */
     public function checkStatus($idTransaksi)
     {
-        $transaksi = Transaksi::with(['booking.pasien', 'booking.layanan', 'booking.tenagaMedis'])->find($idTransaksi);
+        $transaksi = Transaksi::with([
+            'booking.pasien',
+            'booking.layanan',
+            'booking.layananItems.layanan',
+            'booking.tenagaMedis',
+        ])->find($idTransaksi);
 
         if (!$transaksi) {
             return response()->json([
@@ -1122,7 +1289,7 @@ class BookingController extends Controller
         $reasons = [];
         $distanceKm = 0.0;
 
-        $booking->loadMissing(['layanan.kategori', 'transaksi']);
+        $booking->loadMissing(['layanan.kategori', 'layananItems.layanan.kategori', 'transaksi']);
 
         if (!$booking->transaksi) {
             $reasons[] = 'Booking belum memiliki transaksi.';
@@ -1158,7 +1325,11 @@ class BookingController extends Controller
             $reasons[] = 'Booking tidak dalam status menunggu.';
         }
 
-        $layanan = $booking->layanan;
+        $layananItems = $booking->layananItems;
+        $layananList = $layananItems->isNotEmpty()
+            ? $layananItems->map(fn ($item) => $item->layanan)->filter()
+            : collect([$booking->layanan])->filter();
+
         $allowedKategoriIds = $nakes->kategoriLayanan()->pluck('kategori_layanans.id_kategori_layanan')->toArray();
         $operasional = \App\Models\OperasionalNakes::where('id_tenaga_medis', $nakes->id_tenaga_medis)
             ->where('status', 'approved')
@@ -1168,8 +1339,13 @@ class BookingController extends Controller
             $allowedKategoriIds = array_unique(array_merge($allowedKategoriIds, (array) ($operasional->kategori_layanan ?? [])));
         }
 
-        if ($layanan && $layanan->id_kategori_layanan && !in_array($layanan->id_kategori_layanan, $allowedKategoriIds)) {
-            $reasons[] = 'Kategori layanan tidak sesuai dengan spesialisasi nakes.';
+        $requiredKategoriIds = $layananList
+            ->pluck('id_kategori_layanan')
+            ->filter()
+            ->unique();
+
+        if ($requiredKategoriIds->diff($allowedKategoriIds)->isNotEmpty()) {
+            $reasons[] = 'Kategori salah satu layanan tidak sesuai dengan spesialisasi nakes.';
         }
 
         $bookingDate = $booking->tanggal_kunjungan ? Carbon::parse($booking->tanggal_kunjungan) : null;
@@ -1179,7 +1355,8 @@ class BookingController extends Controller
         if ($bookingDate && $bookingJam) {
             $dayName = $bookingDate->locale('id')->translatedFormat('l');
             $bookingStart = Carbon::parse($bookingDate->format('Y-m-d') . ' ' . $bookingJam);
-            $bookingEnd = $bookingStart->copy()->addMinutes((int) ($layanan->durasi_menit ?? 60));
+            $durasiMenit = max(1, (int) $layananList->sum(fn ($item) => $item->durasi_menit ?? 60));
+            $bookingEnd = $bookingStart->copy()->addMinutes($durasiMenit);
 
             foreach ($nakes->jadwalKerja as $jadwal) {
                 if (($jadwal->hari ?? null) === $dayName) {
@@ -1255,13 +1432,14 @@ class BookingController extends Controller
             ->whereDate('tanggal_kunjungan', $booking->tanggal_kunjungan)
             ->whereNotIn('status_booking', ['Selesai', 'Dibatalkan'])
             ->where('id_booking', '!=', $booking->id_booking)
-            ->with(['layanan'])
+            ->with(['layanan', 'layananItems.layanan'])
             ->get();
 
         $bookingStart = $booking->tanggal_kunjungan && $booking->jam_kunjungan
             ? Carbon::parse($booking->tanggal_kunjungan . ' ' . $booking->jam_kunjungan)
             : null;
-        $bookingEnd = $bookingStart ? $bookingStart->copy()->addMinutes((int) ($layanan->durasi_menit ?? 60)) : null;
+        $durasiMenit = max(1, (int) $layananList->sum(fn ($item) => $item->durasi_menit ?? 60));
+        $bookingEnd = $bookingStart ? $bookingStart->copy()->addMinutes($durasiMenit) : null;
 
         foreach ($bookingConflict as $conflict) {
             if (!$conflict->jam_kunjungan || !$bookingStart || !$bookingEnd) {
@@ -1269,7 +1447,12 @@ class BookingController extends Controller
             }
 
             $conflictStart = Carbon::parse($conflict->tanggal_kunjungan . ' ' . $conflict->jam_kunjungan);
-            $conflictEnd = $conflictStart->copy()->addMinutes((int) ($conflict->layanan?->durasi_menit ?? 60));
+            $conflictLayananItems = $conflict->layananItems;
+            $conflictLayananList = $conflictLayananItems->isNotEmpty()
+                ? $conflictLayananItems->map(fn ($item) => $item->layanan)->filter()
+                : collect([$conflict->layanan])->filter();
+            $conflictDuration = max(1, (int) $conflictLayananList->sum(fn ($item) => $item->durasi_menit ?? 60));
+            $conflictEnd = $conflictStart->copy()->addMinutes($conflictDuration);
 
             if ($bookingStart->lt($conflictEnd) && $conflictStart->lt($bookingEnd)) {
                 $reasons[] = 'Nakes sudah memiliki order pada waktu yang sama.';
@@ -1321,7 +1504,7 @@ class BookingController extends Controller
             ], 403);
         }
 
-        $bookings = Booking::with(['pasien', 'layanan.kategori', 'tenagaMedis', 'transaksi'])
+        $bookings = Booking::with(['pasien', 'layanan.kategori', 'layananItems.layanan.kategori', 'tenagaMedis', 'transaksi'])
             ->where('status_booking', 'Pending')
             ->whereHas('transaksi', function ($query) {
                 $query->whereRaw("LOWER(status_transaksi) IN ('lunas', 'sudah bayar', 'settlement', 'success')");
@@ -1372,7 +1555,7 @@ class BookingController extends Controller
             ], 403);
         }
 
-        $booking = Booking::with(['pasien', 'layanan.kategori', 'tenagaMedis', 'transaksi'])->find($id);
+        $booking = Booking::with(['pasien', 'layanan.kategori', 'layananItems.layanan.kategori', 'tenagaMedis', 'transaksi'])->find($id);
 
         if (!$booking) {
             return response()->json([
@@ -1437,7 +1620,7 @@ class BookingController extends Controller
             ], 404);
         }
 
-        $bookings = Booking::with(['pasien', 'layanan', 'transaksi'])
+        $bookings = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'transaksi'])
             ->where(function ($q) use ($nakes) {
                 $q->where('id_tenaga_medis', $nakes->id_tenaga_medis)
                   ->orWhereNull('id_tenaga_medis');
@@ -1475,7 +1658,7 @@ class BookingController extends Controller
             ], 403);
         }
 
-        $booking = Booking::with(['pasien', 'layanan.kategori', 'tenagaMedis', 'transaksi'])->find($id);
+        $booking = Booking::with(['pasien', 'layanan.kategori', 'layananItems.layanan.kategori', 'tenagaMedis', 'transaksi'])->find($id);
 
         if (!$booking) {
             return response()->json([
@@ -1560,7 +1743,12 @@ class BookingController extends Controller
                 );
 
                 $actualTransportCost = 0.0;
-                if (!$booking->layanan?->include_transport) {
+                $layananItems = $booking->layananItems;
+                $layananList = $layananItems->isNotEmpty()
+                    ? $layananItems->map(fn ($item) => $item->layanan)->filter()
+                    : collect([$booking->layanan])->filter();
+
+                if ($layananList->contains(fn ($layanan) => !$layanan->include_transport)) {
                     $idKota = $request->input('id_kota');
                     $transportMaster = $idKota ? MasterTarifTransport::where('id_kota', $idKota)->first() : null;
                     if ($transportMaster) {
@@ -1588,7 +1776,7 @@ class BookingController extends Controller
 
             DB::commit();
 
-            $booking->refresh()->load(['pasien', 'layanan', 'tenagaMedis', 'transaksi']);
+            $booking->refresh()->load(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi']);
 
             return response()->json([
                 'success' => true,
@@ -1623,7 +1811,7 @@ class BookingController extends Controller
             ], 403);
         }
 
-        $booking = Booking::with(['pasien', 'layanan', 'tenagaMedis', 'transaksi'])->find($id);
+        $booking = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi'])->find($id);
 
         if (!$booking) {
             return response()->json([
@@ -1711,7 +1899,7 @@ class BookingController extends Controller
             ], 403);
         }
 
-        $booking = Booking::with(['pasien', 'layanan', 'transaksi'])->find($id);
+        $booking = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'transaksi'])->find($id);
 
         if (!$booking) {
             return response()->json([
