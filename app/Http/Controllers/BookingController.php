@@ -484,29 +484,36 @@ class BookingController extends Controller
         $idKota = $request->input('id_kota');
         $idKategoriTarif = $request->input('id_kategori_tarif');
 
+        $idLayananTarget = $layanan->id_layanan;
+        $matchLayanan = function($q) use ($idLayananTarget) {
+            $q->where('id_layanan', $idLayananTarget)
+              ->orWhereHas('layananTermasuk', function($q2) use ($idLayananTarget) {
+                  $q2->where('master_layanan.id_layanan', $idLayananTarget);
+              });
+        };
+
         $masterTarifQuery = MasterTarif::with(['komponenTarif', 'kategoriTarif', 'layananTermasuk'])
-            ->where('is_active', true);
+            ->where('is_active', true)
+            ->where($matchLayanan);
 
         if ($idKategoriTarif) {
             $masterTarifQuery->where('id_kategori_tarif', $idKategoriTarif);
         }
 
         $masterTarif = (clone $masterTarifQuery)
-            ->where('id_layanan', $layanan->id_layanan)
             ->when($idKota, fn($q) => $q->where('id_kota', $idKota))
             ->first();
 
         if (!$masterTarif) {
             $masterTarif = (clone $masterTarifQuery)
-                ->where('id_layanan', $layanan->id_layanan)
                 ->whereNull('id_kota')
                 ->first();
         }
 
         if (!$masterTarif) {
             $masterTarif = MasterTarif::with(['komponenTarif', 'kategoriTarif'])
-                ->where('id_layanan', $layanan->id_layanan)
                 ->where('is_active', true)
+                ->where($matchLayanan)
                 ->first();
         }
 
@@ -547,8 +554,12 @@ class BookingController extends Controller
         $persentasePpnPajak = 0.0;
         $nominalPpnPajak = 0.0;
 
-        if ($masterTarif && $masterTarif->komponenTarif) {
-            foreach ($masterTarif->komponenTarif as $komponen) {
+        $komponenList = ($masterTarif && $masterTarif->komponenTarif->isNotEmpty())
+            ? $masterTarif->komponenTarif
+            : \App\Models\MasterKomponenBiaya::where('is_active', true)->get();
+
+        if ($komponenList) {
+            foreach ($komponenList as $komponen) {
                 if (!$komponen->is_active) continue;
 
                 if (in_array($komponen->tipe_komponen, ['admin_aplikasi', 'lainnya'])) {
