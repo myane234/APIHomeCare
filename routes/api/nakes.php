@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TenagaMedisController;
 use App\Http\Controllers\BookingController;
+use App\Http\Controllers\NakesOperasionalController;
 use App\Http\Controllers\NakesBookingController;
 use App\Http\Controllers\WebSocketController;
 
