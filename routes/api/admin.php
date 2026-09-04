@@ -125,6 +125,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     Route::get('/manage-admin', [AdminController::class, 'index']);
     Route::post('/manage-admin', [AdminController::class, 'store']);
+
+    Route::get('/manage-admin/chat-rooms', [WebSocketController::class, 'adminRooms']);
+    Route::get('/admin/chat-rooms', [WebSocketController::class, 'adminRooms']);
+
     Route::get('/manage-admin/{id}', [AdminController::class, 'show']);
     Route::put('/manage-admin/{id}', [AdminController::class, 'update']);
     
@@ -132,8 +136,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     Route::get('/manage-admin/bookings', [BookingController::class, 'adminIndex']);
     Route::get('/admin/bookings', [BookingController::class, 'adminIndex']);
-    Route::get('/manage-admin/chat-rooms', [WebSocketController::class, 'adminRooms']);
-    Route::get('/admin/chat-rooms', [WebSocketController::class, 'adminRooms']);
 
     // Seeder Management
     Route::get('/admin/seeders', [AdminSeederController::class, 'index']);
