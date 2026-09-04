@@ -940,7 +940,28 @@ class BookingController extends Controller
                 $transaksi->update($paymentDetails);
             }
 
-            return response()->json($responseData, $response->status());
+            if ($response->successful()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Transaksi charge Midtrans berhasil dibuat.',
+                    'data' => array_merge($responseData, [
+                        'id_booking' => $booking->id_booking,
+                        'order_id' => $responseData['order_id'] ?? $orderId,
+                        'jumlah_total' => (float) $transaksi->jumlah_total,
+                        'jumlah_total_format' => 'Rp ' . number_format((float) $transaksi->jumlah_total, 0, ',', '.'),
+                        'va_number' => $transaksi->va_number,
+                        'bank_va' => $transaksi->bank_va,
+                        'qr_string' => $transaksi->qr_string,
+                        'qr_url' => $transaksi->qr_url,
+                    ])
+                ], $response->status());
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $responseData['status_message'] ?? 'Gagal membuat charge pembayaran Midtrans.',
+                'error' => $responseData
+            ], $response->status());
         } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,
