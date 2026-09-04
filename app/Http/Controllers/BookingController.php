@@ -975,7 +975,7 @@ class BookingController extends Controller
      */
     public function getPaymentDetails($id)
     {
-        $booking = Booking::with(['transaksi'])->find($id);
+        $booking = Booking::with(['layananItems.layanan', 'transaksi'])->find($id);
 
         if (!$booking || !$booking->transaksi) {
             return response()->json([
@@ -1176,7 +1176,7 @@ class BookingController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Status booking berhasil diperbarui menjadi ' . $booking->status_booking,
-            'data'    => new BookingResource($booking->load(['pasien', 'layanan', 'tenagaMedis', 'transaksi'])),
+            'data'    => new BookingResource($booking->load(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi'])),
         ]);
     }
 
@@ -1927,7 +1927,7 @@ class BookingController extends Controller
 
     public function batalkanBooking($id)
     {
-        $booking = Booking::with('transaksi')->find($id);
+        $booking = Booking::with(['layananItems.layanan', 'transaksi'])->find($id);
 
         if (!$booking) {
             return response()->json(['success' => false, 'message' => 'Booking tidak ditemukan.'], 404);

@@ -12,6 +12,9 @@ class TransaksiDetailResource extends JsonResource
         $booking = $this->resource;
         $pasien = $booking->pasien;
         $layanan = $booking->layanan;
+        $layananItems = $booking->relationLoaded('layananItems')
+            ? $booking->layananItems
+            : collect();
         $nakes = $booking->tenagaMedis;
         $transaksi = $booking->transaksi;
 
@@ -71,6 +74,23 @@ class TransaksiDetailResource extends JsonResource
                     'harga_total' => (float) $item->harga_jual * (int) ($item->pivot->qty_default ?? 1),
                 ])->values(),
             ] : null,
+            'layanan_items' => $layananItems->map(fn ($item) => [
+                'id_layanan' => $item->id_layanan,
+                'nama_layanan' => $item->layanan?->nama_layanan,
+                'deskripsi' => $item->layanan?->deskripsi_layanan,
+                'tipe' => $item->layanan?->tipe_layanan,
+                'durasi_menit' => $item->layanan?->durasi_menit,
+                'harga' => $item->layanan ? (float) $item->layanan->harga : null,
+                'harga_format' => $item->layanan ? $this->money($item->layanan->harga) : null,
+                'foto' => $item->layanan?->foto_layanan,
+                'urutan' => $item->urutan,
+                'rincian_booking' => [
+                    'sl' => $this->moneyData($item->sl),
+                    'bhp' => $this->moneyData($item->sb),
+                    'hpp_bhp' => $this->moneyData($item->hpp_bhp),
+                    'hak_nakes' => $this->moneyData($item->hak_nakes_layanan),
+                ],
+            ])->values(),
             'tenaga_medis' => $nakes ? [
                 'id_tenaga_medis' => $nakes->id_tenaga_medis,
                 'nama_lengkap' => $nakes->nama_lengkap,

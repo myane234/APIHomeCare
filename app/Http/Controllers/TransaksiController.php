@@ -79,7 +79,7 @@ class TransaksiController extends Controller
         $sortBy = $request->input('sort_by', 'created_at');
         $sortOrder = $request->input('sort_order', 'desc');
 
-        $query = Booking::with(['pasien', 'layanan', 'tenagaMedis', 'transaksi'])
+        $query = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi'])
             ->where('id_pasien', $pasien->id_pasien);
 
         if ($request->filled('status_booking')) {
@@ -138,6 +138,8 @@ class TransaksiController extends Controller
             'pasien',
             'layanan.kategori',
             'layanan.bhpItems',
+            'layananItems.layanan.kategori',
+            'layananItems.layanan.bhpItems',
             'tenagaMedis',
             'transaksi',
         ])
@@ -262,7 +264,7 @@ class TransaksiController extends Controller
             'order_id' => 'required|string',
         ]);
 
-        $booking = Booking::with('transaksi')->findOrFail($validate['id_booking']);
+        $booking = Booking::with(['transaksi', 'layananItems.layanan'])->findOrFail($validate['id_booking']);
         $transaction = $booking->transaksi;
 
         if (!$transaction) {
