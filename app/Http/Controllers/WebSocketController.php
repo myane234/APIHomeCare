@@ -72,16 +72,9 @@ class WebSocketController extends Controller
      */
     public function getConfig(Request $request)
     {
-        $user = $request->user();
         $bookingId = $request->query('booking_id');
 
-        $userType = 'pasien';
-        $userId = $user->id_user ?? $user->id ?? 0;
-
-        if ($user instanceof TenagaMedis || isset($user->id_tenaga_medis)) {
-            $userType = 'nakes';
-            $userId = $user->id_tenaga_medis ?? $userId;
-        }
+        [$userType, $userId] = $this->resolveSender($request);
 
         $wsUrl = $this->buildWsUrl($bookingId, $userId, $userType);
 
@@ -117,15 +110,7 @@ class WebSocketController extends Controller
             return response()->json(['success' => false, 'message' => 'Booking tidak ditemukan.'], 404);
         }
 
-        $user = $request->user();
-        $senderType = 'pasien';
-        $senderId = $user->id_user ?? $user->id ?? 0;
-        $senderName = $user->nama_lengkap ?? $user->name ?? 'User';
-
-        if ($user instanceof TenagaMedis || isset($user->id_tenaga_medis)) {
-            $senderType = 'nakes';
-            $senderId = $user->id_tenaga_medis ?? $senderId;
-        }
+        [$senderType, $senderId, $senderName] = $this->resolveSender($request, true);
 
         $payload = [
             'type' => 'chat_message',
@@ -243,6 +228,37 @@ class WebSocketController extends Controller
     private function goHttpUrl(string $path): string
     {
         return "http://{$this->wsServerHost}:{$this->wsServerPort}" . $path;
+    }
+
+    private function resolveSender(Request $request, bool $includeName = false): array
+    {
+        $user = $request->user();
+        $nakes = $user instanceof TenagaMedis
+            ? $user
+            : $user?->tenagaMedis;
+        $isNakes = $user instanceof TenagaMedis
+            || ($nakes && $user?->roles?->contains('nama_role', 'nakes'));
+
+        if ($isNakes && $nakes) {
+            $sender = [
+                'nakes',
+                (int) $nakes->id_tenaga_medis,
+            ];
+
+            return $includeName
+                ? [...$sender, $nakes->nama_lengkap ?: 'Nakes']
+                : $sender;
+        }
+
+        $pasien = $user?->pasien;
+        $sender = [
+            'pasien',
+            (int) ($pasien?->id_pasien ?? $user?->id_user ?? $user?->id ?? 0),
+        ];
+
+        return $includeName
+            ? [...$sender, $pasien?->nama_lengkap ?: $user?->name ?: 'Pasien']
+            : $sender;
     }
 
     private function buildWsUrl($bookingId, $userId = null, ?string $userType = null): string
