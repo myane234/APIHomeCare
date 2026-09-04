@@ -137,6 +137,8 @@ class WebSocketController extends Controller
             'timestamp' => now()->toIso8601String(),
         ];
 
+        $this->ensureChatRoom($booking->load(['pasien', 'tenagaMedis']));
+
         // Broadcast ke Server Go WebSocket
         $broadcastSuccess = $this->triggerGoBroadcast($payload);
 
