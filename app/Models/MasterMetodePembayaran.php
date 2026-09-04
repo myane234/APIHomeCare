@@ -14,6 +14,7 @@ class MasterMetodePembayaran extends Model
 
     protected $fillable = [
         'id_kategori_pembayaran',
+        'payment_type',
         'nama_metode',
         'tipe_potongan',
         'nilai_potongan',

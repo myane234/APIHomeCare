@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\MasterMetodePembayaran;
 use App\Models\MasterKategoriPembayaran;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -41,7 +42,13 @@ class MetodePembayaranController extends Controller
      */
     public function index()
     {
-        $data = MasterMetodePembayaran::with('kategori')->get();
+        $data = MasterMetodePembayaran::with('kategori')
+            ->whereNotNull('payment_type')
+            ->where('is_active', true)
+            ->whereHas('kategori', function ($query) {
+                $query->where('is_active', true);
+            })
+            ->get();
 
         $data->each(function ($item) {
             $item->logo = $item->logo ? url(Storage::url($item->logo)) : null;
@@ -68,6 +75,7 @@ class MetodePembayaranController extends Controller
     {
         $validated = $request->validate([
             'id_kategori_pembayaran' => 'required|exists:master_kategori_pembayaran,id_kategori_pembayaran',
+            'payment_type' => ['required', 'string', 'max:50', 'unique:master_metode_pembayaran,payment_type'],
             'nama_metode' => 'required|string|max:255',
             'tipe_potongan' => 'required|in:nominal,persen',
             'nilai_potongan' => 'required|numeric|min:0',
@@ -116,6 +124,13 @@ class MetodePembayaranController extends Controller
 
         $validated = $request->validate([
             'id_kategori_pembayaran' => 'sometimes|required|exists:master_kategori_pembayaran,id_kategori_pembayaran',
+            'payment_type' => [
+                'sometimes',
+                'required',
+                'string',
+                'max:50',
+                Rule::unique('master_metode_pembayaran', 'payment_type')->ignore($metode->id_metode, 'id_metode'),
+            ],
             'nama_metode' => 'sometimes|required|string|max:255',
             'tipe_potongan' => 'sometimes|required|in:nominal,persen',
             'nilai_potongan' => 'sometimes|required|numeric|min:0',
