@@ -56,19 +56,20 @@ class BookingResource extends JsonResource
                 'alamat_utama'  => $this->pasien?->alamat_utama,
             ]),
 
-            // ─── Layanan Utama (backward compat) ─────────────────────────
-            'layanan'           => $this->when($this->relationLoaded('layanan') && $this->layanan, [
-                'id_layanan'    => $this->layanan?->id_layanan,
-                'nama_layanan'  => $this->layanan?->nama_layanan,
-                'tipe_layanan'  => $this->layanan?->tipe_layanan,
-                'foto_layanan'  => $this->layanan?->foto_layanan,
-            ]),
+            // ─── Layanan Utama (backward compat, hanya jika layananItems tidak ada/kosong) ───
+            'layanan'           => $this->when(
+                $this->relationLoaded('layanan') && $this->layanan && (!$this->relationLoaded('layananItems') || $this->layananItems->isEmpty()),
+                [
+                    'id_layanan'    => $this->layanan?->id_layanan,
+                    'nama_layanan'  => $this->layanan?->nama_layanan,
+                    'tipe_layanan'  => $this->layanan?->tipe_layanan,
+                    'foto_layanan'  => $this->layanan?->foto_layanan,
+                ]
+            ),
 
             // ─── Semua Layanan dalam Booking (multi-layanan) ─────────────
-            // Tersedia jika layananItems di-eager load.
-            // Jika booking lama (single layanan), array ini kosong — gunakan 'layanan' di atas.
             'layanan_items'     => $this->when(
-                $this->relationLoaded('layananItems'),
+                $this->relationLoaded('layananItems') && $this->layananItems->isNotEmpty(),
                 fn() => $this->layananItems->map(fn($item) => [
                     'id_layanan'        => $item->id_layanan,
                     'nama_layanan'      => $item->layanan?->nama_layanan,

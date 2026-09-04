@@ -52,7 +52,7 @@ class TransaksiDetailResource extends JsonResource
                     'longitude' => $booking->longitude_kunjungan !== null ? (float) $booking->longitude_kunjungan : null,
                 ],
             ],
-            'layanan' => $layanan ? [
+            'layanan' => ($layanan && $layananItems->isEmpty()) ? [
                 'id_layanan' => $layanan->id_layanan,
                 'nama_layanan' => $layanan->nama_layanan,
                 'deskripsi' => $layanan->deskripsi_layanan,

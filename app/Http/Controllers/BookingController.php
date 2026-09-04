@@ -1145,9 +1145,9 @@ class BookingController extends Controller
                     'jenis' => $booking->tenagaMedis?->jenis_tenaga_medis,
                 ],
                 // Layanan utama (backward compat) + daftar semua layanan
-                'layanan' => [
+                'layanan' => empty($rincianPerLayanan) && $booking->layanan ? [
                     'nama' => $booking->layanan?->nama_layanan,
-                ],
+                ] : null,
                 'layanan_items' => $rincianPerLayanan,
                 'jumlah_layanan' => count($rincianPerLayanan) ?: 1,
                 // Rincian biaya agregat (total semua layanan)
