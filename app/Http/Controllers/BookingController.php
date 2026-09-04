@@ -732,6 +732,10 @@ class BookingController extends Controller
                 'first_name' => $booking->pasien?->nama_lengkap ?? 'Pasien',
                 'email' => $booking->pasien?->user?->email ?? 'no-reply@example.com',
             ],
+            'custom_expiry' => [
+                'expiry_duration' => (int) env('MIDTRANS_EXPIRY_DURATION', 15),
+                'unit' => env('MIDTRANS_EXPIRY_UNIT', 'minutes'),
+            ],
         ];
 
         if ($request->input('payment_type') === 'bank_transfer') {

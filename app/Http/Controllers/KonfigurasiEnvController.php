@@ -28,6 +28,18 @@ class KonfigurasiEnvController extends Controller
         'GOOGLE_REDIRECT_URI',
         'SANCTUM_STATEFUL_DOMAINS',
         'CORS_ALLOWED_ORIGINS',
+        'MIDTRANS_SERVER_KEY',
+        'MIDTRANS_CLIENT_KEY',
+        'MIDTRANS_MERCHANT_ID',
+        'MIDTRANS_IS_PRODUCTION',
+        'FEE_MIDTRANS',
+        'MIDTRANS_EXPIRY_DURATION',
+        'MIDTRANS_EXPIRY_UNIT',
+        'MIDTRANS_NOTIFICATION_URL',
+        'MIDTRANS_FINISH_URL',
+        'MIDTRANS_UNFINISH_URL',
+        'MIDTRANS_ERROR_URL',
+        'MIDTRANS_AUTO_SETTLEMENT',
     ];
 
     /**
@@ -61,6 +73,18 @@ class KonfigurasiEnvController extends Controller
             'GOOGLE_REDIRECT_URI'   => 'nullable|url',
             'SANCTUM_STATEFUL_DOMAINS' => 'nullable|string',
             'CORS_ALLOWED_ORIGINS'   => 'nullable|string',
+            'MIDTRANS_SERVER_KEY'    => 'nullable|string',
+            'MIDTRANS_CLIENT_KEY'    => 'nullable|string',
+            'MIDTRANS_MERCHANT_ID'   => 'nullable|string',
+            'MIDTRANS_IS_PRODUCTION' => 'nullable|in:true,false',
+            'FEE_MIDTRANS'           => 'nullable|numeric',
+            'MIDTRANS_EXPIRY_DURATION' => 'nullable|integer|min:1',
+            'MIDTRANS_EXPIRY_UNIT'     => 'nullable|in:minutes,hours,days',
+            'MIDTRANS_NOTIFICATION_URL'=> 'nullable|url',
+            'MIDTRANS_FINISH_URL'      => 'nullable|url',
+            'MIDTRANS_UNFINISH_URL'    => 'nullable|url',
+            'MIDTRANS_ERROR_URL'       => 'nullable|url',
+            'MIDTRANS_AUTO_SETTLEMENT' => 'nullable|in:true,false',
         ]);
 
         $envPath = base_path('.env');
