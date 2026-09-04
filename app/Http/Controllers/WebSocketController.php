@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
+ * @group WS 
  * Controller untuk integrasi WebSocket Service Go (192.168.18.12:8088)
  */
 class WebSocketController extends Controller
