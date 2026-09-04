@@ -282,4 +282,27 @@ class ContentManagementController extends Controller
             ]
         ], 200);
     }
+
+    /**
+     * Update Heading & Subheading Section Ulasan (Admin)
+     */
+    public function updateUlasanContent(Request $request)
+    {
+        $content = ContentManagement::firstOrCreate([]);
+
+        $validated = $request->validate([
+            'ulasan_heading' => ['nullable', 'string', 'max:255'],
+            'ulasan_subheading' => ['nullable', 'string'],
+        ]);
+
+        $content->update($validated);
+
+        return response()->json([
+            'message' => 'Header Ulasan berhasil diperbarui',
+            'data' => [
+                'ulasan_heading' => $content->ulasan_heading,
+                'ulasan_subheading' => $content->ulasan_subheading,
+            ]
+        ], 200);
+    }
 }

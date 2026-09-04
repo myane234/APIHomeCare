@@ -43,6 +43,22 @@ class ContentManagement extends Model
         'footer_address',
         'footer_socials',
         'footer_links',
+
+        // Ulasan Section Header
+        'ulasan_heading',
+        'ulasan_subheading',
+
+        // Hubungi Kami Page Content
+        'hubungi_banner',
+        'hubungi_banner_text',
+        'hubungi_heading',
+        'hubungi_description',
+        'hubungi_phone',
+        'hubungi_email',
+        'hubungi_whatsapp',
+        'hubungi_address',
+        'hubungi_maps_link',
+        'hubungi_jam_operasional',
     ];
 
     protected $casts = [
@@ -68,5 +84,10 @@ class ContentManagement extends Model
     public function getMitraBannerUrlAttribute()
     {
         return $this->mitra_banner ? url(Storage::url($this->mitra_banner)) : null;
+    }
+
+    public function getHubungiBannerUrlAttribute()
+    {
+        return $this->hubungi_banner ? url(Storage::url($this->hubungi_banner)) : null;
     }
 }

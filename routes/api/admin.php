@@ -18,6 +18,7 @@ use App\Http\Controllers\WilayahLayananController;
 use App\Http\Controllers\KotaKabupatenController;
 use App\Http\Controllers\KategoriLayananController;
 use App\Http\Controllers\KategoriArtikelController;
+use App\Http\Controllers\TagController;
 use App\Http\Controllers\KategoriPembayaranController;
 use App\Http\Controllers\MetodePembayaranController;
 use App\Http\Controllers\TarifTransportController;
@@ -34,6 +35,8 @@ use App\Http\Controllers\NotificationTemplateController;
 use App\Http\Controllers\MasterKategoriTarifController;
 
 use App\Http\Controllers\KonfigurasiEnvController;
+use App\Http\Controllers\UlasanController;
+use App\Http\Controllers\HubungiKamiController;
 
 Route::middleware(['auth:sanctum'])->group(function () {
 
@@ -56,6 +59,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/artikel/upload-images', [ArtikelController::class, 'uploadImages']);
     Route::put('/artikel/{artikel}', [ArtikelController::class, 'update']);
     Route::delete('/artikel/{artikel}', [ArtikelController::class, 'destroy']);
+
+    // Management Tag Artikel
+    Route::post('/tags', [TagController::class, 'store']);
+    Route::put('/tags/{id}', [TagController::class, 'update']);
+    Route::delete('/tags/{id}', [TagController::class, 'destroy']);
 
     // Kategori Layanan CRUD
     Route::post('/layanan/kategori', [KategoriLayananController::class, 'store']);
@@ -231,5 +239,25 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Konfigurasi .env
     Route::get('/konfigurasi-env', [KonfigurasiEnvController::class, 'index']);
     Route::post('/konfigurasi-env', [KonfigurasiEnvController::class, 'update']);
+
+    // Management CMS Ulasan - Admin
+    Route::prefix('admin/ulasan')->group(function () {
+        Route::get('/', [UlasanController::class, 'indexAdmin']);
+        Route::post('/', [UlasanController::class, 'storeAdmin']);
+        Route::get('/{id}', [UlasanController::class, 'show']);
+        Route::post('/{id}', [UlasanController::class, 'updateAdmin']);
+        Route::patch('/{id}/toggle-publish', [UlasanController::class, 'togglePublish']);
+        Route::delete('/{id}', [UlasanController::class, 'destroy']);
+    });
+
+    // Management CMS Hubungi Kami - Admin
+    Route::prefix('admin/hubungi-kami')->group(function () {
+        Route::get('/settings', [HubungiKamiController::class, 'getSettingsAdmin']);
+        Route::post('/settings', [HubungiKamiController::class, 'updateSettingsAdmin']);
+        Route::get('/pesan', [HubungiKamiController::class, 'indexPesan']);
+        Route::get('/pesan/{id}', [HubungiKamiController::class, 'showPesan']);
+        Route::put('/pesan/{id}', [HubungiKamiController::class, 'updatePesanStatus']);
+        Route::delete('/pesan/{id}', [HubungiKamiController::class, 'destroyPesan']);
+    });
 
 });
