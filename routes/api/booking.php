@@ -1,12 +1,16 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\BookingController;
+use App\Http\Controllers\WebSocketController;
 
 Route::post('/booking/charge', [BookingController::class, 'charge']);
 Route::get('/booking/nakes-terdekat', [BookingController::class, 'getNearestNakesList']);
 
 Route::middleware(['auth:sanctum'])->group(function () {
+    // WebSocket & Real-time Chat
+    Route::get('/websocket/config', [WebSocketController::class, 'getConfig']);
+    Route::post('/booking/{id}/chat', [WebSocketController::class, 'sendChatMessage']);
+
     // Booking Endpoints
     Route::post('/booking', [BookingController::class, 'store']);
     Route::get('/booking/terkini', [BookingController::class, 'pasienActiveTracking']);
