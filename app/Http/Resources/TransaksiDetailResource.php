@@ -122,6 +122,7 @@ class TransaksiDetailResource extends JsonResource
                 'rincian_biaya' => [
                     'layanan' => $this->moneyData($transaksi->sl),
                     'bhp' => $this->moneyData($transaksi->sb),
+                    'bhp_tambahan' => $this->moneyData($transaksi->sb_tambahan ?? 0),
                     'transportasi' => $this->moneyData($transaksi->st),
                     'administrasi' => $this->moneyData($transaksi->ba),
                     'ppn' => $this->moneyData($transaksi->ppn),

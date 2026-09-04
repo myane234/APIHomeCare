@@ -64,6 +64,14 @@ class Booking extends Model
     }
 
     /**
+     * Detail BHP yang digunakan dalam booking (termasuk kuantitas tambahan dari nakes).
+     */
+    public function bookingBhp()
+    {
+        return $this->hasMany(BookingBhp::class, 'id_booking', 'id_booking');
+    }
+
+    /**
      * Generate nomor rekam medis dengan format P-YY-XXXX
      * P = Pasien
      * YY = 2 digit tahun terakhir (26 untuk 2026)

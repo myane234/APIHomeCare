@@ -106,26 +106,41 @@ class BookingResource extends JsonResource
                         ? \Carbon\Carbon::parse($transaksi->waktu_bayar)->setTimezone('Asia/Jakarta')->translatedFormat('d M Y, H:i') . ' WIB'
                         : null,
                     'rincian_biaya'     => [
-                        'sl'    => (float) $transaksi->sl,
-                        'sb'    => (float) $transaksi->sb,
-                        'st'    => (float) $transaksi->st,
-                        'ba'    => (float) $transaksi->ba,
-                        'ppn'   => (float) $transaksi->ppn,
+                        'sl'          => (float) $transaksi->sl,
+                        'sb'          => (float) $transaksi->sb,
+                        'sb_tambahan' => (float) ($transaksi->sb_tambahan ?? 0),
+                        'st'          => (float) $transaksi->st,
+                        'ba'          => (float) $transaksi->ba,
+                        'ppn'         => (float) $transaksi->ppn,
                     ],
                     'persentase'        => [
                         'ppn'       => (float) $transaksi->persen_ppn,
                         'fee_nakes' => (float) $transaksi->persen_fee_nakes,
                     ],
                     'bagi_hasil'        => [
-                        'hak_nakes'     => (float) $transaksi->hak_nakes,
-                        'profit_hc'     => (float) $transaksi->profit_hc,
-                        'fee_midtrans'  => (float) $transaksi->fee_midtrans,
-                        'hpp_bhp'       => (float) $transaksi->hpp_bhp,
+                        'hak_nakes'        => (float) $transaksi->hak_nakes,
+                        'profit_hc'        => (float) $transaksi->profit_hc,
+                        'fee_midtrans'     => (float) $transaksi->fee_midtrans,
+                        'hpp_bhp'          => (float) $transaksi->hpp_bhp,
+                        'hpp_bhp_tambahan' => (float) ($transaksi->hpp_bhp_tambahan ?? 0),
                     ],
                     'jumlah_total'      => (float) $transaksi->jumlah_total,
                     'jumlah_total_format' => 'Rp ' . number_format((float) $transaksi->jumlah_total, 0, ',', '.'),
                 ];
             }),
+
+            // ─── Detail BHP Tambahan (saat/setelah tindakan) ─────────────
+            'booking_bhp'       => $this->when($this->relationLoaded('bookingBhp'), fn() => $this->bookingBhp->map(fn($item) => [
+                'id_booking_bhp'     => $item->id_booking_bhp,
+                'id_layanan'         => $item->id_layanan,
+                'id_bhp'             => $item->id_bhp,
+                'nama_bhp'           => $item->bhpItem?->nama_bhp,
+                'qty_default'        => (int) $item->qty_default,
+                'qty_real'           => (int) $item->qty_real,
+                'qty_tambahan'       => (int) $item->qty_tambahan,
+                'harga_jual'         => (float) $item->harga_jual,
+                'total_sb_tambahan'  => (float) $item->total_sb_tambahan,
+            ])->values()),
         ];
     }
 

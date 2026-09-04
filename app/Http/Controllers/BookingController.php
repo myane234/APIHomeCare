@@ -141,7 +141,7 @@ class BookingController extends Controller
         $sortBy = $request->input('sort_by', 'created_at');
         $sortOrder = $request->input('sort_order', 'desc');
 
-        $query = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi']);
+        $query = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi', 'bookingBhp.bhpItem']);
 
         // Filter by status
         if ($request->filled('status_booking')) {
@@ -1154,6 +1154,7 @@ class BookingController extends Controller
                 'rincian_biaya' => $t ? [
                     ['label' => 'Total Tarif Layanan (SL)', 'nilai' => (float) $t->sl, 'format' => 'Rp ' . number_format((float) $t->sl, 0, ',', '.')],
                     ['label' => 'Bahan Habis Pakai (SB)', 'nilai' => (float) $t->sb, 'format' => 'Rp ' . number_format((float) $t->sb, 0, ',', '.')],
+                    ['label' => 'Bahan Habis Pakai Tambahan (SB Tambahan)', 'nilai' => (float) ($t->sb_tambahan ?? 0), 'format' => 'Rp ' . number_format((float) ($t->sb_tambahan ?? 0), 0, ',', '.')],
                     ['label' => 'Biaya Transportasi (ST)', 'nilai' => (float) $t->st, 'format' => 'Rp ' . number_format((float) $t->st, 0, ',', '.')],
                     ['label' => 'Biaya Admin Aplikasi', 'nilai' => (float) $t->ba, 'format' => 'Rp ' . number_format((float) $t->ba, 0, ',', '.')],
                     ['label' => 'PPN (' . (float) $t->persen_ppn . '%)', 'nilai' => (float) $t->ppn, 'format' => 'Rp ' . number_format((float) $t->ppn, 0, ',', '.')],
@@ -1172,6 +1173,7 @@ class BookingController extends Controller
                     'profit_hc_format' => 'Rp ' . number_format((float) $t->profit_hc, 0, ',', '.'),
                     'fee_midtrans' => (float) $t->fee_midtrans,
                     'hpp_bhp' => (float) $t->hpp_bhp,
+                    'hpp_bhp_tambahan' => (float) ($t->hpp_bhp_tambahan ?? 0),
                 ] : null,
             ],
         ]);

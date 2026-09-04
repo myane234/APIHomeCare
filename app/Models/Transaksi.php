@@ -31,6 +31,7 @@ class Transaksi extends Model
         // Snapshot komponen biaya
         'sl',               // Tarif Layanan / Jasa
         'sb',               // Tarif BHP (Bahan Habis Pakai)
+        'sb_tambahan',      // Tarif BHP Tambahan dari Nakes saat tindakan
         'st',               // Tarif Transport
         'ba',               // Biaya Administrasi
         'ppn',              // Nominal PPN
@@ -42,6 +43,7 @@ class Transaksi extends Model
         // Biaya lain
         'fee_midtrans',
         'hpp_bhp',
+        'hpp_bhp_tambahan',
 
         // Bagi hasil
         'hak_nakes',
@@ -62,6 +64,7 @@ class Transaksi extends Model
         'jumlah_total'     => 'decimal:2',
         'sl'               => 'decimal:2',
         'sb'               => 'decimal:2',
+        'sb_tambahan'      => 'decimal:2',
         'st'               => 'decimal:2',
         'ba'               => 'decimal:2',
         'ppn'              => 'decimal:2',
@@ -69,6 +72,7 @@ class Transaksi extends Model
         'persen_fee_nakes' => 'decimal:2',
         'fee_midtrans'     => 'decimal:2',
         'hpp_bhp'          => 'decimal:2',
+        'hpp_bhp_tambahan' => 'decimal:2',
         'hak_nakes'        => 'decimal:2',
         'profit_hc'        => 'decimal:2',
         'waktu_bayar'      => 'datetime',
