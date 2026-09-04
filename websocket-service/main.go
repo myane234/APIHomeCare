@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 )
 
 func main() {
@@ -67,30 +69,67 @@ func main() {
 		})
 	})
 
+	http.HandleFunc("/rooms", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			var room RoomInfo
+			if err := json.NewDecoder(r.Body).Decode(&room); err != nil || room.BookingID == 0 {
+				http.Error(w, "booking_id is required", http.StatusBadRequest)
+				return
+			}
+
+			room.CreatedAt = time.Now().UTC()
+			room = hub.upsertRoom(room)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": true,
+				"room":    room,
+			})
+			return
+		}
+
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		rooms := hub.roomList()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"total_rooms": len(rooms),
+			"rooms":       rooms,
+		})
+	})
+
+	http.HandleFunc("/rooms/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		bookingID, err := strconv.ParseUint(strings.TrimPrefix(r.URL.Path, "/rooms/"), 10, 64)
+		if err != nil || bookingID == 0 {
+			http.Error(w, "booking_id is required", http.StatusBadRequest)
+			return
+		}
+
+		if !hub.closeRoom(bookingID) {
+			http.Error(w, "Room not found", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success":    true,
+			"booking_id": bookingID,
+			"message":    "Room closed",
+		})
+	})
+
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":  "UP",
 			"service": "Citra Homecare Go WebSocket Service",
-		})
-	})
-
-	http.HandleFunc("/rooms", func(w http.ResponseWriter, r *http.Request) {
-		hub.mu.RLock()
-		defer hub.mu.RUnlock()
-
-		rooms := make([]RoomInfo, 0, len(hub.rooms))
-		for bookingID, clients := range hub.rooms {
-			rooms = append(rooms, RoomInfo{
-				BookingID:   bookingID,
-				ClientCount: len(clients),
-			})
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"total_rooms": len(rooms),
-			"rooms":       rooms,
 		})
 	})
 

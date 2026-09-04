@@ -27,6 +27,14 @@ type WSMessage struct {
 }
 
 type RoomInfo struct {
-	BookingID   uint64 `json:"booking_id"`
-	ClientCount int    `json:"client_count"`
+	BookingID   uint64       `json:"booking_id"`
+	ClientCount int          `json:"client_count"`
+	Patient     *Participant `json:"pasien,omitempty"`
+	Nakes       *Participant `json:"nakes,omitempty"`
+	CreatedAt   time.Time    `json:"created_at"`
+}
+
+type Participant struct {
+	ID   uint64 `json:"id"`
+	Name string `json:"name"`
 }

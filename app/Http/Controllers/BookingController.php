@@ -8,6 +8,7 @@ use App\Models\BookingLayanan;
 use App\Models\MasterLayanan;
 use App\Models\TenagaMedis;
 use App\Models\Transaksi;
+use App\Http\Controllers\WebSocketController;
 use App\Models\MasterTarif;
 use App\Models\MasterKategoriTarif;
 use App\Models\MasterTarifTransport;
@@ -847,6 +848,10 @@ class BookingController extends Controller
                         'longitude_kunjungan' => $validate['longitude_kunjungan'],
                         'status_booking' => 'Pending',
                     ]);
+
+                    if ($booking->id_tenaga_medis) {
+                        app(WebSocketController::class)->ensureChatRoom($booking->load(['pasien', 'tenagaMedis']));
+                    }
 
                     // 4. Simpan detail per-layanan ke booking_layanan
                     foreach ($perLayananData as $item) {

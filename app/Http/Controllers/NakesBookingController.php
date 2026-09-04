@@ -245,6 +245,8 @@ class NakesBookingController extends Controller
                 ], 400);
             }
 
+            app(WebSocketController::class)->ensureChatRoom($booking->load(['pasien', 'tenagaMedis']));
+
             // Recalculate Transport Nakes
             $transaksi = $booking->transaksi;
             $nakesCoordinates = $this->resolveCoordinates($nakes->latitude, $nakes->longitude, $nakes->alamat_lengkap);

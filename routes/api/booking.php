@@ -11,6 +11,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // WebSocket & Real-time Chat
     Route::get('/websocket/config', [WebSocketController::class, 'getConfig']);
     Route::post('/booking/{id}/chat', [WebSocketController::class, 'sendChatMessage']);
+    Route::delete('/booking/{id}/chat-room', [WebSocketController::class, 'closeChatRoom']);
 
     // Booking Endpoints
     Route::post('/booking', [BookingController::class, 'store']);

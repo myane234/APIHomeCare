@@ -16,6 +16,55 @@ class WebSocketController extends Controller
     private string $wsServerHost = '192.168.18.12';
     private string $wsServerPort = '8088';
 
+    public function adminRooms(Request $request)
+    {
+        try {
+            $response = Http::timeout(3)->get($this->goHttpUrl('/rooms'), $request->query());
+            return response()->json($response->json(), $response->status());
+        } catch (\Throwable $e) {
+            Log::warning('Gagal mengambil room dari Go WebSocket server: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Go WebSocket server tidak dapat dihubungi.'], 503);
+        }
+    }
+
+    public function ensureChatRoom(Booking $booking): bool
+    {
+        try {
+            $response = Http::timeout(3)->post($this->goHttpUrl('/rooms'), [
+                'booking_id' => (int) $booking->id_booking,
+                'pasien' => $booking->pasien ? ['id' => (int) $booking->pasien->id_pasien, 'name' => $booking->pasien->nama_lengkap] : null,
+                'nakes' => $booking->tenagaMedis ? ['id' => (int) $booking->tenagaMedis->id_tenaga_medis, 'name' => $booking->tenagaMedis->nama_lengkap] : null,
+            ]);
+
+            return $response->successful();
+        } catch (\Throwable $e) {
+            Log::warning('Gagal membuat room di Go WebSocket server: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function closeChatRoom($id)
+    {
+        if (!Booking::find($id)) {
+            return response()->json(['success' => false, 'message' => 'Booking tidak ditemukan.'], 404);
+        }
+
+        try {
+            $response = Http::timeout(3)->delete($this->goHttpUrl('/rooms/' . (int) $id));
+
+            return response()->json([
+                'success' => $response->successful(),
+                'message' => $response->successful()
+                    ? 'Room chat berhasil ditutup.'
+                    : 'Room chat tidak ditemukan atau sudah ditutup.',
+                'data' => $response->json(),
+            ], $response->successful() ? 200 : $response->status());
+        } catch (\Throwable $e) {
+            Log::warning('Gagal menutup room di Go WebSocket server: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Go WebSocket server tidak dapat dihubungi.'], 503);
+        }
+    }
+
     /**
      * API Ambil Konfigurasi WebSocket Connection untuk Mobile/Frontend Client
      * GET /api/websocket/config
@@ -33,10 +82,7 @@ class WebSocketController extends Controller
             $userId = $user->id_tenaga_medis ?? $userId;
         }
 
-        $wsUrl = "ws://{$this->wsServerHost}:{$this->wsServerPort}/ws";
-        if ($bookingId) {
-            $wsUrl .= "?booking_id={$bookingId}&user_id={$userId}&user_type={$userType}";
-        }
+        $wsUrl = $this->buildWsUrl($bookingId, $userId, $userType);
 
         return response()->json([
             'success' => true,
@@ -189,5 +235,25 @@ class WebSocketController extends Controller
             Log::warning("Gagal broadcast ke Go WebSocket server: " . $e->getMessage());
             return false;
         }
+    }
+
+    private function goHttpUrl(string $path): string
+    {
+        return "http://{$this->wsServerHost}:{$this->wsServerPort}" . $path;
+    }
+
+    private function buildWsUrl($bookingId, $userId = null, ?string $userType = null): string
+    {
+        $wsUrl = "ws://{$this->wsServerHost}:{$this->wsServerPort}/ws";
+        if ($bookingId) {
+            $parameters = ['booking_id' => (int) $bookingId];
+            if ($userId !== null && $userType !== null) {
+                $parameters['user_id'] = (int) $userId;
+                $parameters['user_type'] = $userType;
+            }
+            $wsUrl .= '?' . http_build_query($parameters);
+        }
+
+        return $wsUrl;
     }
 }
