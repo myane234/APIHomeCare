@@ -432,18 +432,22 @@ class BookingController extends Controller
         if (!empty($validate['layanan_ids'])) {
             $layananIds = array_values(array_unique(array_map('intval', $validate['layanan_ids'])));
         } else {
-            // Fallback ke id_layanan tunggal (backward compat)
-            $rawId = is_array($validate['id_layanan'] ?? null)
-                ? ($validate['id_layanan'][0] ?? null)
-                : ($validate['id_layanan'] ?? null);
+            // Fallback jika dikirim via id_layanan (bisa berupa array [10, 11] atau int tunggal)
+            $raw = $validate['id_layanan'] ?? null;
+            if (is_array($raw)) {
+                $layananIds = array_values(array_unique(array_map('intval', $raw)));
+            } elseif ($raw !== null && $raw !== '') {
+                $layananIds = [(int) $raw];
+            } else {
+                $layananIds = [];
+            }
 
-            if (!$rawId) {
+            if (empty($layananIds)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Layanan wajib dipilih. Gunakan layanan_ids[] atau id_layanan.',
                 ], 422);
             }
-            $layananIds = [(int) $rawId];
         }
 
         $user = $request->user();
