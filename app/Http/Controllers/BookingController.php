@@ -926,159 +926,154 @@ class BookingController extends Controller
      * POST /api/booking/charge
      */
     public function charge(Request $request)
-    {
-        $validated = $request->validate([
-            'id_booking' => 'required|exists:bookings,id_booking',
-            'payment_type' => 'required|string|max:50',
-            'bank_transfer' => 'required_if:payment_type,bank_transfer|array',
-            'qris' => 'nullable|array',
-            'gopay' => 'nullable|array',
-            'shopeepay' => 'nullable|array',
-        ]);
+{
+    $validated = $request->validate([
+        'id_booking' => 'required|exists:bookings,id_booking',
+        'payment_type' => 'required|string|max:50',
+    ]);
 
-        $paymentType = $validated['payment_type'];
-        $metode = MasterMetodePembayaran::where('payment_type', $paymentType)
-            ->where('is_active', true)
-            ->whereHas('kategori', function ($query) {
-                $query->where('is_active', true);
-            })
-            ->first();
+    $paymentType = $validated['payment_type'];
 
-        if (!$metode) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Metode pembayaran tidak tersedia atau sedang dinonaktifkan.',
-            ], 422);
-        }
+    
+    $bank = strtolower($request->input('bank_transfer.bank', ''));
+    $searchKeys = array_unique(array_filter([$paymentType, $bank]));
 
-        $booking = Booking::with(['transaksi', 'pasien.user'])->find($request->input('id_booking'));
+  
+    $metode = MasterMetodePembayaran::whereIn('payment_type', $searchKeys)
+        ->where('is_active', true)
+        ->whereHas('kategori', fn($q) => $q->where('is_active', true))
+        ->first();
 
-        if (!$booking || !$booking->transaksi) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Booking atau data transaksi tidak ditemukan.'
-            ], 404);
-        }
-
-        $transaksi = $booking->transaksi;
-        $orderId = $transaksi->midtrans_order_id ?? ('BOOKING-' . $booking->id_booking . '-' . time());
-        $grossAmount = (int) $transaksi->jumlah_total;
-
-        $payload = [
-            'payment_type' => $paymentType,
-            'transaction_details' => [
-                'order_id' => $orderId,
-                'gross_amount' => $grossAmount,
-            ],
-            'customer_details' => [
-                'first_name' => $booking->pasien?->nama_lengkap ?? 'Pasien',
-                'email' => $booking->pasien?->user?->email ?? 'no-reply@example.com',
-            ],
-            'custom_expiry' => [
-                'expiry_duration' => (int) env('MIDTRANS_EXPIRY_DURATION', 15),
-                'unit' => env('MIDTRANS_EXPIRY_UNIT', 'minutes'),
-            ],
-        ];
-
-        if ($paymentType === 'bank_transfer') {
-            $payload['bank_transfer'] = $request->input('bank_transfer');
-        }
-
-        if ($paymentType === 'qris') {
-            $payload['qris'] = $request->input('qris', ['acquirer' => 'gopay']);
-        }
-
-        if ($paymentType === 'gopay') {
-            $payload['gopay'] = $request->input('gopay', []);
-        }
-
-        if ($paymentType === 'shopeepay') {
-            $payload['shopeepay'] = $request->input('shopeepay', []);
-        }
-
-        $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
-        $isProduction = config('services.midtrans.is_production', false);
-        $url = $isProduction
-            ? 'https://api.midtrans.com/v2/charge'
-            : 'https://api.sandbox.midtrans.com/v2/charge';
-
-        try {
-            $client = Http::withBasicAuth($serverKey, '')
-                ->withHeaders([
-                    'Accept' => 'application/json',
-                    'Content-Type' => 'application/json',
-                ]);
-
-            if (config('app.env') === 'local') {
-                $client->withoutVerifying();
-            }
-
-            $response = $client->post($url, $payload);
-            $responseData = $response->json();
-
-            if ($response->successful()) {
-                $paymentDetails = [
-                    'midtrans_transaction_id' => $responseData['transaction_id'] ?? null,
-                    'midtrans_order_id' => $responseData['order_id'] ?? $orderId,
-                    'payment_method' => $paymentType,
-                    'metode_pembayaran' => $paymentType,
-                    'midtrans_response' => $responseData,
-                ];
-
-                if ($paymentType === 'bank_transfer' && isset($responseData['va_numbers'])) {
-                    $vaArray = $responseData['va_numbers'];
-                    if (is_array($vaArray) && !empty($vaArray)) {
-                        $vaData = reset($vaArray);
-                        $paymentDetails['va_number'] = $vaData['va_number'] ?? null;
-                        $paymentDetails['bank_va'] = $vaData['bank'] ?? null;
-                    }
-                }
-
-                if (in_array($paymentType, ['qris', 'gopay']) && isset($responseData['qr_string'])) {
-                    $paymentDetails['qr_string'] = $responseData['qr_string'];
-
-                    if (isset($responseData['actions'])) {
-                        foreach ($responseData['actions'] as $action) {
-                            if (($action['name'] ?? '') === 'generate-qr-code') {
-                                $paymentDetails['qr_url'] = $action['url'];
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                $transaksi->update($paymentDetails);
-            }
-
-            if ($response->successful()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Transaksi charge Midtrans berhasil dibuat.',
-                    'data' => array_merge($responseData, [
-                        'id_booking' => $booking->id_booking,
-                        'order_id' => $responseData['order_id'] ?? $orderId,
-                        'jumlah_total' => (float) $transaksi->jumlah_total,
-                        'jumlah_total_format' => 'Rp ' . number_format((float) $transaksi->jumlah_total, 0, ',', '.'),
-                        'va_number' => $transaksi->va_number,
-                        'bank_va' => $transaksi->bank_va,
-                        'qr_string' => $transaksi->qr_string,
-                        'qr_url' => $transaksi->qr_url,
-                    ])
-                ], $response->status());
-            }
-
-            return response()->json([
-                'success' => false,
-                'message' => $responseData['status_message'] ?? 'Gagal membuat charge pembayaran Midtrans.',
-                'error' => $responseData
-            ], $response->status());
-        } catch (\Throwable $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal meneruskan pembayaran ke Midtrans: ' . $e->getMessage()
-            ], 500);
-        }
+    if (!$metode) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Metode pembayaran tidak tersedia atau sedang dinonaktifkan.',
+        ], 422);
     }
+
+    $booking = Booking::with(['transaksi', 'pasien.user'])->find($request->input('id_booking'));
+
+    if (!$booking || !$booking->transaksi) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Booking atau data transaksi tidak ditemukan.'
+        ], 404);
+    }
+
+    $transaksi = $booking->transaksi;
+    $orderId = $transaksi->midtrans_order_id ?? ('BOOKING-' . $booking->id_booking . '-' . time());
+
+   
+    $payload = [
+        'payment_type' => $paymentType,
+        'transaction_details' => [
+            'order_id' => $orderId,
+            'gross_amount' => (int) $transaksi->jumlah_total,
+        ],
+        'customer_details' => [
+            'first_name' => $booking->pasien?->nama_lengkap ?? 'Pasien',
+            'email' => $booking->pasien?->user?->email ?? 'no-reply@example.com',
+        ],
+        'custom_expiry' => [
+            'expiry_duration' => (int) env('MIDTRANS_EXPIRY_DURATION', 15),
+            'unit' => env('MIDTRANS_EXPIRY_UNIT', 'minutes'),
+        ],
+    ];
+
+   
+    if ($request->has($paymentType) && is_array($request->input($paymentType))) {
+        $payload[$paymentType] = $request->input($paymentType);
+    }
+
+    $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
+    $url = config('services.midtrans.is_production', false)
+        ? 'https://api.midtrans.com/v2/charge'
+        : 'https://api.sandbox.midtrans.com/v2/charge';
+
+    try {
+        $client = Http::withBasicAuth($serverKey, '');
+        if (config('app.env') === 'local') {
+            $client->withoutVerifying();
+        }
+
+        $response = $client->post($url, $payload);
+        $responseData = $response->json();
+
+        if ($response->successful()) {
+            $paymentDetails = [
+                'midtrans_transaction_id' => $responseData['transaction_id'] ?? null,
+                'midtrans_order_id' => $responseData['order_id'] ?? $orderId,
+                'payment_method' => $paymentType,
+                'metode_pembayaran' => $paymentType,
+                'midtrans_response' => $responseData,
+            ];
+
+            
+            
+            
+            if (isset($responseData['va_numbers'][0])) {
+                $paymentDetails['va_number'] = $responseData['va_numbers'][0]['va_number'] ?? null;
+                $paymentDetails['bank_va'] = $responseData['va_numbers'][0]['bank'] ?? null;
+            }
+           
+            elseif (isset($responseData['permata_va_number'])) {
+                $paymentDetails['va_number'] = $responseData['permata_va_number'];
+                $paymentDetails['bank_va'] = 'permata';
+            }
+
+           
+            if (isset($responseData['payment_code'])) {
+                $paymentDetails['payment_code'] = $responseData['payment_code'];
+                $paymentDetails['store'] = $responseData['store'] ?? null;
+            }
+
+           
+            if (isset($responseData['bill_key'])) {
+                $paymentDetails['bill_key'] = $responseData['bill_key'];
+                $paymentDetails['biller_code'] = $responseData['biller_code'] ?? null;
+            }
+
+           
+            if (isset($responseData['qr_string'])) {
+                $paymentDetails['qr_string'] = $responseData['qr_string'];
+            }
+
+            if (isset($responseData['actions']) && is_array($responseData['actions'])) {
+                foreach ($responseData['actions'] as $action) {
+                    if (in_array($action['name'] ?? '', ['generate-qr-code', 'deeplink-redirect', 'desktop-web-checkout'])) {
+                        $paymentDetails['qr_url'] = $action['url'];
+                        break;
+                    }
+                }
+            }
+
+            $transaksi->update($paymentDetails);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Transaksi charge Midtrans berhasil dibuat.',
+                'data' => array_merge($responseData, [
+                    'id_booking' => $booking->id_booking,
+                    'order_id' => $responseData['order_id'] ?? $orderId,
+                    'jumlah_total' => (float) $transaksi->jumlah_total,
+                    'jumlah_total_format' => 'Rp ' . number_format((float) $transaksi->jumlah_total, 0, ',', '.'),
+                ])
+            ], $response->status());
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => $responseData['status_message'] ?? 'Gagal membuat charge pembayaran Midtrans.',
+            'error' => $responseData
+        ], $response->status());
+
+    } catch (\Throwable $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Gagal meneruskan pembayaran ke Midtrans: ' . $e->getMessage()
+        ], 500);
+    }
+}
 
     /**
      * API Detail Booking berdasarkan ID
