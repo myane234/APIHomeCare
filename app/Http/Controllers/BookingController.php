@@ -925,7 +925,7 @@ class BookingController extends Controller
      * Step 2: API Direct Midtrans Charge (Eksekusi Pembayaran via Core API)
      * POST /api/booking/charge
      */
-    public function charge(Request $request)
+   public function charge(Request $request)
 {
     $validated = $request->validate([
         'id_booking' => 'required|exists:bookings,id_booking',
@@ -934,11 +934,11 @@ class BookingController extends Controller
 
     $paymentType = $validated['payment_type'];
 
-    
+    // 1. Ambil keyword bank jika berupa bank_transfer
     $bank = strtolower($request->input('bank_transfer.bank', ''));
     $searchKeys = array_unique(array_filter([$paymentType, $bank]));
 
-  
+    // 2. Cek ketersediaan di database master
     $metode = MasterMetodePembayaran::whereIn('payment_type', $searchKeys)
         ->where('is_active', true)
         ->whereHas('kategori', fn($q) => $q->where('is_active', true))
@@ -963,7 +963,7 @@ class BookingController extends Controller
     $transaksi = $booking->transaksi;
     $orderId = $transaksi->midtrans_order_id ?? ('BOOKING-' . $booking->id_booking . '-' . time());
 
-   
+    
     $payload = [
         'payment_type' => $paymentType,
         'transaction_details' => [
@@ -980,9 +980,27 @@ class BookingController extends Controller
         ],
     ];
 
-   
+
     if ($request->has($paymentType) && is_array($request->input($paymentType))) {
         $payload[$paymentType] = $request->input($paymentType);
+    }
+
+    
+    if ($paymentType === 'shopeepay') {
+        $shopeepayData = $payload['shopeepay'] ?? [];
+        if (empty($shopeepayData['callback_url'])) {
+          
+            $shopeepayData['callback_url'] = env('MIDTRANS_CALLBACK_URL', url('/payment/finish'));
+        }
+        $payload['shopeepay'] = $shopeepayData;
+    }
+
+    if ($paymentType === 'qris' && empty($payload['qris'])) {
+        $payload['qris'] = ['acquirer' => 'gopay'];
+    }
+
+    if ($paymentType === 'bank_transfer' && !isset($payload['bank_transfer'])) {
+        $payload['bank_transfer'] = $request->input('bank_transfer', ['bank' => $bank]);
     }
 
     $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
@@ -1008,32 +1026,28 @@ class BookingController extends Controller
                 'midtrans_response' => $responseData,
             ];
 
-            
-            
-            
+          
             if (isset($responseData['va_numbers'][0])) {
                 $paymentDetails['va_number'] = $responseData['va_numbers'][0]['va_number'] ?? null;
                 $paymentDetails['bank_va'] = $responseData['va_numbers'][0]['bank'] ?? null;
-            }
-           
-            elseif (isset($responseData['permata_va_number'])) {
+            } elseif (isset($responseData['permata_va_number'])) {
                 $paymentDetails['va_number'] = $responseData['permata_va_number'];
                 $paymentDetails['bank_va'] = 'permata';
             }
 
-           
+        
             if (isset($responseData['payment_code'])) {
                 $paymentDetails['payment_code'] = $responseData['payment_code'];
                 $paymentDetails['store'] = $responseData['store'] ?? null;
             }
 
-           
+            
             if (isset($responseData['bill_key'])) {
                 $paymentDetails['bill_key'] = $responseData['bill_key'];
                 $paymentDetails['biller_code'] = $responseData['biller_code'] ?? null;
             }
 
-           
+            
             if (isset($responseData['qr_string'])) {
                 $paymentDetails['qr_string'] = $responseData['qr_string'];
             }
