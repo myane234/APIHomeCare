@@ -37,6 +37,9 @@ use App\Http\Controllers\MasterKategoriTarifController;
 use App\Http\Controllers\KonfigurasiEnvController;
 use App\Http\Controllers\UlasanController;
 use App\Http\Controllers\HubungiKamiController;
+use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\LaporanController;
+use App\Http\Controllers\DashboardStatistikController;
 
 Route::middleware(['auth:sanctum'])->group(function () {
 
@@ -259,5 +262,24 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::put('/pesan/{id}', [HubungiKamiController::class, 'updatePesanStatus']);
         Route::delete('/pesan/{id}', [HubungiKamiController::class, 'destroyPesan']);
     });
+
+    // Aktivitas Log - Admin
+    Route::prefix('admin/activity-logs')->group(function () {
+        Route::get('/', [ActivityLogController::class, 'index']);
+        Route::post('/', [ActivityLogController::class, 'store']);
+        Route::get('/{id}', [ActivityLogController::class, 'show']);
+        Route::delete('/{id}', [ActivityLogController::class, 'destroy']);
+        Route::post('/clear', [ActivityLogController::class, 'clear']);
+    });
+
+    // Laporan Rekapitulasi - Admin
+    Route::prefix('admin/laporan')->group(function () {
+        Route::get('/transaksi', [LaporanController::class, 'laporanTransaksi']);
+        Route::get('/booking', [LaporanController::class, 'laporanBooking']);
+        Route::get('/nakes', [LaporanController::class, 'laporanNakes']);
+    });
+
+    // Dashboard Statistik Agregat - Admin
+    Route::get('/admin/dashboard-stats', [DashboardStatistikController::class, 'index']);
 
 });
