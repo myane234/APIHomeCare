@@ -1133,6 +1133,8 @@ class BookingController extends Controller
             ->values()
             ->whenEmpty(fn($layanan) => $booking->layanan?->nama_layanan ? collect([$booking->layanan->nama_layanan]) : collect())
             ->implode(', ');
+        $jumlahTotal = (float) $transaksi->jumlah_total;
+        $jumlahFormat = 'Rp ' . number_format($jumlahTotal, 0, ',', '.');
         $lunasStatuses = ['lunas', 'sudah bayar', 'settlement', 'success'];
 
         if (!in_array(strtolower($transaksi->status_transaksi), $lunasStatuses) && $orderId) {
@@ -1176,14 +1178,15 @@ class BookingController extends Controller
                     'booking_code' => $booking->booking_code,
                     'nama_layanan' => $namaLayanan,
                     'status_transaksi' => $transaksi->status_transaksi,
+                    'metode_pembayaran' => $transaksi->metode_pembayaran,
+                    'jumlah_total' => $jumlahTotal,
+                    'jumlah_total_format' => $jumlahFormat,
                     'waktu_bayar' => $transaksi->waktu_bayar,
                 ]
             ], 200);
         }
 
         $paymentDetails = [];
-        $jumlahTotal = (float) $transaksi->jumlah_total;
-        $jumlahFormat = 'Rp ' . number_format($jumlahTotal, 0, ',', '.');
 
         if ($transaksi->payment_method === 'qris' || ($transaksi->qr_string && $transaksi->qr_url)) {
             $paymentDetails['qris'] = [
@@ -1210,6 +1213,7 @@ class BookingController extends Controller
                 'nama_layanan' => $namaLayanan,
                 'order_id' => $orderId,
                 'status_transaksi' => $transaksi->status_transaksi,
+                'metode_pembayaran' => $transaksi->metode_pembayaran,
                 'jumlah_total' => $jumlahTotal,
                 'jumlah_total_format' => $jumlahFormat,
                 'payment_details' => $paymentDetails,
