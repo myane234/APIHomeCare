@@ -1173,6 +1173,7 @@ class BookingController extends Controller
                 'message' => 'Pembayaran untuk booking ini sudah lunas.',
                 'data' => [
                     'booking_id' => $booking->id_booking,
+                    'booking_code' => $booking->booking_code,
                     'nama_layanan' => $namaLayanan,
                     'status_transaksi' => $transaksi->status_transaksi,
                     'waktu_bayar' => $transaksi->waktu_bayar,
