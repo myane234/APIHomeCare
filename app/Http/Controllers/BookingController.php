@@ -934,9 +934,17 @@ class BookingController extends Controller
 
     $paymentType = $validated['payment_type'];
 
-    // 1. Ambil keyword bank jika berupa bank_transfer
+    // 1. Ambil keyword bank dan dukung format payment_type bank yang tersimpan di master
     $bank = strtolower($request->input('bank_transfer.bank', ''));
-    $searchKeys = array_unique(array_filter([$paymentType, $bank]));
+    $searchKeys = [$paymentType];
+    if ($paymentType === 'bank_transfer' && $bank !== '') {
+        $searchKeys = array_unique([
+            $paymentType,
+            $bank,
+            "{$bank}_va",
+            "{$bank}_transfer",
+        ]);
+    }
 
     // 2. Cek ketersediaan di database master
     $metode = MasterMetodePembayaran::whereIn('payment_type', $searchKeys)
