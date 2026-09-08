@@ -1116,7 +1116,7 @@ class BookingController extends Controller
      */
     public function getPaymentDetails($id)
     {
-        $booking = Booking::with(['layananItems.layanan', 'transaksi'])->find($id);
+        $booking = Booking::with(['layanan', 'layananItems.layanan', 'transaksi'])->find($id);
 
         if (!$booking || !$booking->transaksi) {
             return response()->json([
@@ -1127,6 +1127,12 @@ class BookingController extends Controller
 
         $transaksi = $booking->transaksi;
         $orderId = $transaksi->midtrans_order_id ?? ('BOOKING-' . $booking->id_booking);
+        $namaLayanan = $booking->layananItems
+            ->map(fn($item) => $item->layanan?->nama_layanan)
+            ->filter()
+            ->values()
+            ->whenEmpty(fn($layanan) => $booking->layanan?->nama_layanan ? collect([$booking->layanan->nama_layanan]) : collect())
+            ->implode(', ');
         $lunasStatuses = ['lunas', 'sudah bayar', 'settlement', 'success'];
 
         if (!in_array(strtolower($transaksi->status_transaksi), $lunasStatuses) && $orderId) {
@@ -1166,6 +1172,8 @@ class BookingController extends Controller
                 'success' => true,
                 'message' => 'Pembayaran untuk booking ini sudah lunas.',
                 'data' => [
+                    'booking_id' => $booking->id_booking,
+                    'nama_layanan' => $namaLayanan,
                     'status_transaksi' => $transaksi->status_transaksi,
                     'waktu_bayar' => $transaksi->waktu_bayar,
                 ]
@@ -1196,7 +1204,9 @@ class BookingController extends Controller
             'success' => true,
             'message' => 'Detail pembayaran berhasil diambil.',
             'data' => [
+                'booking_id' => $booking->id_booking,
                 'booking_code' => $booking->booking_code,
+                'nama_layanan' => $namaLayanan,
                 'order_id' => $orderId,
                 'status_transaksi' => $transaksi->status_transaksi,
                 'jumlah_total' => $jumlahTotal,
