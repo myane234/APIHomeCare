@@ -13,7 +13,9 @@ class Ulasan extends Model
     protected $table = 'ulasans';
 
     protected $fillable = [
+        'id_user',
         'nama_pengulas',
+        'email',
         'profesi_peran',
         'foto',
         'rating',
@@ -55,5 +57,13 @@ class Ulasan extends Model
     public function layanan()
     {
         return $this->belongsTo(MasterLayanan::class, 'layanan_id');
+    }
+
+    /**
+     * Relasi ke User
+     */
+    public function user()
+    {
+        return $this->belongsTo(Users::class, 'id_user', 'id_user');
     }
 }

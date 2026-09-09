@@ -61,12 +61,52 @@ class UlasanController extends Controller
     }
 
     /**
-     * Public API: Pengiriman Ulasan oleh Pasien / Pengunjung
+     * Protected API: Mengambil informasi user login untuk auto-fill form ulasan
+     */
+    public function userInfo(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthenticated',
+            ], 401);
+        }
+
+        $pasien = $user->pasien;
+        $namaPengulas = $pasien?->nama_lengkap ?? $user->email;
+        $avatar = $pasien?->avatar ?? $user->avatar;
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Berhasil mengambil informasi user untuk ulasan',
+            'data' => [
+                'id_user'       => $user->id_user,
+                'email'         => $user->email,
+                'nama_pengulas' => $namaPengulas,
+                'foto'          => $avatar,
+                'foto_url'      => $avatar ? (str_starts_with($avatar, 'http') ? $avatar : url(Storage::url($avatar))) : null,
+            ],
+        ], 200);
+    }
+
+    /**
+     * Authenticated API: Pengiriman Ulasan oleh Pasien / Pengunjung yang sudah Login
      */
     public function storePublic(Request $request)
     {
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthenticated. Silakan login terlebih dahulu untuk mengisi ulasan.',
+            ], 401);
+        }
+
         $validated = $request->validate([
-            'nama_pengulas' => 'required|string|max:255',
+            'nama_pengulas' => 'nullable|string|max:255',
             'profesi_peran' => 'nullable|string|max:255',
             'foto'          => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
             'rating'        => 'required|integer|min:1|max:5',
@@ -74,9 +114,20 @@ class UlasanController extends Controller
             'layanan_id'    => 'nullable|exists:master_layanan,id_master_layanan',
         ]);
 
+        // Auto load email & user ID dari akun terautentikasi
+        $validated['id_user'] = $user->id_user;
+        $validated['email']   = $user->email;
+
+        $pasien = $user->pasien;
+        if (empty($validated['nama_pengulas'])) {
+            $validated['nama_pengulas'] = $pasien?->nama_lengkap ?? $user->email;
+        }
+
         if ($request->hasFile('foto')) {
             $path = $request->file('foto')->store('ulasan', 'public');
             $validated['foto'] = $path;
+        } else {
+            $validated['foto'] = $pasien?->avatar ?? $user->avatar;
         }
 
         // Moderasi: ulasan publik default belum terpublikasi (is_published = false)
@@ -97,7 +148,7 @@ class UlasanController extends Controller
      */
     public function indexAdmin(Request $request)
     {
-        $query = Ulasan::with('layanan');
+        $query = Ulasan::with(['layanan', 'user']);
 
         // Filter Status Publikasi
         if ($request->filled('is_published')) {
@@ -115,6 +166,7 @@ class UlasanController extends Controller
             $searchTerm = $request->input('search', $request->input('q'));
             $query->where(function ($q) use ($searchTerm) {
                 $q->where('nama_pengulas', 'like', '%' . $searchTerm . '%')
+                  ->orWhere('email', 'like', '%' . $searchTerm . '%')
                   ->orWhere('profesi_peran', 'like', '%' . $searchTerm . '%')
                   ->orWhere('komentar', 'like', '%' . $searchTerm . '%');
             });
@@ -144,6 +196,7 @@ class UlasanController extends Controller
     {
         $validated = $request->validate([
             'nama_pengulas' => 'required|string|max:255',
+            'email'         => 'nullable|email|max:255',
             'profesi_peran' => 'nullable|string|max:255',
             'foto'          => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
             'rating'        => 'required|integer|min:1|max:5',
@@ -171,7 +224,7 @@ class UlasanController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Ulasan berhasil ditambahkan oleh Admin',
-            'data'    => $ulasan->load('layanan'),
+            'data'    => $ulasan->load(['layanan', 'user']),
         ], 201);
     }
 
@@ -180,7 +233,7 @@ class UlasanController extends Controller
      */
     public function show($id)
     {
-        $ulasan = Ulasan::with('layanan')->find($id);
+        $ulasan = Ulasan::with(['layanan', 'user'])->find($id);
 
         if (!$ulasan) {
             return response()->json([
