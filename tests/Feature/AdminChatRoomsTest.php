@@ -17,6 +17,34 @@ class AdminChatRoomsTest extends TestCase
 {
     use RefreshDatabase;
 
+    private function createTenagaMedisData(array $overrides = []): array
+    {
+        return array_merge([
+            'id_user' => 1,
+            'id_pasien' => 1,
+            'id_wilayah_layanan' => 1,
+            'nama_lengkap' => 'Default Nakes',
+            'nama_panggilan' => 'Nakes',
+            'nik' => '1234567890123456',
+            'jenis_kelamin' => 'P',
+            'tempat_lahir' => 'Jakarta',
+            'tanggal_lahir' => '1995-05-20',
+            'agama' => 'Islam',
+            'no_telp' => '081234567890',
+            'alamat_lengkap' => 'Jl. Test No. 1',
+            'jenis_tenaga_medis' => 'Perawat',
+            'universitas' => 'Universitas Indonesia',
+            'program_studi' => 'Keperawatan',
+            'tahun_lulus' => '2020',
+            'no_str' => 'STR-123',
+            'no_sip' => 'SIP-123',
+            'foto_profile' => '/storage/uploads/nakes/fake.jpg',
+            'latitude' => -6.200,
+            'longitude' => 106.816,
+            'status' => 'approved',
+        ], $overrides);
+    }
+
     public function test_admin_can_get_paginated_chat_rooms_without_waiting_for_nakes_chat(): void
     {
         $adminUser = Users::create([
@@ -52,18 +80,12 @@ class AdminChatRoomsTest extends TestCase
             'jenis_kelamin' => 'P',
             'alamat_utama' => 'Alamat Nakes',
         ]);
-        $nakes = TenagaMedis::create([
+        $nakes = TenagaMedis::create($this->createTenagaMedisData([
             'id_user' => $nakesUser->id_user,
             'id_pasien' => $nakesPasien->id_pasien,
-            'id_wilayah_layanan' => 1,
             'nama_lengkap' => 'Nakes Chat Ready',
             'nik' => '5555666677778888',
-            'jenis_tenaga_medis' => 'Perawat',
-            'no_str' => 'STR-999',
-            'latitude' => -6.200,
-            'longitude' => 106.816,
-            'status' => 'approved',
-        ]);
+        ]));
 
         $kategori = KategoriLayanan::create(['nama_kategori' => 'Umum']);
         $layanan = MasterLayanan::create([
@@ -133,18 +155,12 @@ class AdminChatRoomsTest extends TestCase
             'jenis_kelamin' => 'P',
             'alamat_utama' => 'Alamat Nakes Detail',
         ]);
-        $nakes = TenagaMedis::create([
+        $nakes = TenagaMedis::create($this->createTenagaMedisData([
             'id_user' => $nakesUser->id_user,
             'id_pasien' => $nakesPasien->id_pasien,
-            'id_wilayah_layanan' => 1,
             'nama_lengkap' => 'Nakes Detail',
             'nik' => '3434343434343434',
-            'jenis_tenaga_medis' => 'Bidan',
-            'no_str' => 'STR-888',
-            'latitude' => -6.200,
-            'longitude' => 106.816,
-            'status' => 'approved',
-        ]);
+        ]));
 
         $booking = Booking::create([
             'booking_code' => 'B-DETAIL-001',
