@@ -10,6 +10,7 @@ Route::get('/booking/nakes-terdekat', [BookingController::class, 'getNearestNake
 Route::middleware(['auth:sanctum'])->group(function () {
     // WebSocket & Real-time Chat
     Route::get('/websocket/config', [WebSocketController::class, 'getConfig']);
+    Route::get('/booking/{id}/chat', [WebSocketController::class, 'adminRoomDetail']);
     Route::post('/booking/{id}/chat', [WebSocketController::class, 'sendChatMessage']);
     Route::delete('/booking/{id}/chat-room', [WebSocketController::class, 'closeChatRoom']);
 

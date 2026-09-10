@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Booking;
+use App\Models\Chat;
 use App\Models\TenagaMedis;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -14,21 +15,208 @@ use Illuminate\Support\Facades\Log;
  */
 class WebSocketController extends Controller
 {
+    private string $wsServerHost;
+    private string $wsServerPort;
+
     public function __construct()
     {
         $this->wsServerHost = env('WEBSOCKET_HOST', '192.168.18.12');
         $this->wsServerPort = (string) env('WEBSOCKET_PORT', '8088');
     }
 
+    /**
+     * API Admin: List all chat rooms with pagination & filters
+     * GET /api/admin/chat-rooms or /api/manage-admin/chat-rooms
+     */
     public function adminRooms(Request $request)
     {
-        try {
-            $response = Http::timeout(3)->get($this->goHttpUrl('/rooms'), $request->query());
-            return response()->json($response->json(), $response->status());
-        } catch (\Throwable $e) {
-            Log::warning('Gagal mengambil room dari Go WebSocket server: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Go WebSocket server tidak dapat dihubungi.'], 503);
+        $perPage = max(1, (int) $request->query('per_page', $request->query('limit', 15)));
+        $page = max(1, (int) $request->query('page', 1));
+        $status = $request->query('status');
+        $search = $request->query('search');
+
+        $query = Booking::with(['pasien', 'tenagaMedis', 'layanan'])
+            ->where('status_booking', '!=', 'Dibatalkan');
+
+        if ($status) {
+            $query->where('status_booking', $status);
         }
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('booking_code', 'like', "%{$search}%")
+                    ->orWhereHas('pasien', function ($qp) use ($search) {
+                        $qp->where('nama_lengkap', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('tenagaMedis', function ($qn) use ($search) {
+                        $qn->where('nama_lengkap', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        $paginator = $query->orderByDesc('updated_at')->paginate($perPage, ['*'], 'page', $page);
+
+        // Ambil status rooms aktif dari Go WebSocket Server
+        $goRooms = [];
+        try {
+            $goRes = Http::timeout(2)->get($this->goHttpUrl('/rooms'));
+            if ($goRes->successful()) {
+                $goRooms = collect($goRes->json('rooms', []))->keyBy('booking_id')->all();
+            }
+        } catch (\Throwable $e) {
+            // Ignore Go timeout
+        }
+
+        $formattedData = collect($paginator->items())->map(function ($booking) use ($goRooms) {
+            $bookingId = (int) $booking->id_booking;
+            $goRoom = $goRooms[$bookingId] ?? null;
+
+            $lastChat = Chat::where('id_booking', $bookingId)->latest('waktu_kirim')->first();
+            $totalChats = Chat::where('id_booking', $bookingId)->count();
+
+            return [
+                'booking_id' => $bookingId,
+                'booking_code' => $booking->booking_code,
+                'status_booking' => $booking->status_booking,
+                'tanggal_kunjungan' => $booking->tanggal_kunjungan,
+                'jam_kunjungan' => $booking->jam_kunjungan,
+                'pasien' => $booking->pasien ? [
+                    'id' => (int) $booking->pasien->id_pasien,
+                    'name' => $booking->pasien->nama_lengkap,
+                    'no_telp' => $booking->pasien->no_telp,
+                    'foto_profile' => $booking->pasien->foto_profile,
+                ] : null,
+                'nakes' => $booking->tenagaMedis ? [
+                    'id' => (int) $booking->tenagaMedis->id_tenaga_medis,
+                    'name' => $booking->tenagaMedis->nama_lengkap,
+                    'jenis_tenaga_medis' => $booking->tenagaMedis->jenis_tenaga_medis,
+                    'no_telp' => $booking->tenagaMedis->no_telp,
+                    'foto_profile' => $booking->tenagaMedis->foto_profile,
+                ] : null,
+                'layanan' => $booking->layanan ? [
+                    'id' => (int) $booking->layanan->id_layanan,
+                    'nama_layanan' => $booking->layanan->nama_layanan,
+                ] : null,
+                'websocket_active' => $goRoom !== null,
+                'client_count' => $goRoom['client_count'] ?? 0,
+                'total_messages' => $totalChats,
+                'last_message' => $lastChat ? [
+                    'id_chat' => (int) $lastChat->id_chat,
+                    'sender_id' => (int) $lastChat->id_pengirim,
+                    'content' => $lastChat->pesan,
+                    'timestamp' => $lastChat->waktu_kirim?->toIso8601String(),
+                ] : null,
+                'created_at' => $booking->created_at?->toIso8601String(),
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Daftar chat rooms berhasil diambil.',
+            'data' => $formattedData,
+            'meta' => [
+                'current_page' => $paginator->currentPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+                'last_page' => $paginator->lastPage(),
+            ],
+        ]);
+    }
+
+    /**
+     * API Admin: Detail Chat Room & Riwayat Pesan per Booking ID
+     * GET /api/admin/chat-rooms/{id} or /api/manage-admin/chat-rooms/{id}
+     */
+    public function adminRoomDetail(Request $request, $id)
+    {
+        $booking = Booking::with(['pasien', 'tenagaMedis', 'layanan', 'transaksi'])->find($id);
+
+        if (!$booking) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking tidak ditemukan.',
+            ], 404);
+        }
+
+        $chats = Chat::where('id_booking', $id)
+            ->with(['pengirim.pasien', 'pengirim.tenagaMedis'])
+            ->orderBy('waktu_kirim', 'asc')
+            ->get();
+
+        $messages = $chats->map(function ($chat) use ($booking) {
+            $senderUser = $chat->pengirim;
+            $senderType = 'user';
+            $senderName = 'User';
+
+            if ($booking->tenagaMedis && $senderUser && (int) $senderUser->id_user === (int) $booking->tenagaMedis->id_user) {
+                $senderType = 'nakes';
+                $senderName = $booking->tenagaMedis->nama_lengkap;
+            } elseif ($booking->pasien && $senderUser && (int) $senderUser->id_user === (int) $booking->pasien->id_user) {
+                $senderType = 'pasien';
+                $senderName = $booking->pasien->nama_lengkap;
+            } elseif ($senderUser) {
+                $senderName = $senderUser->name ?: 'Admin';
+                $senderType = 'admin';
+            }
+
+            return [
+                'id_chat' => (int) $chat->id_chat,
+                'booking_id' => (int) $chat->id_booking,
+                'sender_id' => (int) $chat->id_pengirim,
+                'sender_type' => $senderType,
+                'sender_name' => $senderName,
+                'content' => $chat->pesan,
+                'timestamp' => $chat->waktu_kirim?->toIso8601String() ?: $chat->created_at?->toIso8601String(),
+            ];
+        });
+
+        $goRoomInfo = null;
+        try {
+            $goRes = Http::timeout(2)->get($this->goHttpUrl('/rooms'));
+            if ($goRes->successful()) {
+                $rooms = collect($goRes->json('rooms', []))->keyBy('booking_id');
+                $goRoomInfo = $rooms->get((int) $id);
+            }
+        } catch (\Throwable $e) {
+            // Ignore Go connection errors
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Detail chat room berhasil diambil.',
+            'data' => [
+                'room_info' => [
+                    'booking_id' => (int) $booking->id_booking,
+                    'booking_code' => $booking->booking_code,
+                    'status_booking' => $booking->status_booking,
+                    'tanggal_kunjungan' => $booking->tanggal_kunjungan,
+                    'jam_kunjungan' => $booking->jam_kunjungan,
+                    'alamat_kunjungan' => $booking->alamat_kunjungan,
+                    'pasien' => $booking->pasien ? [
+                        'id' => (int) $booking->pasien->id_pasien,
+                        'name' => $booking->pasien->nama_lengkap,
+                        'no_telp' => $booking->pasien->no_telp,
+                        'foto_profile' => $booking->pasien->foto_profile,
+                    ] : null,
+                    'nakes' => $booking->tenagaMedis ? [
+                        'id' => (int) $booking->tenagaMedis->id_tenaga_medis,
+                        'name' => $booking->tenagaMedis->nama_lengkap,
+                        'jenis_tenaga_medis' => $booking->tenagaMedis->jenis_tenaga_medis,
+                        'no_telp' => $booking->tenagaMedis->no_telp,
+                        'foto_profile' => $booking->tenagaMedis->foto_profile,
+                    ] : null,
+                    'layanan' => $booking->layanan ? [
+                        'id' => (int) $booking->layanan->id_layanan,
+                        'nama_layanan' => $booking->layanan->nama_layanan,
+                    ] : null,
+                    'websocket_connected' => $goRoomInfo !== null,
+                    'websocket_client_count' => $goRoomInfo['client_count'] ?? 0,
+                    'created_at' => $booking->created_at?->toIso8601String(),
+                ],
+                'total_messages' => $messages->count(),
+                'messages' => $messages,
+            ],
+        ]);
     }
 
     public function ensureChatRoom(Booking $booking): bool
@@ -126,6 +314,16 @@ class WebSocketController extends Controller
             'content' => $request->input('content'),
             'timestamp' => now()->toIso8601String(),
         ];
+
+        $user = $request->user();
+        if ($user) {
+            Chat::create([
+                'id_booking' => (int) $id,
+                'id_pengirim' => (int) ($user->id_user ?? $user->id),
+                'pesan' => $request->input('content'),
+                'waktu_kirim' => now(),
+            ]);
+        }
 
         $this->ensureChatRoom($booking->load(['pasien', 'tenagaMedis']));
 

@@ -131,6 +131,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     Route::get('/manage-admin/chat-rooms', [WebSocketController::class, 'adminRooms']);
     Route::get('/admin/chat-rooms', [WebSocketController::class, 'adminRooms']);
+    Route::get('/manage-admin/chat-rooms/{id}', [WebSocketController::class, 'adminRoomDetail']);
+    Route::get('/admin/chat-rooms/{id}', [WebSocketController::class, 'adminRoomDetail']);
 
     Route::get('/manage-admin/{id}', [AdminController::class, 'show']);
     Route::put('/manage-admin/{id}', [AdminController::class, 'update']);
