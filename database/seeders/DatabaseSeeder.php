@@ -39,6 +39,7 @@ class DatabaseSeeder extends Seeder
             LegalitySeeder::class,
             MasterTarifTransportSeeder::class,
             MasterTarifSeeder::class,
+            UlasanSeeder::class,
         ]);
 
         // Jika ingin membuat data pasien tetap langsung di sini, silakan:

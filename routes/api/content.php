@@ -16,8 +16,9 @@ Route::prefix('resource/content')->group(function () {
     // Kategori Artikel (Public Read)
     Route::get('/artikel/kategori', [KategoriArtikelController::class, 'index']);
 
-    // Ulasan (Public Read)
+    // Ulasan (Public Read & Submit)
     Route::get('/ulasan', [UlasanController::class, 'indexPublic']);
+    Route::post('/ulasan', [UlasanController::class, 'storePublic']);
 
     // Hubungi Kami (Public Read & Submit Pesan)
     Route::get('/hubungi-kami', [HubungiKamiController::class, 'getContentPublic']);
@@ -27,7 +28,6 @@ Route::prefix('resource/content')->group(function () {
 // Authenticated Patient / User routes for Ulasan Submission
 Route::middleware(['auth:sanctum'])->prefix('resource/content')->group(function () {
     Route::get('/ulasan/user-info', [UlasanController::class, 'userInfo']);
-    Route::post('/ulasan', [UlasanController::class, 'storePublic']);
 });
 
 // Admin routes (Requires Authentication and Admin Role)

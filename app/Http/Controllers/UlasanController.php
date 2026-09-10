@@ -98,13 +98,6 @@ class UlasanController extends Controller
     {
         $user = $request->user();
 
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthenticated. Silakan login terlebih dahulu untuk mengisi ulasan.',
-            ], 401);
-        }
-
         $validated = $request->validate([
             'nama_pengulas' => 'nullable|string|max:255',
             'profesi_peran' => 'nullable|string|max:255',
@@ -114,32 +107,40 @@ class UlasanController extends Controller
             'layanan_id'    => 'nullable|exists:master_layanan,id_master_layanan',
         ]);
 
-        // Auto load email & user ID dari akun terautentikasi
-        $validated['id_user'] = $user->id_user;
-        $validated['email']   = $user->email;
+        if ($user) {
+            $validated['id_user'] = $user->id_user;
+            $validated['email']   = $user->email;
+            $pasien = $user->pasien;
+            if (empty($validated['nama_pengulas'])) {
+                $validated['nama_pengulas'] = $pasien?->nama_lengkap ?? $user->email;
+            }
+        }
 
-        $pasien = $user->pasien;
         if (empty($validated['nama_pengulas'])) {
-            $validated['nama_pengulas'] = $pasien?->nama_lengkap ?? $user->email;
+            $validated['nama_pengulas'] = 'Pengunjung Portal';
+        }
+
+        if (empty($validated['profesi_peran'])) {
+            $validated['profesi_peran'] = 'Pasien';
         }
 
         if ($request->hasFile('foto')) {
             $path = $request->file('foto')->store('ulasan', 'public');
             $validated['foto'] = $path;
-        } else {
+        } elseif ($user) {
+            $pasien = $user->pasien;
             $validated['foto'] = $pasien?->avatar ?? $user->avatar;
         }
 
-        // Moderasi: ulasan publik default belum terpublikasi (is_published = false)
-        $validated['is_published'] = false;
+        $validated['is_published'] = true;
         $validated['urutan'] = 0;
 
         $ulasan = Ulasan::create($validated);
 
         return response()->json([
             'success' => true,
-            'message' => 'Terima kasih! Ulasan Anda berhasil dikirim dan akan ditinjau oleh tim kami.',
-            'data'    => $ulasan,
+            'message' => 'Terima kasih! Ulasan Anda berhasil dikirim.',
+            'data'    => $ulasan->load('layanan'),
         ], 201);
     }
 
