@@ -55,6 +55,7 @@ class AdminChatRoomsTest extends TestCase
         $nakes = TenagaMedis::create([
             'id_user' => $nakesUser->id_user,
             'id_pasien' => $nakesPasien->id_pasien,
+            'id_wilayah_layanan' => 1,
             'nama_lengkap' => 'Nakes Chat Ready',
             'nik' => '5555666677778888',
             'jenis_tenaga_medis' => 'Perawat',
@@ -135,6 +136,7 @@ class AdminChatRoomsTest extends TestCase
         $nakes = TenagaMedis::create([
             'id_user' => $nakesUser->id_user,
             'id_pasien' => $nakesPasien->id_pasien,
+            'id_wilayah_layanan' => 1,
             'nama_lengkap' => 'Nakes Detail',
             'nik' => '3434343434343434',
             'jenis_tenaga_medis' => 'Bidan',
