@@ -9,6 +9,10 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
+/**
+ * @group Tenaga Medis (nakes)
+ */
+
 class TenagaMedisController extends Controller
 {
     private function activeTenagaMedis(Request $request): ?TenagaMedis
@@ -76,6 +80,8 @@ class TenagaMedisController extends Controller
             'no_telp'            => ['required', 'string', 'max:15'],
             'id_wilayah_layanan' => ['required', 'integer', 'exists:master_provinsi,id_provinsi'],
             'alamat_lengkap'     => ['required', 'string', 'max:1000'],
+            'latitude'           => ['required', 'numeric', 'between:-90,90'],
+            'longitude'          => ['required', 'numeric', 'between:-180,180'],
             'foto_profile'       => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
 
             // Jenis Tenaga Medis (self-assign nakes)
@@ -176,6 +182,8 @@ class TenagaMedisController extends Controller
                         'agama'              => $validate['agama'],
                         'no_telp'            => $validate['no_telp'],
                         'alamat_lengkap'     => $validate['alamat_lengkap'],
+                        'latitude'           => $validate['latitude'],
+                        'longitude'          => $validate['longitude'],
 
                         'jenis_tenaga_medis' => $validate['jenis_tenaga_medis'],
 
@@ -226,6 +234,285 @@ class TenagaMedisController extends Controller
         }
     }
 
+    private function isEmptyValue($value): bool
+    {
+        if (is_array($value)) {
+            return empty($value);
+        }
+
+        return $value === null || $value === '' || $value === [];
+    }
+
+    private function getProfileCompletionFields(TenagaMedis $tenagaMedis): array
+    {
+        $fields = [
+            'nik',
+            'nama_lengkap',
+            'nama_panggilan',
+            'jenis_kelamin',
+            'tempat_lahir',
+            'tanggal_lahir',
+            'agama',
+            'no_telp',
+            'id_wilayah_layanan',
+            'alamat_lengkap',
+            'latitude',
+            'longitude',
+            'jenis_tenaga_medis',
+            'universitas',
+            'program_studi',
+            'tahun_lulus',
+            'no_str',
+            'no_sip',
+            'foto_profile',
+            'file_ktp',
+            'ijazah',
+            'file_skck',
+            'file_cv',
+            'file_str',
+            'file_sip',
+            'tempat_kerja',
+            'lama_bekerja',
+            'dokumen_tambahan',
+        ];
+
+        $lockedFields = [];
+        $fillableFields = [];
+
+        foreach ($fields as $field) {
+            if ($this->isEmptyValue($tenagaMedis->{$field})) {
+                $fillableFields[] = $field;
+            } else {
+                $lockedFields[] = $field;
+            }
+        }
+
+        return compact('lockedFields', 'fillableFields');
+    }
+
+    /**
+     * Endpoint Untuk cek Data Nakes lengkap/Tidakl 
+     */
+    public function completeProfile(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User tidak ditemukan.'
+            ], 401);
+        }
+
+        $tenagaMedis = TenagaMedis::where('id_user', $user->id_user)->first();
+
+        if (!$tenagaMedis) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data Tenaga Medis tidak ditemukan.'
+            ], 404);
+        }
+
+        $completion = $this->getProfileCompletionFields($tenagaMedis);
+        $lockedFields = $completion['lockedFields'];
+        $fillableFields = $completion['fillableFields'];
+
+        if ($request->isMethod('get')) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Status kelengkapan profil Nakes.',
+                'data' => $tenagaMedis,
+                'locked_fields' => $lockedFields,
+                'fillable_fields' => $fillableFields,
+                'is_complete' => empty($fillableFields),
+            ], 200);
+        }
+
+        if (empty($fillableFields)) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Semua data profil Nakes sudah terisi dan terkunci.',
+                'data' => $tenagaMedis,
+                'locked_fields' => $lockedFields,
+                'fillable_fields' => [],
+                'ignored_fields' => [],
+                'updated_fields' => [],
+            ], 200);
+        }
+
+        $rules = [];
+
+        if (in_array('nik', $fillableFields, true)) {
+            $rules['nik'] = ['nullable', 'string', 'regex:/^[0-9]{16}$/'];
+        }
+        if (in_array('nama_lengkap', $fillableFields, true)) {
+            $rules['nama_lengkap'] = ['nullable', 'string', 'max:255'];
+        }
+        if (in_array('nama_panggilan', $fillableFields, true)) {
+            $rules['nama_panggilan'] = ['nullable', 'string', 'max:100'];
+        }
+        if (in_array('jenis_kelamin', $fillableFields, true)) {
+            $rules['jenis_kelamin'] = ['nullable', 'in:L,P'];
+        }
+        if (in_array('tempat_lahir', $fillableFields, true)) {
+            $rules['tempat_lahir'] = ['nullable', 'string', 'max:255'];
+        }
+        if (in_array('tanggal_lahir', $fillableFields, true)) {
+            $rules['tanggal_lahir'] = ['nullable', 'date'];
+        }
+        if (in_array('agama', $fillableFields, true)) {
+            $rules['agama'] = ['nullable', 'string', 'max:50'];
+        }
+        if (in_array('no_telp', $fillableFields, true)) {
+            $rules['no_telp'] = ['nullable', 'string', 'max:15'];
+        }
+        if (in_array('id_wilayah_layanan', $fillableFields, true)) {
+            $rules['id_wilayah_layanan'] = ['nullable', 'integer', 'exists:master_provinsi,id_provinsi'];
+        }
+        if (in_array('alamat_lengkap', $fillableFields, true)) {
+            $rules['alamat_lengkap'] = ['nullable', 'string', 'max:1000'];
+        }
+        if (in_array('latitude', $fillableFields, true)) {
+            $rules['latitude'] = ['nullable', 'numeric', 'between:-90,90'];
+        }
+        if (in_array('longitude', $fillableFields, true)) {
+            $rules['longitude'] = ['nullable', 'numeric', 'between:-180,180'];
+        }
+        if (in_array('jenis_tenaga_medis', $fillableFields, true)) {
+            $rules['jenis_tenaga_medis'] = ['nullable', 'string', 'max:100'];
+        }
+        if (in_array('universitas', $fillableFields, true)) {
+            $rules['universitas'] = ['nullable', 'string', 'max:255'];
+        }
+        if (in_array('program_studi', $fillableFields, true)) {
+            $rules['program_studi'] = ['nullable', 'string', 'max:255'];
+        }
+        if (in_array('tahun_lulus', $fillableFields, true)) {
+            $rules['tahun_lulus'] = ['nullable', 'digits:4', 'integer'];
+        }
+        if (in_array('no_str', $fillableFields, true)) {
+            $rules['no_str'] = ['nullable', 'string', 'max:255'];
+        }
+        if (in_array('no_sip', $fillableFields, true)) {
+            $rules['no_sip'] = ['nullable', 'string', 'max:255'];
+        }
+
+        if (in_array('foto_profile', $fillableFields, true)) {
+            $rules['foto_profile'] = ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'];
+        }
+        if (in_array('file_ktp', $fillableFields, true)) {
+            $rules['file_ktp'] = ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'];
+        }
+        if (in_array('ijazah', $fillableFields, true)) {
+            $rules['ijazah'] = ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'];
+        }
+        if (in_array('file_skck', $fillableFields, true)) {
+            $rules['file_skck'] = ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'];
+        }
+        if (in_array('file_cv', $fillableFields, true)) {
+            $rules['file_cv'] = ['nullable', 'file', 'mimes:pdf,doc,docx,jpg,jpeg,png', 'max:5120'];
+        }
+        if (in_array('file_str', $fillableFields, true)) {
+            $rules['file_str'] = ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'];
+        }
+        if (in_array('file_sip', $fillableFields, true)) {
+            $rules['file_sip'] = ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'];
+        }
+        if (in_array('tempat_kerja', $fillableFields, true)) {
+            $rules['tempat_kerja'] = ['nullable', 'string', 'max:255'];
+        }
+        if (in_array('lama_bekerja', $fillableFields, true)) {
+            $rules['lama_bekerja'] = ['nullable', 'string', 'max:100'];
+        }
+        if (in_array('dokumen_tambahan', $fillableFields, true)) {
+            $rules['dokumen_tambahan'] = ['nullable', 'array', 'max:10'];
+            $rules['dokumen_tambahan.*'] = ['file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:5120'];
+        }
+
+        $rules = array_filter($rules, fn () => true);
+
+        $validated = $request->validate($rules);
+
+        $updates = [];
+        $ignoredFields = [];
+        $uploadedPaths = [];
+
+        $saveSingleFile = function (string $field, string $folder) use ($request, &$updates, &$uploadedPaths) {
+            if (!$request->hasFile($field)) {
+                return;
+            }
+
+            $file = $request->file($field);
+            $filename = $field . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $path = $file->storeAs($folder, $filename, 'public');
+            $uploadedPaths[] = $path;
+            $updates[$field] = '/storage/' . $path;
+        };
+
+        foreach ($fillableFields as $field) {
+            if ($request->hasFile($field)) {
+                $folder = $field === 'foto_profile' ? 'uploads/nakes/profiles' : 'uploads/nakes/docs';
+                $saveSingleFile($field, $folder);
+                continue;
+            }
+
+            if ($request->exists($field) && !in_array($field, ['dokumen_tambahan'], true)) {
+                $value = $request->input($field);
+                if ($value !== null && $value !== '') {
+                    $updates[$field] = $value;
+                } else {
+                    $ignoredFields[] = $field;
+                }
+            }
+        }
+
+        if (in_array('dokumen_tambahan', $fillableFields, true) && $request->hasFile('dokumen_tambahan')) {
+            $extraPaths = [];
+            foreach ($request->file('dokumen_tambahan') as $file) {
+                $filename = 'doc_extra_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                $path = $file->storeAs('uploads/nakes/docs_extra', $filename, 'public');
+                $uploadedPaths[] = $path;
+                $extraPaths[] = '/storage/' . $path;
+            }
+            $updates['dokumen_tambahan'] = $extraPaths;
+        }
+
+        foreach ($fillableFields as $field) {
+            if (isset($validated[$field]) && !in_array($field, array_keys($updates), true)) {
+                $updates[$field] = $validated[$field];
+            }
+        }
+
+        foreach ($fillableFields as $field) {
+            if (!array_key_exists($field, $updates) && $request->exists($field) && $request->input($field) === null) {
+                $ignoredFields[] = $field;
+            }
+        }
+
+        $ignoredFields = array_values(array_unique($ignoredFields));
+
+        if (!empty($updates)) {
+            $tenagaMedis->fill($updates);
+            $tenagaMedis->save();
+        }
+
+        $freshTenagaMedis = $tenagaMedis->fresh();
+        $newState = $this->getProfileCompletionFields($freshTenagaMedis);
+
+        return response()->json([
+            'success' => true,
+            'message' => !empty($updates)
+                ? 'Data profil Nakes berhasil dilengkapi. Field yang sudah terisi tetap aman dan tidak bisa diubah.'
+                : 'Tidak ada field kosong yang bisa diisi pada saat ini.',
+            'data' => $freshTenagaMedis,
+            'locked_fields' => $newState['lockedFields'],
+            'fillable_fields' => $newState['fillableFields'],
+            'ignored_fields' => $ignoredFields,
+            'updated_fields' => array_keys($updates),
+            'is_complete' => empty($newState['fillableFields']),
+        ], 200);
+    }
+
     /**
      * Tampilkan Detail Profil Nakes User Login
      */
@@ -269,6 +556,8 @@ class TenagaMedisController extends Controller
             'no_telp'            => ['sometimes', 'required', 'string', 'max:15'],
             'id_wilayah_layanan' => ['sometimes', 'required', 'integer'],
             'alamat_lengkap'     => ['sometimes', 'required', 'string', 'max:1000'],
+            'latitude'           => ['sometimes', 'nullable', 'numeric', 'between:-90,90'],
+            'longitude'          => ['sometimes', 'nullable', 'numeric', 'between:-180,180'],
             
             'jenis_tenaga_medis' => ['sometimes', 'required', 'string', 'max:100'],
             'universitas'        => ['sometimes', 'required', 'string', 'max:255'],

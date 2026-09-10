@@ -149,31 +149,52 @@ class BookingController extends Controller
         $nakes = $activeBooking->tenagaMedis;
         $trackingData = null;
 
-        if ($nakes && $nakes->latitude && $nakes->longitude && $activeBooking->latitude_kunjungan && $activeBooking->longitude_kunjungan) {
-            $distanceKm = $this->calculateDistance(
-                (float) $nakes->latitude,
-                (float) $nakes->longitude,
-                (float) $activeBooking->latitude_kunjungan,
-                (float) $activeBooking->longitude_kunjungan
+        if ($nakes) {
+            $nakesCoordinates = $this->resolveCoordinates(
+                $nakes->latitude,
+                $nakes->longitude,
+                $nakes->alamat_lengkap ?: $nakes->pasien?->alamat_utama
             );
 
+            $bookingCoordinates = $this->resolveCoordinates(
+                $activeBooking->latitude_kunjungan,
+                $activeBooking->longitude_kunjungan,
+                $activeBooking->alamat_kunjungan
+            );
 
-            $estimasiMenit = max(5, (int) round(($distanceKm / 25) * 60));
+            $this->storeMissingCoordinates($nakes, $nakesCoordinates);
+            $this->storeMissingCoordinates(
+                $activeBooking,
+                $bookingCoordinates,
+                'latitude_kunjungan',
+                'longitude_kunjungan'
+            );
 
-            $trackingData = [
-                'jarak_km' => $distanceKm,
-                'estimasi_menit_sampai' => $estimasiMenit,
-                'lokasi_nakes' => [
-                    'latitude' => (float) $nakes->latitude,
-                    'longitude' => (float) $nakes->longitude,
-                    'alamat' => $nakes->alamat_lengkap,
-                ],
-                'lokasi_kunjungan' => [
-                    'latitude' => (float) $activeBooking->latitude_kunjungan,
-                    'longitude' => (float) $activeBooking->longitude_kunjungan,
-                    'alamat' => $activeBooking->alamat_kunjungan,
-                ],
-            ];
+            if ($nakesCoordinates && $bookingCoordinates) {
+                $distanceKm = $this->calculateDistance(
+                    (float) $nakesCoordinates['latitude'],
+                    (float) $nakesCoordinates['longitude'],
+                    (float) $bookingCoordinates['latitude'],
+                    (float) $bookingCoordinates['longitude']
+                );
+
+                $estimasiMenit = max(5, (int) round(($distanceKm / 25) * 60));
+
+                $trackingData = [
+                    'jarak_km' => $distanceKm,
+                    'estimasi_menit_sampai' => $estimasiMenit,
+                    'lokasi_nakes' => [
+                        'latitude' => (float) $nakesCoordinates['latitude'],
+                        'longitude' => (float) $nakesCoordinates['longitude'],
+                        'alamat' => $nakes->alamat_lengkap ?: $nakes->pasien?->alamat_utama,
+                    ],
+                    'lokasi_kunjungan' => [
+                        'latitude' => (float) $bookingCoordinates['latitude'],
+                        'longitude' => (float) $bookingCoordinates['longitude'],
+                        'alamat' => $activeBooking->alamat_kunjungan,
+                    ],
+                ];
+            }
         }
 
         return response()->json([

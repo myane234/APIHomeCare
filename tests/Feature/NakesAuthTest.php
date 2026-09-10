@@ -214,6 +214,66 @@ class NakesAuthTest extends TestCase
         $this->assertEquals('Dokumen STR tidak valid.', $nakesRequest->fresh()->admin_notes);
     }
 
+    public function test_nakes_complete_profile_keeps_existing_fields_locked_and_fills_missing_only(): void
+    {
+        Storage::fake('public');
+
+        $pasien = Pasien::factory()->create();
+        $user = $pasien->user;
+        $this->actingAs($user, 'sanctum');
+
+        $nakes = TenagaMedis::create([
+            'id_user' => $user->id_user,
+            'id_pasien' => $pasien->id_pasien,
+            'id_wilayah_layanan' => 1,
+            'nik' => '1234567890123456',
+            'nama_lengkap' => 'Dr. Jane Doe',
+            'nama_panggilan' => 'Jane',
+            'jenis_kelamin' => 'P',
+            'tempat_lahir' => 'Jakarta',
+            'tanggal_lahir' => '1995-05-20',
+            'agama' => 'Islam',
+            'no_telp' => '081234567890',
+            'alamat_lengkap' => null,
+            'jenis_tenaga_medis' => 'Perawat',
+            'universitas' => 'Universitas Indonesia',
+            'program_studi' => 'Keperawatan',
+            'tahun_lulus' => 2020,
+            'no_str' => 'STR-123',
+            'no_sip' => 'SIP-123',
+            'foto_profile' => null,
+            'file_ktp' => '/storage/uploads/nakes/test-ktp.jpg',
+            'ijazah' => '/storage/uploads/nakes/test-ijazah.jpg',
+            'file_skck' => '/storage/uploads/nakes/test-skck.jpg',
+            'file_cv' => '/storage/uploads/nakes/test-cv.pdf',
+            'file_str' => '/storage/uploads/nakes/test-str.jpg',
+            'file_sip' => '/storage/uploads/nakes/test-sip.jpg',
+            'latitude' => null,
+            'longitude' => null,
+            'status' => 'approved',
+        ]);
+
+        $response = $this->postJson('/api/nakes/complete-profile', [
+            'nik' => '9999999999999999',
+            'alamat_lengkap' => 'Jl. Baru No. 99, Jakarta',
+            'latitude' => -6.300000,
+            'longitude' => 106.900000,
+            'foto_profile' => UploadedFile::fake()->image('new-profile.jpg'),
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.nik', '1234567890123456')
+            ->assertJsonPath('data.alamat_lengkap', 'Jl. Baru No. 99, Jakarta')
+            ->assertJsonPath('data.latitude', -6.300000)
+            ->assertJsonPath('data.longitude', 106.900000)
+            ->assertJsonPath('locked_fields.0', 'nik')
+            ->assertJsonPath('ignored_fields.0', 'foto_profile');
+
+        $this->assertEquals('1234567890123456', $nakes->fresh()->nik);
+        $this->assertEquals('Jl. Baru No. 99, Jakarta', $nakes->fresh()->alamat_lengkap);
+    }
+
     public function test_super_admin_can_manage_active_nakes_profiles(): void
     {
         $pasien = Pasien::factory()->create();
