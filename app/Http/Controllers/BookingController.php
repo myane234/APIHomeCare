@@ -1963,6 +1963,7 @@ class BookingController extends Controller
             DB::commit();
 
             $booking->refresh()->load(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi']);
+            app(WebSocketController::class)->ensureChatRoom($booking);
 
             return response()->json([
                 'success' => true,

@@ -106,6 +106,12 @@ func (h *Hub) run() {
 			h.rooms[sub.bookingID][sub.client] = true
 			if info, ok := h.metadata[sub.bookingID]; ok {
 				info.ClientCount = len(h.rooms[sub.bookingID])
+			} else {
+				h.metadata[sub.bookingID] = &RoomInfo{
+					BookingID:   sub.bookingID,
+					ClientCount: len(h.rooms[sub.bookingID]),
+					CreatedAt:   time.Now().UTC(),
+				}
 			}
 			h.mu.Unlock()
 			log.Printf("[Hub] Client %d joined room booking:%d (Total clients in room: %d)",

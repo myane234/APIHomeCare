@@ -19,6 +19,7 @@ Route::middleware(['auth:sanctum', 'role:nakes,tenaga medis'])->group(function (
     Route::get('/nakes/booking', [NakesBookingController::class, 'index']);
     Route::get('/nakes/orders', [NakesBookingController::class, 'ordersQueue']);
     Route::get('/nakes/order/{id}', [NakesBookingController::class, 'show']);
+    Route::post('/nakes/booking/{id}/status', [BookingController::class, 'nakesUpdateStatus']);
     Route::post('/nakes/booking/{id}/terima', [NakesBookingController::class, 'acceptBooking']);
     Route::post('/nakes/booking/{id}/tolak', [NakesBookingController::class, 'rejectBooking']);
     Route::post('/nakes/booking/{id}/tindakan', [NakesBookingController::class, 'startTindakan']);
@@ -34,10 +35,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/nakes/pakta-integritas/download', [TenagaMedisController::class, 'downloadPaktaIntegritas']);
 
     // Alternate direct endpoints for accepting order & updating status
-    // Route::get('/nakes/orders', [BookingController::class, 'nakesOrderQueue']);
-    // Route::get('/nakes/order/{id}', [BookingController::class, 'nakesOrderDetail']);
-    // Route::post('/nakes/order/{id}/accept', [BookingController::class, 'nakesAcceptBooking']);
-    // Route::post('/nakes/order/{id}/reject', [BookingController::class, 'nakesRejectBooking']);
-    // Route::post('/nakes/order/{id}/status', [BookingController::class, 'nakesUpdateStatus']);
+    Route::get('/nakes/order-queue', [BookingController::class, 'nakesOrderQueue']);
+    Route::get('/nakes/order/{id}', [BookingController::class, 'nakesOrderDetail']);
+    Route::post('/nakes/order/{id}/accept', [BookingController::class, 'nakesAcceptBooking']);
+    Route::post('/nakes/order/{id}/reject', [BookingController::class, 'nakesRejectBooking']);
+    Route::post('/nakes/order/{id}/status', [BookingController::class, 'nakesUpdateStatus']);
 });
 

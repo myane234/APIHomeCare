@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	port := flag.String("port", "8080", "HTTP server port")
+	port := flag.String("port", "8088", "HTTP server port")
 	flag.Parse()
 
 	if envPort := os.Getenv("PORT"); envPort != "" {
