@@ -29,6 +29,7 @@ Route::middleware(['auth:sanctum', 'role:nakes,tenaga medis'])->group(function (
 
 // Route untuk nakes (termasuk yang butuh endpoint nakes order)
 Route::middleware(['auth:sanctum'])->group(function () {
+    Route::match(['get', 'post'], '/nakes/complete-profile', [TenagaMedisController::class, 'completeProfile']);
     Route::post('/nakes/complete-data', [TenagaMedisController::class, 'completeData']);
     Route::get('/nakes/pakta-integritas/download', [TenagaMedisController::class, 'downloadPaktaIntegritas']);
 

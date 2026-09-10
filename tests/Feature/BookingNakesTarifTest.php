@@ -211,6 +211,89 @@ class BookingNakesTarifTest extends TestCase
         $this->assertEquals(5000.00, (float)$transaksi->ba);
     }
 
+    public function test_pasien_active_tracking_uses_geocoded_nakes_location_when_coordinates_missing(): void
+    {
+        config(['services.locationiq.key' => 'test-key']);
+        Http::fake([
+            'https://us1.locationiq.com/v1/search*' => Http::response([
+                ['lat' => '-6.1750000', 'lon' => '106.8650000'],
+            ], 200),
+        ]);
+
+        Role::firstOrCreate(['nama_role' => 'pasien']);
+        $patientUser = Users::create([
+            'email' => 'pasien_tracking@example.com',
+            'password' => bcrypt('password123'),
+            'is_active' => true,
+        ]);
+        $patientUser->roles()->attach('pasien');
+
+        $pasien = Pasien::create([
+            'id_user' => $patientUser->id_user,
+            'nama_lengkap' => 'Pasien Tracking',
+            'nik' => '2233445566778899',
+            'jenis_kelamin' => 'P',
+            'alamat_utama' => 'Jl. Sudirman No 5',
+        ]);
+
+        Role::firstOrCreate(['nama_role' => 'tenaga medis']);
+        $nakesUser = Users::create([
+            'email' => 'nakes_tracking@example.com',
+            'password' => bcrypt('password123'),
+            'is_active' => true,
+        ]);
+        $nakesUser->roles()->attach('tenaga medis');
+
+        $nakesPasien = Pasien::create([
+            'id_user' => $nakesUser->id_user,
+            'nama_lengkap' => 'Nakes Tracking',
+            'nik' => '9988776655443322',
+            'jenis_kelamin' => 'P',
+            'alamat_utama' => 'Jl. Menteng Raya No 10',
+        ]);
+
+        $nakes = TenagaMedis::create($this->createTenagaMedisData([
+            'id_user' => $nakesUser->id_user,
+            'id_pasien' => $nakesPasien->id_pasien,
+            'nama_lengkap' => 'Nakes Tracking',
+            'nik' => '9988776655443322',
+            'alamat_lengkap' => 'Jl. Menteng Raya No 10, Jakarta Pusat',
+            'latitude' => null,
+            'longitude' => null,
+        ]));
+
+        $booking = Booking::create([
+            'booking_code' => 'B-TEST-TRACKING',
+            'medical_record_number' => 'P-26-0001',
+            'id_pasien' => $pasien->id_pasien,
+            'id_layanan' => null,
+            'id_tenaga_medis' => $nakes->id_tenaga_medis,
+            'tanggal_kunjungan' => '2026-09-08',
+            'jam_kunjungan' => '14:58',
+            'alamat_kunjungan' => 'Jl. Persada II, Tebet, Jakarta Selatan',
+            'latitude_kunjungan' => -6.2088,
+            'longitude_kunjungan' => 106.8456,
+            'status_booking' => 'DiPerjalanan',
+        ]);
+
+        $this->actingAs($patientUser, 'sanctum');
+
+        $response = $this->getJson('/api/booking/terkini');
+
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.tracking_info.lokasi_nakes.latitude', -6.175)
+            ->assertJsonPath('data.tracking_info.lokasi_nakes.longitude', 106.865)
+            ->assertJsonPath('data.tenaga_medis_tracking.latitude', -6.175)
+            ->assertJsonPath('data.tenaga_medis_tracking.longitude', 106.865);
+
+        $this->assertDatabaseHas('tenaga_medis', [
+            'id_tenaga_medis' => $nakes->id_tenaga_medis,
+            'latitude' => -6.175,
+            'longitude' => 106.865,
+        ]);
+    }
+
     public function test_nearest_nakes_list_endpoint(): void
     {
         Role::firstOrCreate(['nama_role' => 'tenaga medis']);
