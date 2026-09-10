@@ -14,8 +14,11 @@ use Illuminate\Support\Facades\Log;
  */
 class WebSocketController extends Controller
 {
-    private string $wsServerHost = '192.168.18.12';
-    private string $wsServerPort = '8088';
+    public function __construct()
+    {
+        $this->wsServerHost = env('WEBSOCKET_HOST', '192.168.18.12');
+        $this->wsServerPort = (string) env('WEBSOCKET_PORT', '8088');
+    }
 
     public function adminRooms(Request $request)
     {
@@ -31,6 +34,8 @@ class WebSocketController extends Controller
     public function ensureChatRoom(Booking $booking): bool
     {
         try {
+            $booking->loadMissing(['pasien', 'tenagaMedis']);
+
             $response = Http::timeout(3)->post($this->goHttpUrl('/rooms'), [
                 'booking_id' => (int) $booking->id_booking,
                 'pasien' => $booking->pasien ? ['id' => (int) $booking->pasien->id_pasien, 'name' => $booking->pasien->nama_lengkap] : null,

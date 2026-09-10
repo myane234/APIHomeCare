@@ -15,6 +15,6 @@ WORKDIR /root/
 
 COPY --from=builder /app/ws-service .
 
-EXPOSE 8080
+EXPOSE 8088
 
 CMD ["./ws-service"]

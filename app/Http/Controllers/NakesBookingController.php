@@ -245,6 +245,7 @@ class NakesBookingController extends Controller
                 ], 400);
             }
 
+            $booking->refresh();
             app(WebSocketController::class)->ensureChatRoom($booking->load(['pasien', 'tenagaMedis']));
 
             // Recalculate Transport Nakes
