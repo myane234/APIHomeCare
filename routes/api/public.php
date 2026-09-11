@@ -25,6 +25,10 @@ Route::get('/promo/{promo}', [PromoController::class, 'show']);
 Route::get('/artikel', [ArtikelController::class, 'index']);
 Route::get('/artikel/{artikel}', [ArtikelController::class, 'show']);
 
+// Ulasan (Public Read & Submit)
+Route::get('/ulasan', [\App\Http\Controllers\UlasanController::class, 'indexPublic']);
+Route::post('/ulasan', [\App\Http\Controllers\UlasanController::class, 'storePublic']);
+
 Route::get('/tags', [TagController::class, 'index']);
 Route::get('/tags/{id}', [TagController::class, 'show']);
 

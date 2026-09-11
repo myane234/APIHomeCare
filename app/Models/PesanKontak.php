@@ -20,4 +20,14 @@ class PesanKontak extends Model
         'status',
         'catatan_admin',
     ];
+
+    protected $appends = ['no_wa'];
+
+    /**
+     * Accessor untuk mendapatkan no_wa (alias dari no_hp)
+     */
+    public function getNoWaAttribute()
+    {
+        return $this->no_hp;
+    }
 }
