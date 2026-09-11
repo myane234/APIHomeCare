@@ -18,10 +18,32 @@ class HubungiKamiController extends Controller
     /**
      * Public API: Mengambil data konten halaman Hubungi Kami
      */
-    public function getContentPublic()
+    /**
+     * Public API: Mengambil data konten halaman Hubungi Kami
+     */
+    public function getContentPublic(Request $request)
     {
         $content = ContentManagement::firstOrCreate([]);
         $global = GlobalConfig::first();
+
+        // Tarik data profil pengguna jika sedang login
+        $user = auth('sanctum')->user() ?? $request->user();
+        $userProfile = null;
+
+        if ($user) {
+            $pasien = $user->pasien;
+            $nakes  = $user->tenagaMedis;
+            $nama   = $pasien?->nama_lengkap ?? $nakes?->nama_lengkap ?? $user->name ?? null;
+            $noWa   = $pasien?->no_hp ?? $nakes?->no_telp ?? null;
+
+            $userProfile = [
+                'id_user' => $user->id_user,
+                'nama'    => $nama,
+                'email'   => $user->email,
+                'no_wa'   => $noWa,
+                'no_hp'   => $noWa,
+            ];
+        }
 
         return response()->json([
             'success' => true,
@@ -36,22 +58,88 @@ class HubungiKamiController extends Controller
                 'hubungi_address'         => $content->hubungi_address ?: ($global->address ?? null),
                 'hubungi_maps_link'       => $content->hubungi_maps_link,
                 'hubungi_jam_operasional' => $content->hubungi_jam_operasional ?? 'Senin - Minggu: 08:00 - 20:00 WIB',
+                'user_profile'            => $userProfile,
             ]
         ], 200);
     }
 
     /**
-     * Public API: Pengiriman pesan/inquiry dari form Hubungi Kami
+     * Protected API: Mengambil informasi profile user login untuk auto-fill form Hubungi Kami
+     */
+    public function userInfo(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthenticated',
+            ], 401);
+        }
+
+        $pasien = $user->pasien;
+        $nakes  = $user->tenagaMedis;
+
+        $nama = $pasien?->nama_lengkap ?? $nakes?->nama_lengkap ?? $user->name ?? null;
+        $noWa = $pasien?->no_hp ?? $nakes?->no_telp ?? null;
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Berhasil mengambil informasi profil user untuk Hubungi Kami',
+            'data' => [
+                'id_user' => $user->id_user,
+                'nama'    => $nama,
+                'email'   => $user->email,
+                'no_wa'   => $noWa,
+                'no_hp'   => $noWa,
+            ],
+        ], 200);
+    }
+
+    /**
+     * Public / Authenticated API: Pengiriman pesan/inquiry dari form Hubungi Kami
      */
     public function kirimPesan(Request $request)
     {
+        $user = auth('sanctum')->user() ?? $request->user();
+
+        // Jika user terautentikasi (login), otomatis tarik data dari profil jika input kosong
+        if ($user) {
+            $pasien = $user->pasien;
+            $nakes  = $user->tenagaMedis;
+            $namaProfile = $pasien?->nama_lengkap ?? $nakes?->nama_lengkap ?? $user->name;
+            $noWaProfile = $pasien?->no_hp ?? $nakes?->no_telp;
+
+            if (!$request->filled('nama') && $namaProfile) {
+                $request->merge(['nama' => $namaProfile]);
+            }
+            if (!$request->filled('email') && $user->email) {
+                $request->merge(['email' => $user->email]);
+            }
+            if (!$request->filled('no_hp') && !$request->filled('no_wa') && $noWaProfile) {
+                $request->merge(['no_hp' => $noWaProfile, 'no_wa' => $noWaProfile]);
+            }
+        }
+
         $validated = $request->validate([
             'nama'   => 'required|string|max:255',
             'email'  => 'required|email|max:255',
-            'no_hp'  => 'nullable|string|max:20',
+            'no_hp'  => 'nullable|string|max:25',
+            'no_wa'  => 'nullable|string|max:25',
             'subjek' => 'nullable|string|max:255',
             'pesan'  => 'required|string',
+        ], [
+            'nama.required'  => 'Nama wajib diisi.',
+            'email.required' => 'Email wajib diisi.',
+            'email.email'    => 'Format email tidak valid.',
+            'pesan.required' => 'Pesan wajib diisi.',
         ]);
+
+        // Jika no_wa dikirim tetapi no_hp kosong, gunakan no_wa sebagai nilai no_hp
+        if (empty($validated['no_hp']) && !empty($validated['no_wa'])) {
+            $validated['no_hp'] = $validated['no_wa'];
+        }
+        unset($validated['no_wa']);
 
         $validated['status'] = 'belum_dibaca';
 
