@@ -7,6 +7,8 @@ use App\Models\Booking;
 use App\Models\BookingBhp;
 use App\Models\BhpItem;
 use App\Models\MasterLayanan;
+use App\Models\MasterKategoriTarif;
+use App\Models\MasterTarif;
 use App\Models\MasterTarifTransport;
 use App\Models\TenagaMedis;
 use App\Models\Transaksi;
@@ -19,6 +21,58 @@ use Illuminate\Support\Facades\DB;
  */
 class NakesBookingController extends Controller
 {
+    private function calculateTransportTariff(?MasterTarifTransport $transportMaster, float $distanceKm): float
+    {
+        if (!$transportMaster || $distanceKm <= 0 || $distanceKm > 40) {
+            return 0.0;
+        }
+
+        return (int) ceil($distanceKm / 10) * (float) $transportMaster->tarif_per_10_km;
+    }
+
+    private function bookingUsesTransport(Booking $booking): bool
+    {
+        $category = $booking->id_kategori_tarif
+            ? MasterKategoriTarif::find($booking->id_kategori_tarif)
+            : MasterKategoriTarif::where('is_default', true)->first();
+        if ($booking->tanggal_kunjungan && $booking->jam_kunjungan) {
+            $dateTime = Carbon::parse($booking->tanggal_kunjungan . ' ' . $booking->jam_kunjungan);
+            $dayNames = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+            $day = $dayNames[$dateTime->dayOfWeek];
+            $currentTime = $dateTime->format('H:i:s');
+
+            $category = MasterKategoriTarif::where('is_default', false)
+                ->whereNotNull('hari_berlaku')->whereNotNull('jam_mulai')->whereNotNull('jam_selesai')
+                ->get()->first(function ($item) use ($day, $currentTime, $dateTime, $dayNames) {
+                    $days = array_map('strtolower', $item->hari_berlaku ?? []);
+                    $start = Carbon::parse($dateTime->format('Y-m-d') . ' ' . $item->jam_mulai);
+                    $end = Carbon::parse($dateTime->format('Y-m-d') . ' ' . $item->jam_selesai);
+                    if ($end->gte($start)) {
+                        return in_array($day, $days, true)
+                            && $currentTime >= $start->format('H:i:s')
+                            && $currentTime <= $end->format('H:i:s');
+                    }
+                    $previousDay = $dayNames[$dateTime->copy()->subDay()->dayOfWeek];
+                    return (in_array($day, $days, true) && $currentTime >= $start->format('H:i:s'))
+                        || (in_array($previousDay, $days, true) && $currentTime <= $end->format('H:i:s'));
+                }) ?? $category;
+        }
+
+        $serviceIds = $booking->layananItems->isNotEmpty()
+            ? $booking->layananItems->pluck('id_layanan')->filter()
+            : collect([$booking->id_layanan])->filter();
+
+        return $category && $serviceIds->contains(function ($serviceId) use ($category) {
+            return MasterTarif::where('is_active', true)
+                ->where('id_kategori_tarif', $category->id_kategori_tarif)
+                ->where('is_transport', true)
+                ->where(function ($query) use ($serviceId) {
+                    $query->where('id_layanan', $serviceId)
+                        ->orWhereHas('layananTermasuk', fn ($pivot) => $pivot->where('master_layanan.id_layanan', $serviceId));
+                })->exists();
+        });
+    }
+
     /**
      * Helper untuk mendapatkan profil Nakes yang sedang login.
      */
@@ -267,8 +321,11 @@ class NakesBookingController extends Controller
                     ? $layananItems->map(fn($item) => $item->layanan)->filter()
                     : collect([$booking->layanan])->filter();
 
-                if ($layananList->contains(fn($layanan) => !$layanan->include_transport)) {
-                    $actualTransportCost = $actualDistance > 0 ? (10000.0 + ($actualDistance * 3000.0)) : 0.0;
+                if ($this->bookingUsesTransport($booking)) {
+                    $transportMaster = MasterTarifTransport::query()->first();
+                    $actualTransportCost = $transportMaster
+                        ? $this->calculateTransportTariff($transportMaster, $actualDistance)
+                        : 0.0;
                 }
                 $actualTransportCost = (int) round($actualTransportCost);
                 $originalSt = (float) $transaksi->st;

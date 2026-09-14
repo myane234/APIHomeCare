@@ -16,6 +16,28 @@ use Illuminate\Support\Facades\DB;
  */
 class SuperAdminMasterTarif extends Controller
 {
+    private function hasTransportConflict(array $layananIds, ?int $ignoreId = null): bool
+    {
+        foreach ($layananIds as $layananId) {
+            $query = MasterTarif::query()
+                ->where('is_transport', true)
+                ->where(function ($builder) use ($layananId) {
+                    $builder->where('id_layanan', $layananId)
+                        ->orWhereHas('layananTermasuk', fn ($pivot) => $pivot->where('master_layanan.id_layanan', $layananId));
+                });
+
+            if ($ignoreId !== null) {
+                $query->where('id_master_tarif', '!=', $ignoreId);
+            }
+
+            if ($query->exists()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Tampilkan semua daftar Master Tarif
      */
@@ -85,6 +107,9 @@ class SuperAdminMasterTarif extends Controller
             if (empty($layananIds)) {
                 throw new \InvalidArgumentException('Minimal satu layanan harus dipilih');
             }
+            if ($request->boolean('is_transport') && $this->hasTransportConflict($layananIds)) {
+                throw new \InvalidArgumentException('Setiap layanan hanya boleh memiliki satu Master Tarif transport.');
+            }
             $komponenIds = $request->input('komponen_tarif_ids', []);
 
             $masterTarif = MasterTarif::updateOrCreate(
@@ -124,7 +149,7 @@ class SuperAdminMasterTarif extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal menyimpan master tarif: ' . $e->getMessage()
-            ], 500);
+            ], $e instanceof \InvalidArgumentException ? 422 : 500);
         }
     }
 
@@ -183,10 +208,16 @@ class SuperAdminMasterTarif extends Controller
             if (empty($layananIds)) {
                 $layananIds = [(int) $masterTarif->id_layanan];
             }
+            $isTransport = $request->has('is_transport')
+                ? $request->boolean('is_transport')
+                : (bool) $masterTarif->is_transport;
+            if ($isTransport && $this->hasTransportConflict($layananIds, (int) $masterTarif->getKey())) {
+                throw new \InvalidArgumentException('Setiap layanan hanya boleh memiliki satu Master Tarif transport.');
+            }
             if ($request->has('id_layanan')) $masterTarif->id_layanan = $layananIds[0];
             if ($request->has('fee_nakes_tipe')) $masterTarif->fee_nakes_tipe = $request->fee_nakes_tipe;
             if ($request->has('fee_nakes_nilai')) $masterTarif->fee_nakes_nilai = $request->fee_nakes_nilai;
-            if ($request->has('is_transport')) $masterTarif->is_transport = $request->is_transport;
+            if ($request->has('is_transport')) $masterTarif->is_transport = $request->boolean('is_transport');
             if ($request->has('is_active')) $masterTarif->is_active = $request->is_active;
 
             $layananUtama = MasterLayanan::find($masterTarif->id_layanan);
@@ -225,7 +256,7 @@ class SuperAdminMasterTarif extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal mengupdate master tarif: ' . $e->getMessage()
-            ], 500);
+            ], $e instanceof \InvalidArgumentException ? 422 : 500);
         }
     }
 

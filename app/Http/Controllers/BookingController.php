@@ -378,6 +378,32 @@ class BookingController extends Controller
 
         return $matched ?? MasterKategoriTarif::where('is_default', true)->first();
     }
+    private function bookingUsesTransport(Booking $booking): bool
+    {
+        $category = $booking->id_kategori_tarif
+            ? MasterKategoriTarif::find($booking->id_kategori_tarif)
+            : $this->findTriggeredTariffCategory($booking->tanggal_kunjungan, $booking->jam_kunjungan);
+        $serviceIds = $booking->layananItems->isNotEmpty()
+            ? $booking->layananItems->pluck('id_layanan')->filter()
+            : collect([$booking->id_layanan])->filter();
+
+        if (!$category || $serviceIds->isEmpty()) {
+            return false;
+        }
+
+        return $serviceIds->contains(function ($serviceId) use ($category) {
+            $tarif = MasterTarif::query()
+                ->where('is_active', true)
+                ->where('id_kategori_tarif', $category->id_kategori_tarif)
+                ->where(function ($query) use ($serviceId) {
+                    $query->where('id_layanan', $serviceId)
+                        ->orWhereHas('layananTermasuk', fn ($pivot) => $pivot->where('master_layanan.id_layanan', $serviceId));
+                })
+                ->first();
+
+            return (bool) $tarif?->is_transport;
+        });
+    }
 
     /**
      * Mengambil koordinat dari input atau geocoding alamat tanpa menyimpan hasilnya.
@@ -778,15 +804,17 @@ class BookingController extends Controller
                 'sb' => round($sb, 2),
                 'hpp_bhp' => round($hppBhp, 2),
                 'hak_nakes_layanan' => round($feeNakesLyn, 2),
+                'is_transport' => (bool) $masterTarif?->is_transport,
             ];
         }
 
 
         // Transport tidak dikenakan jika SEMUA layanan include transport
-        $semuaIncludeTransport = $semuaLayanan->every(fn($l) => (bool) $l->include_transport);
+        // Transport hanya dihitung bila Master Tarif terpilih mengaktifkannya.
+        $transportIncluded = collect($perLayananData)->contains(fn ($item) => $item['is_transport'] ?? false);
         $tarifTransportasiFinal = 0.0;
 
-        if (!$semuaIncludeTransport) {
+        if ($transportIncluded) {
             $transportMaster = MasterTarifTransport::query()->first();
 
             if ($transportMaster) {
@@ -851,8 +879,8 @@ class BookingController extends Controller
             + $biayaAdministrasiAplikasi - $feeMidtrans;
 
         try {
-            return Cache::lock('create_booking_lock', 10)->block(5, function () use ($validate, $pasien, $layananIds, $semuaLayanan, $perLayananData, $tenagaMedisId, $alamatKunjungan, $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $totalHppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance) {
-                return DB::transaction(function () use ($validate, $pasien, $layananIds, $semuaLayanan, $perLayananData, $tenagaMedisId, $alamatKunjungan, $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $totalHppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance) {
+            return Cache::lock('create_booking_lock', 10)->block(5, function () use ($validate, $pasien, $layananIds, $semuaLayanan, $perLayananData, $tenagaMedisId, $alamatKunjungan, $idKategoriTarif, $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $totalHppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance) {
+                return DB::transaction(function () use ($validate, $pasien, $layananIds, $semuaLayanan, $perLayananData, $tenagaMedisId, $alamatKunjungan, $idKategoriTarif, $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $totalHppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance) {
 
                     // 1. Generate booking_code (Format: B-YYMMDDXXXXXXX)
                     $prefixBooking = 'B-' . date('ymd');
@@ -874,6 +902,7 @@ class BookingController extends Controller
                         'medical_record_number' => $medicalRecordNumber,
                         'id_pasien' => $pasien->id_pasien,
                         'id_layanan' => $layananIds[0],   // primary layanan
+                        'id_kategori_tarif' => $idKategoriTarif,
                         'id_tenaga_medis' => $tenagaMedisId,
                         'tanggal_kunjungan' => $validate['tanggal_kunjungan'],
                         'jam_kunjungan' => $validate['jam_kunjungan'],
@@ -1044,7 +1073,7 @@ class BookingController extends Controller
     $jarakNakesAcuan = 0.0;
     $tierTransport = 0;
 
-    if ($stTransport <= 0 && $semuaLayanan->contains(fn($layanan) => !$layanan->include_transport)) {
+    if ($stTransport <= 0 && $this->bookingUsesTransport($booking)) {
         $transportMaster = MasterTarifTransport::query()->first();
 
         if ($transportMaster && $booking->latitude_kunjungan && $booking->longitude_kunjungan) {
@@ -2062,7 +2091,7 @@ class BookingController extends Controller
                     ? $layananItems->map(fn($item) => $item->layanan)->filter()
                     : collect([$booking->layanan])->filter();
 
-                if ($layananList->contains(fn($layanan) => !$layanan->include_transport)) {
+                if ($this->bookingUsesTransport($booking)) {
                     $transportMaster = MasterTarifTransport::query()->first();
                     if ($transportMaster) {
                         $actualTransportCost = $this->calculateTransportTariff($transportMaster, $actualDistance);
