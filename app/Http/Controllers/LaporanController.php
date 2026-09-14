@@ -174,8 +174,10 @@ class LaporanController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('nama_lengkap', 'like', '%' . $search . '%')
-                  ->orWhere('email', 'like', '%' . $search . '%')
-                  ->orWhere('nomor_str', 'like', '%' . $search . '%');
+                  ->orWhereHas('user', function ($u) use ($search) {
+                      $u->where('email', 'like', '%' . $search . '%');
+                  })
+                  ->orWhere('no_str', 'like', '%' . $search . '%');
             });
         }
 
@@ -201,16 +203,18 @@ class LaporanController extends Controller
             $totalHakNakes = Transaksi::whereIn('id_booking', $bookingIds)->sum('hak_nakes');
 
             return [
-                'id_tenaga_medis' => $nakes->id_tenaga_medis,
-                'nama_lengkap'    => $nakes->nama_lengkap,
-                'profesi'         => $nakes->profesi,
-                'nomor_str'       => $nakes->nomor_str,
-                'status'          => $nakes->status,
-                'total_booking'   => $totalBooking,
-                'total_selesai'   => $totalSelesai,
-                'total_dibatalkan' => $totalDibatalkan,
-                'total_hak_nakes' => (float) $totalHakNakes,
-                'rating'          => $nakes->rating ?? 5.0,
+                'id_tenaga_medis'    => $nakes->id_tenaga_medis,
+                'nama_lengkap'       => $nakes->nama_lengkap,
+                'jenis_tenaga_medis' => $nakes->jenis_tenaga_medis,
+                'profesi'            => $nakes->jenis_tenaga_medis,
+                'no_str'             => $nakes->no_str,
+                'nomor_str'          => $nakes->no_str,
+                'status'             => $nakes->status,
+                'total_booking'      => $totalBooking,
+                'total_selesai'      => $totalSelesai,
+                'total_dibatalkan'   => $totalDibatalkan,
+                'total_hak_nakes'    => (float) $totalHakNakes,
+                'rating'             => $nakes->rating ?? 5.0,
             ];
         });
 

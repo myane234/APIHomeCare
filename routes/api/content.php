@@ -25,6 +25,12 @@ Route::prefix('resource/content')->group(function () {
     Route::post('/hubungi-kami/kirim-pesan', [HubungiKamiController::class, 'kirimPesan']);
 });
 
+// Authenticated Patient / User routes for Ulasan & Hubungi Kami Submission
+Route::middleware(['auth:sanctum'])->prefix('resource/content')->group(function () {
+    Route::get('/ulasan/user-info', [UlasanController::class, 'userInfo']);
+    Route::get('/hubungi-kami/user-info', [HubungiKamiController::class, 'userInfo']);
+});
+
 // Admin routes (Requires Authentication and Admin Role)
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('resource/content')->group(function () {
     Route::post('/home', [ContentManagementController::class, 'updateHome']);
