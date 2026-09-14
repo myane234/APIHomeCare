@@ -992,12 +992,31 @@ class BookingController extends Controller
     $transaksi = $booking->transaksi;
     $orderId = $transaksi->midtrans_order_id ?? ('BOOKING-' . $booking->id_booking . '-' . time());
 
+    // Hitung dari snapshot komponen agar retry charge tidak menerapkan diskon
+    // berulang pada jumlah_total yang sudah pernah disesuaikan.
+    $totalSebelumPotongan = (float) $transaksi->sl
+        + (float) $transaksi->sb
+        + (float) ($transaksi->sb_tambahan ?? 0)
+        + (float) $transaksi->st
+        + (float) $transaksi->ba
+        + (float) $transaksi->ppn;
+
+    if ($totalSebelumPotongan <= 0) {
+        $totalSebelumPotongan = (float) $transaksi->jumlah_total;
+    }
+
+    $nilaiPotongan = max(0, (float) $metode->nilai_potongan);
+    $potongan = $metode->tipe_potongan === 'persen'
+        ? $totalSebelumPotongan * min(100, $nilaiPotongan) / 100
+        : min($nilaiPotongan, $totalSebelumPotongan);
+    $jumlahTotalCharge = max(0, (int) round($totalSebelumPotongan - $potongan));
+
     
     $payload = [
         'payment_type' => $paymentType,
         'transaction_details' => [
             'order_id' => $orderId,
-            'gross_amount' => (int) $transaksi->jumlah_total,
+            'gross_amount' => $jumlahTotalCharge,
         ],
         'customer_details' => [
             'first_name' => $booking->pasien?->nama_lengkap ?? 'Pasien',
@@ -1091,6 +1110,9 @@ class BookingController extends Controller
             }
 
             $transaksi->update($paymentDetails);
+            $transaksi->update([
+                'jumlah_total' => $jumlahTotalCharge,
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -1098,8 +1120,12 @@ class BookingController extends Controller
                 'data' => array_merge($responseData, [
                     'id_booking' => $booking->id_booking,
                     'order_id' => $responseData['order_id'] ?? $orderId,
-                    'jumlah_total' => (float) $transaksi->jumlah_total,
-                    'jumlah_total_format' => 'Rp ' . number_format((float) $transaksi->jumlah_total, 0, ',', '.'),
+                    'jumlah_total' => $jumlahTotalCharge,
+                    'jumlah_total_sebelum_potongan' => $totalSebelumPotongan,
+                    'potongan' => round($potongan, 2),
+                    'tipe_potongan' => $metode->tipe_potongan,
+                    'nilai_potongan' => $nilaiPotongan,
+                    'jumlah_total_format' => 'Rp ' . number_format($jumlahTotalCharge, 0, ',', '.'),
                 ])
             ], $response->status());
         }
