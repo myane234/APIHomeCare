@@ -65,7 +65,7 @@ class BookingController extends Controller
         $sortBy = $request->input('sort_by', 'created_at');
         $sortOrder = $request->input('sort_order', 'desc');
 
-        $query = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi'])
+        $query = Booking::with(['pasien', 'layanan', 'kategoriTarif', 'layananItems.layanan', 'tenagaMedis', 'transaksi'])
             ->where('id_pasien', $pasien->id_pasien);
 
         // Filter by status
@@ -124,7 +124,7 @@ class BookingController extends Controller
         }
 
 
-        $activeBooking = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi', 'bookingBhp.bhpItem'])
+        $activeBooking = Booking::with(['pasien', 'layanan', 'kategoriTarif', 'layananItems.layanan', 'tenagaMedis', 'transaksi', 'bookingBhp.bhpItem'])
             ->where('id_pasien', $pasien->id_pasien)
             ->whereIn('status_booking', ['Pending', 'DiPerjalanan', 'Tindakan'])
             ->orderByDesc('created_at')
@@ -132,7 +132,7 @@ class BookingController extends Controller
 
 
         if (!$activeBooking) {
-            $activeBooking = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi', 'bookingBhp.bhpItem'])
+            $activeBooking = Booking::with(['pasien', 'layanan', 'kategoriTarif', 'layananItems.layanan', 'tenagaMedis', 'transaksi', 'bookingBhp.bhpItem'])
                 ->where('id_pasien', $pasien->id_pasien)
                 ->orderByDesc('created_at')
                 ->first();
@@ -254,7 +254,7 @@ class BookingController extends Controller
         $sortBy = $request->input('sort_by', 'created_at');
         $sortOrder = $request->input('sort_order', 'desc');
 
-        $query = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi', 'bookingBhp.bhpItem']);
+        $query = Booking::with(['pasien', 'layanan', 'kategoriTarif', 'layananItems.layanan', 'tenagaMedis', 'transaksi', 'bookingBhp.bhpItem']);
 
         // Filter by status
         if ($request->filled('status_booking')) {
@@ -1052,7 +1052,10 @@ class BookingController extends Controller
         'transaksi',
         'pasien.user',
         'layanan',
-        'layananItems.layanan',
+        'kategoriTarif',
+        'layananItems.layanan.kategori',
+        'layananItems.layanan.bhpItems',
+        'bookingBhp.bhpItem',
     ])->find($request->input('id_booking'));
 
     if (!$booking || !$booking->transaksi) {
@@ -1241,6 +1244,16 @@ class BookingController extends Controller
                 'message' => 'Transaksi charge Midtrans berhasil dibuat.',
                 'data' => array_merge($responseData, [
                     'id_booking' => $booking->id_booking,
+                    'booking' => (new BookingResource($booking))->resolve(),
+                    'kategori_tarif' => $booking->kategoriTarif ? [
+                        'id_kategori_tarif' => $booking->kategoriTarif->id_kategori_tarif,
+                        'nama_kategori' => $booking->kategoriTarif->nama_kategori,
+                        'biaya_tambahan' => (float) $booking->kategoriTarif->biaya_tambahan,
+                        'is_default' => (bool) $booking->kategoriTarif->is_default,
+                        'hari_berlaku' => $booking->kategoriTarif->hari_berlaku,
+                        'jam_mulai' => $booking->kategoriTarif->jam_mulai,
+                        'jam_selesai' => $booking->kategoriTarif->jam_selesai,
+                    ] : null,
                     'order_id' => $responseData['order_id'] ?? $orderId,
                     'jumlah_total' => $jumlahTotalCharge,
                     'jumlah_total_dasar' => $totalDasar,
@@ -1280,7 +1293,16 @@ class BookingController extends Controller
      */
     public function show($id)
     {
-        $booking = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi'])->find($id);
+        $booking = Booking::with([
+            'pasien',
+            'layanan',
+            'kategoriTarif',
+            'layananItems.layanan.kategori',
+            'layananItems.layanan.bhpItems',
+            'tenagaMedis',
+            'transaksi',
+            'bookingBhp.bhpItem',
+        ])->find($id);
 
         if (!$booking) {
             return response()->json([

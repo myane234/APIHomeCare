@@ -45,6 +45,11 @@ class Booking extends Model
         return $this->belongsTo(MasterLayanan::class, 'id_layanan', 'id_layanan');
     }
 
+    public function kategoriTarif()
+    {
+        return $this->belongsTo(MasterKategoriTarif::class, 'id_kategori_tarif', 'id_kategori_tarif');
+    }
+
     public function tenagaMedis()
     {
         return $this->belongsTo(TenagaMedis::class, 'id_tenaga_medis', 'id_tenaga_medis');

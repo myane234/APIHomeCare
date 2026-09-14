@@ -25,6 +25,16 @@ class BookingResource extends JsonResource
             'status_booking'    => $this->status_booking,
             'status_label'      => $this->statusLabel(),
             'status_color'      => $this->statusColor(),
+            'id_kategori_tarif' => $this->id_kategori_tarif,
+            'kategori_tarif'    => $this->when($this->relationLoaded('kategoriTarif') && $this->kategoriTarif, [
+                'id_kategori_tarif' => $this->kategoriTarif?->id_kategori_tarif,
+                'nama_kategori' => $this->kategoriTarif?->nama_kategori,
+                'biaya_tambahan' => (float) ($this->kategoriTarif?->biaya_tambahan ?? 0),
+                'is_default' => (bool) ($this->kategoriTarif?->is_default ?? false),
+                'hari_berlaku' => $this->kategoriTarif?->hari_berlaku,
+                'jam_mulai' => $this->kategoriTarif?->jam_mulai,
+                'jam_selesai' => $this->kategoriTarif?->jam_selesai,
+            ]),
 
             // ─── Waktu & Lokasi ──────────────────────────────────────────
             'tanggal_kunjungan' => $this->tanggal_kunjungan
@@ -59,11 +69,24 @@ class BookingResource extends JsonResource
             // ─── Layanan Utama (backward compat, hanya jika layananItems tidak ada/kosong) ───
             'layanan'           => $this->when(
                 $this->relationLoaded('layanan') && $this->layanan && (!$this->relationLoaded('layananItems') || $this->layananItems->isEmpty()),
-                [
+                fn() => [
                     'id_layanan'    => $this->layanan?->id_layanan,
                     'nama_layanan'  => $this->layanan?->nama_layanan,
+                    'deskripsi'     => $this->layanan?->deskripsi_layanan,
                     'tipe_layanan'  => $this->layanan?->tipe_layanan,
+                    'durasi_menit'  => $this->layanan?->durasi_menit,
                     'foto_layanan'  => $this->layanan?->foto_layanan,
+                    'kategori'      => $this->layanan?->kategori ? [
+                        'id_kategori_layanan' => $this->layanan->kategori->id_kategori_layanan,
+                        'nama_kategori' => $this->layanan->kategori->nama_kategori,
+                    ] : null,
+                    'bhp'           => $this->layanan?->bhpItems?->map(fn($item) => [
+                        'id_bhp' => $item->id_bhp,
+                        'nama_bhp' => $item->nama_bhp,
+                        'qty_default' => (int) ($item->pivot->qty_default ?? 1),
+                        'is_mandatory' => (bool) ($item->pivot->is_mandatory ?? false),
+                        'harga_jual' => (float) $item->harga_jual,
+                    ])->values(),
                 ]
             ),
 
@@ -73,8 +96,21 @@ class BookingResource extends JsonResource
                 fn() => $this->layananItems->map(fn($item) => [
                     'id_layanan'        => $item->id_layanan,
                     'nama_layanan'      => $item->layanan?->nama_layanan,
+                    'deskripsi'         => $item->layanan?->deskripsi_layanan,
                     'tipe_layanan'      => $item->layanan?->tipe_layanan,
+                    'durasi_menit'      => $item->layanan?->durasi_menit,
                     'foto_layanan'      => $item->layanan?->foto_layanan,
+                    'kategori'          => $item->layanan?->kategori ? [
+                        'id_kategori_layanan' => $item->layanan->kategori->id_kategori_layanan,
+                        'nama_kategori' => $item->layanan->kategori->nama_kategori,
+                    ] : null,
+                    'bhp'               => $item->layanan?->bhpItems?->map(fn($bhp) => [
+                        'id_bhp' => $bhp->id_bhp,
+                        'nama_bhp' => $bhp->nama_bhp,
+                        'qty_default' => (int) ($bhp->pivot->qty_default ?? 1),
+                        'is_mandatory' => (bool) ($bhp->pivot->is_mandatory ?? false),
+                        'harga_jual' => (float) $bhp->harga_jual,
+                    ])->values(),
                     'urutan'            => $item->urutan,
                     'sl'                => (float) $item->sl,
                     'sb'                => (float) $item->sb,
