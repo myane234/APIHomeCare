@@ -18,6 +18,7 @@ class Booking extends Model
         'medical_record_number',
         'id_pasien',
         'id_layanan',
+        'id_kota',
         'id_tenaga_medis',
         'id_promo',
         'tanggal_kunjungan',

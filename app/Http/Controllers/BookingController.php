@@ -344,6 +344,41 @@ class BookingController extends Controller
         return round($earthRadius * $c, 2);
     }
 
+    private function findTriggeredTariffCategory(?string $date, ?string $time): ?MasterKategoriTarif
+    {
+        if (!$date || !$time) {
+            return MasterKategoriTarif::where('is_default', true)->first();
+        }
+
+        $bookingDateTime = Carbon::parse($date . ' ' . $time);
+        $dayNames = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+        $day = $dayNames[$bookingDateTime->dayOfWeek];
+        $currentTime = $bookingDateTime->format('H:i:s');
+
+        $matched = MasterKategoriTarif::where('is_default', false)
+            ->whereNotNull('hari_berlaku')
+            ->whereNotNull('jam_mulai')
+            ->whereNotNull('jam_selesai')
+            ->orderBy('id_kategori_tarif')
+            ->get()
+            ->first(function (MasterKategoriTarif $kategori) use ($day, $currentTime, $bookingDateTime, $dayNames) {
+                $days = array_map('strtolower', $kategori->hari_berlaku ?? []);
+                $start = Carbon::parse($bookingDateTime->format('Y-m-d') . ' ' . $kategori->jam_mulai);
+                $end = Carbon::parse($bookingDateTime->format('Y-m-d') . ' ' . $kategori->jam_selesai);
+                $sameDay = in_array($day, $days, true);
+
+                if ($end->gt($start) || $end->equalTo($start)) {
+                    return $sameDay && $currentTime >= $start->format('H:i:s') && $currentTime <= $end->format('H:i:s');
+                }
+
+                $previousDay = $dayNames[$bookingDateTime->copy()->subDay()->dayOfWeek];
+                return ($sameDay && $currentTime >= $start->format('H:i:s'))
+                    || (in_array($previousDay, $days, true) && $currentTime <= $end->format('H:i:s'));
+            });
+
+        return $matched ?? MasterKategoriTarif::where('is_default', true)->first();
+    }
+
     /**
      * Mengambil koordinat dari input atau geocoding alamat tanpa menyimpan hasilnya.
      */
@@ -616,8 +651,16 @@ class BookingController extends Controller
         }
 
         $distance = 0.0;
-        $idKota = $request->input('id_kota');
         $idKategoriTarif = $request->input('id_kategori_tarif');
+
+        $kategoriTarifObj = $idKategoriTarif
+            ? MasterKategoriTarif::find($idKategoriTarif)
+            : $this->findTriggeredTariffCategory(
+                $validate['tanggal_kunjungan'] ?? null,
+                $validate['jam_kunjungan'] ?? null
+            );
+
+        $idKategoriTarif = $kategoriTarifObj?->id_kategori_tarif;
 
         $idLayananPrimary = $layananIds[0];
 
@@ -636,19 +679,23 @@ class BookingController extends Controller
                     (float) $tenagaMedis->latitude,
                     (float) $tenagaMedis->longitude
                 );
+
+                if ($distance > 40) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Nakes tidak tersedia di wilayah Anda. Jarak layanan maksimal adalah 40 km.',
+                        'distance_km' => round($distance, 2),
+                    ], 422);
+                }
             }
         } else {
-            $nearestList = $this->findNearestNakes($patientLat, $patientLng, $idLayananPrimary);
-            $nearestNakes = $nearestList->first();
-            if ($nearestNakes) {
-                $distance = (float) ($nearestNakes->distance_km ?? 0.0);
-                if ($distance > 1000)
-                    $distance = 0.0;
-            }
+            // Nakes belum dipilih, jadi transport belum dapat dihitung.
+            // ST akan dihitung ulang setelah nakes menerima order.
+            $distance = 0.0;
             $tenagaMedisId = null;
         }
 
-        $cariMasterTarif = function (int $idLayananTarget) use ($idKota, $idKategoriTarif): ?MasterTarif {
+        $cariMasterTarif = function (int $idLayananTarget) use ($idKategoriTarif): ?MasterTarif {
             $matchLayanan = function ($q) use ($idLayananTarget) {
                 $q->where('id_layanan', $idLayananTarget)
                     ->orWhereHas('layananTermasuk', function ($q2) use ($idLayananTarget) {
@@ -664,22 +711,8 @@ class BookingController extends Controller
                 $query->where('id_kategori_tarif', $idKategoriTarif);
             }
 
-            $tarif = (clone $query)->when($idKota, fn($q) => $q->where('id_kota', $idKota))->first();
-            if (!$tarif) {
-                $tarif = (clone $query)->whereNull('id_kota')->first();
-            }
-            if (!$tarif) {
-                $tarif = MasterTarif::with(['komponenTarif', 'kategoriTarif'])
-                    ->where('is_active', true)
-                    ->where($matchLayanan)
-                    ->first();
-            }
-            return $tarif;
+            return $query->first();
         };
-
-        $kategoriTarifObj = $idKategoriTarif
-            ? MasterKategoriTarif::find($idKategoriTarif)
-            : null;
 
     
         $masterTarifPrimary = null;
@@ -754,15 +787,10 @@ class BookingController extends Controller
         $tarifTransportasiFinal = 0.0;
 
         if (!$semuaIncludeTransport) {
-            $transportMaster = $idKota
-                ? MasterTarifTransport::where('id_kota', $idKota)->first()
-                : null;
+            $transportMaster = MasterTarifTransport::query()->first();
 
             if ($transportMaster) {
-                $tarifTransportasiFinal = (float) $transportMaster->tarif_awal
-                    + ($distance * (float) $transportMaster->tarif_per_kilometer);
-            } else {
-                $tarifTransportasiFinal = $distance > 0 ? (10000.0 + ($distance * 3000.0)) : 0.0;
+                $tarifTransportasiFinal = $this->calculateTransportTariff($transportMaster, $distance);
             }
         }
 
@@ -940,6 +968,17 @@ class BookingController extends Controller
         }
     }
 
+    private function calculateTransportTariff(?MasterTarifTransport $transportMaster, float $distanceKm): float
+    {
+        if (!$transportMaster || $distanceKm <= 0 || $distanceKm > 40) {
+            return 0.0;
+        }
+
+        $tierCount = (int) ceil($distanceKm / 10);
+
+        return $tierCount * (float) $transportMaster->tarif_per_10_km;
+    }
+
 
 
     /**
@@ -980,7 +1019,12 @@ class BookingController extends Controller
         ], 422);
     }
 
-    $booking = Booking::with(['transaksi', 'pasien.user'])->find($request->input('id_booking'));
+    $booking = Booking::with([
+        'transaksi',
+        'pasien.user',
+        'layanan',
+        'layananItems.layanan',
+    ])->find($request->input('id_booking'));
 
     if (!$booking || !$booking->transaksi) {
         return response()->json([
@@ -992,11 +1036,56 @@ class BookingController extends Controller
     $transaksi = $booking->transaksi;
     $orderId = $transaksi->midtrans_order_id ?? ('BOOKING-' . $booking->id_booking . '-' . time());
 
+    $semuaLayanan = $booking->layananItems->isNotEmpty()
+        ? $booking->layananItems->map(fn($item) => $item->layanan)->filter()
+        : collect([$booking->layanan])->filter();
+
+    $stTransport = (float) $transaksi->st;
+    $jarakNakesAcuan = 0.0;
+    $tierTransport = 0;
+
+    if ($stTransport <= 0 && $semuaLayanan->contains(fn($layanan) => !$layanan->include_transport)) {
+        $transportMaster = MasterTarifTransport::query()->first();
+
+        if ($transportMaster && $booking->latitude_kunjungan && $booking->longitude_kunjungan) {
+            $nearestNakes = $this->findNearestNakes(
+                (float) $booking->latitude_kunjungan,
+                (float) $booking->longitude_kunjungan,
+                $booking->id_layanan
+            )->first();
+
+            if (!$nearestNakes) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Nakes tidak tersedia di wilayah Anda.',
+                ], 422);
+            }
+
+            $jarakNakesAcuan = (float) ($nearestNakes->distance_km ?? 0);
+            if ($jarakNakesAcuan > 40) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Nakes tidak tersedia di wilayah Anda. Jarak layanan maksimal adalah 40 km.',
+                    'distance_km' => round($jarakNakesAcuan, 2),
+                ], 422);
+            }
+
+            $tierTransport = (int) ceil($jarakNakesAcuan / 10);
+            $stTransport = $this->calculateTransportTariff($transportMaster, $jarakNakesAcuan);
+
+            $transaksi->update([
+                'st' => $stTransport,
+                'hak_nakes' => (float) $transaksi->hak_nakes + $stTransport,
+            ]);
+            $transaksi->refresh();
+        }
+    }
+
 
     $totalDasar = (float) $transaksi->sl
         + (float) $transaksi->sb
         + (float) ($transaksi->sb_tambahan ?? 0)
-        + (float) $transaksi->st
+        + $stTransport
         + (float) $transaksi->ba
         + (float) $transaksi->ppn;
 
@@ -1126,6 +1215,9 @@ class BookingController extends Controller
                     'order_id' => $responseData['order_id'] ?? $orderId,
                     'jumlah_total' => $jumlahTotalCharge,
                     'jumlah_total_dasar' => $totalDasar,
+                    'st_transport' => $stTransport,
+                    'jarak_nakes_acuan' => round($jarakNakesAcuan, 2),
+                    'tier_transport' => $tierTransport,
                     'biaya_transaksi' => round($biayaTransaksi, 2),
                     'tipe_potongan' => $metode->tipe_potongan,
                     'nilai_potongan' => $nilaiBiayaTransaksi,
@@ -1632,8 +1724,8 @@ class BookingController extends Controller
                 $bookingCoordinates['longitude']
             );
 
-            if ($distanceKm > 30) {
-                $reasons[] = 'Lokasi pasien berada di luar radius layanan 30 km.';
+            if ($distanceKm > 40) {
+                $reasons[] = 'Nakes tidak tersedia di wilayah Anda. Jarak layanan maksimal adalah 40 km.';
             }
         } else {
             if (!$nakesCoordinates) {
@@ -1971,12 +2063,9 @@ class BookingController extends Controller
                     : collect([$booking->layanan])->filter();
 
                 if ($layananList->contains(fn($layanan) => !$layanan->include_transport)) {
-                    $idKota = $request->input('id_kota');
-                    $transportMaster = $idKota ? MasterTarifTransport::where('id_kota', $idKota)->first() : null;
+                    $transportMaster = MasterTarifTransport::query()->first();
                     if ($transportMaster) {
-                        $actualTransportCost = (float) $transportMaster->tarif_awal + ($actualDistance * (float) $transportMaster->tarif_per_kilometer);
-                    } else {
-                        $actualTransportCost = $actualDistance > 0 ? (10000.0 + ($actualDistance * 3000.0)) : 0.0;
+                        $actualTransportCost = $this->calculateTransportTariff($transportMaster, $actualDistance);
                     }
                 }
                 $actualTransportCost = (int) round($actualTransportCost);

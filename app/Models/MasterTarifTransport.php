@@ -13,13 +13,11 @@ class MasterTarifTransport extends Model
     protected $primaryKey = 'id_transport';
 
     protected $fillable = [
-        'id_kota',
-        'tarif_awal',
-        'tarif_per_kilometer',
+        'tarif_per_10_km',
     ];
 
-    public function kota()
-    {
-        return $this->belongsTo(KotaKabupaten::class, 'id_kota', 'id_kota');
-    }
+    protected $casts = [
+        'tarif_per_10_km' => 'decimal:2',
+    ];
+
 }

@@ -19,8 +19,6 @@ class MasterTarif extends Model
         'nama_template',
         'id_kategori_tarif',
         'id_layanan',
-        'id_kota',
-        'id_provinsi',
         'fee_nakes_tipe',
         'fee_nakes_nilai',
         'fee_nakes_nominal',
@@ -45,16 +43,6 @@ class MasterTarif extends Model
     public function kategoriTarif()
     {
         return $this->belongsTo(MasterKategoriTarif::class, 'id_kategori_tarif', 'id_kategori_tarif');
-    }
-
-    public function kota()
-    {
-        return $this->belongsTo(KotaKabupaten::class, 'id_kota', 'id_kota');
-    }
-
-    public function provinsi()
-    {
-        return $this->belongsTo(WilayahLayanan::class, 'id_provinsi', 'id_provinsi');
     }
 
     public function layananTermasuk()

@@ -17,26 +17,20 @@ use Illuminate\Http\Request;
 class TarifTransportController extends Controller
 {
     /**
-     * Get all master tarif transport
+    * Get the national transport tariff configuration
      * 
      * @response 200 {
      *  "success": true,
      *  "message": "Berhasil mengambil daftar tarif transport",
-     *  "data": [
-     *      {
-     *          "id_tarif_transport": 1,
-     *          "id_kota": 1,
-     *          "tarif_awal": 10000.00,
-     *          "tarif_per_kilometer": 2000.00,
-     *          "created_at": "2022-01-01T00:00:00.000000Z",
-     *          "updated_at": "2022-01-01T00:00:00.000000Z"
-     *      }
-     *  ]
+    *  "data": {
+    *      "id_transport": 1,
+    *      "tarif_per_10_km": 20000.00
+    *  }
      * }
      */
     public function index()
     {
-        $data = MasterTarifTransport::with('kota')->get();
+        $data = MasterTarifTransport::query()->first();
 
         return response()->json([
             'success' => true,
@@ -46,22 +40,22 @@ class TarifTransportController extends Controller
     }
 
     /**
-     * Store a new master tarif transport
-     * 
-     * @bodyParam id_kota int required ID kota/kabupaten
-     * @bodyParam tarif_awal numeric required Tarif awal/dasar transportasi
-     * @bodyParam tarif_per_kilometer numeric required Tarif per kilometer transportasi
+    * Create or update the national transport tariff configuration
+    *
+    * @bodyParam tarif_per_10_km numeric required Tarif untuk setiap kelipatan 10 km
      */
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'id_kota' => 'required|exists:master_kota_kabupaten,id_kota',
-            'tarif_awal' => 'required|numeric|min:0',
-            'tarif_per_kilometer' => 'required|numeric|min:0',
+            'tarif_per_10_km' => 'required|numeric|min:0',
         ]);
 
-        $transport = MasterTarifTransport::create($validated);
-        $transport->load('kota');
+        $transport = MasterTarifTransport::query()->first();
+        if ($transport) {
+            $transport->update($validated);
+        } else {
+            $transport = MasterTarifTransport::create($validated);
+        }
 
         return response()->json([
             'success' => true,
@@ -75,7 +69,7 @@ class TarifTransportController extends Controller
      */
     public function show($id)
     {
-        $transport = MasterTarifTransport::with('kota')->findOrFail($id);
+        $transport = MasterTarifTransport::findOrFail($id);
 
         return response()->json([
             'success' => true,
@@ -85,24 +79,19 @@ class TarifTransportController extends Controller
     }
 
     /**
-     * Update master tarif transport by ID
-     * 
-     * @bodyParam id_kota int optional ID kota/kabupaten
-     * @bodyParam tarif_awal numeric optional Tarif awal/dasar transportasi
-     * @bodyParam tarif_per_kilometer numeric optional Tarif per kilometer transportasi
+    * Update the national transport tariff configuration
+    *
+    * @bodyParam tarif_per_10_km numeric optional Tarif untuk setiap kelipatan 10 km
      */
     public function update(Request $request, $id)
     {
         $transport = MasterTarifTransport::findOrFail($id);
 
         $validated = $request->validate([
-            'id_kota' => 'sometimes|required|exists:master_kota_kabupaten,id_kota',
-            'tarif_awal' => 'sometimes|required|numeric|min:0',
-            'tarif_per_kilometer' => 'sometimes|required|numeric|min:0',
+            'tarif_per_10_km' => 'sometimes|required|numeric|min:0',
         ]);
 
         $transport->update($validated);
-        $transport->load('kota');
 
         return response()->json([
             'success' => true,
