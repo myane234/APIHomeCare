@@ -31,7 +31,7 @@ class MasterTarifSeeder extends Seeder
             ['id_kategori_tarif' => 1, 'nama_kategori' => 'REGULER', 'biaya_tambahan' => 0.00, 'is_default' => 1, 'hari_berlaku' => null, 'jam_mulai' => null, 'jam_selesai' => null],
             ['id_kategori_tarif' => 2, 'nama_kategori' => 'CITO (EMERGENCY)', 'biaya_tambahan' => 10000.00, 'is_default' => 0, 'hari_berlaku' => null, 'jam_mulai' => null, 'jam_selesai' => null],
             ['id_kategori_tarif' => 3, 'nama_kategori' => 'MALAM HARI', 'biaya_tambahan' => 20000.00, 'is_default' => 0, 'hari_berlaku' => json_encode(['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu']), 'jam_mulai' => '22:00:00', 'jam_selesai' => '06:00:00'],
-            ['id_kategori_tarif' => 4, 'nama_kategori' => 'AKHIR PEKAN (WEEKEND)', 'biaya_tambahan' => 15000.00, 'is_default' => 0, 'hari_berlaku' => json_encode(['sabtu', 'minggu']), 'jam_mulai' => '00:00:00', 'jam_selesai' => '23:59:00'],
+            ['id_kategori_tarif' => 4, 'nama_kategori' => 'AKHIR PEKAN (WEEKEND)', 'biaya_tambahan' => 15000.00, 'is_default' => 0, 'hari_berlaku' => json_encode(['sabtu', 'minggu']), 'jam_mulai' => '06:00:00', 'jam_selesai' => '22:00:00'],
             ['id_kategori_tarif' => 5, 'nama_kategori' => 'HARI LIBUR NASIONAL', 'biaya_tambahan' => 25000.00, 'is_default' => 0, 'hari_berlaku' => null, 'jam_mulai' => null, 'jam_selesai' => null],
             ['id_kategori_tarif' => 6, 'nama_kategori' => 'VIP / PRIORITAS', 'biaya_tambahan' => 50000.00, 'is_default' => 0, 'hari_berlaku' => null, 'jam_mulai' => null, 'jam_selesai' => null],
             ['id_kategori_tarif' => 7, 'nama_kategori' => 'LUAR KOTA', 'biaya_tambahan' => 35000.00, 'is_default' => 0, 'hari_berlaku' => null, 'jam_mulai' => null, 'jam_selesai' => null],

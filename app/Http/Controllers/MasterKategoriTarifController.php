@@ -10,6 +10,51 @@ class MasterKategoriTarifController extends Controller
 {
     private const DAYS = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu'];
 
+    private function triggerSegments(array $days, string $start, string $end): array
+    {
+        $dayIndexes = array_flip(self::DAYS);
+        $startMinutes = ((int) substr($start, 0, 2) * 60) + (int) substr($start, 3, 2);
+        $endMinutes = ((int) substr($end, 0, 2) * 60) + (int) substr($end, 3, 2);
+        $segments = [];
+
+        foreach ($days as $day) {
+            $dayIndex = $dayIndexes[$day];
+            if ($endMinutes > $startMinutes) {
+                $segments[] = [$dayIndex, $startMinutes, $endMinutes];
+                continue;
+            }
+
+            $segments[] = [$dayIndex, $startMinutes, 1440];
+            $segments[] = [($dayIndex + 1) % 7, 0, $endMinutes];
+        }
+
+        return $segments;
+    }
+
+    private function triggersOverlap(array $days, string $start, string $end, ?MasterKategoriTarif $item): bool
+    {
+        if (!$item || !$item->hari_berlaku || !$item->jam_mulai || !$item->jam_selesai) {
+            return false;
+        }
+
+        $existingSegments = $this->triggerSegments(
+            array_map('strtolower', $item->hari_berlaku),
+            substr((string) $item->jam_mulai, 0, 5),
+            substr((string) $item->jam_selesai, 0, 5)
+        );
+        $newSegments = $this->triggerSegments($days, $start, $end);
+
+        foreach ($newSegments as [$newDay, $newStart, $newEnd]) {
+            foreach ($existingSegments as [$existingDay, $existingStart, $existingEnd]) {
+                if ($newDay === $existingDay && $newStart < $existingEnd && $existingStart < $newEnd) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private function validateTrigger(Request $request, ?MasterKategoriTarif $current = null): array
     {
         $daysInput = $request->has('hari_berlaku')
@@ -47,14 +92,11 @@ class MasterKategoriTarifController extends Controller
             }
         } elseif ($days && $start && $end) {
             $duplicate = $query->where('is_default', false)->get()->contains(function ($item) use ($days, $start, $end) {
-                $existingDays = collect($item->hari_berlaku ?? [])->map(fn ($day) => strtolower((string) $day))->sort()->values()->all();
-                return $existingDays === $days
-                    && substr((string) $item->jam_mulai, 0, 5) === substr($start, 0, 5)
-                    && substr((string) $item->jam_selesai, 0, 5) === substr($end, 0, 5);
+                return $this->triggersOverlap($days, substr($start, 0, 5), substr($end, 0, 5), $item);
             });
 
             if ($duplicate) {
-                abort(422, 'Trigger hari dan jam tersebut sudah digunakan kategori tarif lain.');
+                abort(422, 'Trigger hari dan jam tersebut overlap dengan kategori tarif lain. Atur jadwal agar tidak bentrok.');
             }
         }
 
