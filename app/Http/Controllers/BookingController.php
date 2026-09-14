@@ -992,24 +992,23 @@ class BookingController extends Controller
     $transaksi = $booking->transaksi;
     $orderId = $transaksi->midtrans_order_id ?? ('BOOKING-' . $booking->id_booking . '-' . time());
 
-    // Hitung dari snapshot komponen agar retry charge tidak menerapkan diskon
-    // berulang pada jumlah_total yang sudah pernah disesuaikan.
-    $totalSebelumPotongan = (float) $transaksi->sl
+
+    $totalDasar = (float) $transaksi->sl
         + (float) $transaksi->sb
         + (float) ($transaksi->sb_tambahan ?? 0)
         + (float) $transaksi->st
         + (float) $transaksi->ba
         + (float) $transaksi->ppn;
 
-    if ($totalSebelumPotongan <= 0) {
-        $totalSebelumPotongan = (float) $transaksi->jumlah_total;
+    if ($totalDasar <= 0) {
+        $totalDasar = (float) $transaksi->jumlah_total;
     }
 
-    $nilaiPotongan = max(0, (float) $metode->nilai_potongan);
-    $potongan = $metode->tipe_potongan === 'persen'
-        ? $totalSebelumPotongan * min(100, $nilaiPotongan) / 100
-        : min($nilaiPotongan, $totalSebelumPotongan);
-    $jumlahTotalCharge = max(0, (int) round($totalSebelumPotongan - $potongan));
+    $nilaiBiayaTransaksi = max(0, (float) $metode->nilai_potongan);
+    $biayaTransaksi = $metode->tipe_potongan === 'persen'
+        ? $totalDasar * min(100, $nilaiBiayaTransaksi) / 100
+        : $nilaiBiayaTransaksi;
+    $jumlahTotalCharge = (int) round($totalDasar + $biayaTransaksi);
 
     
     $payload = [
@@ -1069,12 +1068,9 @@ class BookingController extends Controller
             $paymentDetails = [
                 'midtrans_transaction_id' => $responseData['transaction_id'] ?? null,
                 'midtrans_order_id' => $responseData['order_id'] ?? $orderId,
-                'payment_method' => $paymentType,
-                'metode_pembayaran' => $paymentType,
                 'midtrans_response' => $responseData,
             ];
 
-          
             if (isset($responseData['va_numbers'][0])) {
                 $paymentDetails['va_number'] = $responseData['va_numbers'][0]['va_number'] ?? null;
                 $paymentDetails['bank_va'] = $responseData['va_numbers'][0]['bank'] ?? null;
@@ -1082,6 +1078,14 @@ class BookingController extends Controller
                 $paymentDetails['va_number'] = $responseData['permata_va_number'];
                 $paymentDetails['bank_va'] = 'permata';
             }
+
+            $bankVa = $paymentDetails['bank_va'] ?? $bank;
+            $paymentMethodLabel = $paymentType === 'bank_transfer' && $bankVa !== ''
+                ? strtoupper($bankVa) . ' VA'
+                : ($metode->nama_metode ?: ucfirst(str_replace('_', ' ', $paymentType)));
+
+            $paymentDetails['payment_method'] = $paymentMethodLabel;
+            $paymentDetails['metode_pembayaran'] = $paymentMethodLabel;
 
         
             if (isset($responseData['payment_code'])) {
@@ -1121,10 +1125,16 @@ class BookingController extends Controller
                     'id_booking' => $booking->id_booking,
                     'order_id' => $responseData['order_id'] ?? $orderId,
                     'jumlah_total' => $jumlahTotalCharge,
-                    'jumlah_total_sebelum_potongan' => $totalSebelumPotongan,
-                    'potongan' => round($potongan, 2),
+                    'jumlah_total_dasar' => $totalDasar,
+                    'biaya_transaksi' => round($biayaTransaksi, 2),
                     'tipe_potongan' => $metode->tipe_potongan,
-                    'nilai_potongan' => $nilaiPotongan,
+                    'nilai_potongan' => $nilaiBiayaTransaksi,
+                    'payment_type' => $paymentMethodLabel,
+                    'payment_type_code' => $paymentType,
+                    'metode_pembayaran' => $paymentMethodLabel,
+                    'payment_method' => $paymentMethodLabel,
+                    'va_number' => $paymentDetails['va_number'] ?? null,
+                    'bank_va' => $paymentDetails['bank_va'] ?? null,
                     'jumlah_total_format' => 'Rp ' . number_format($jumlahTotalCharge, 0, ',', '.'),
                 ])
             ], $response->status());
@@ -1243,14 +1253,14 @@ class BookingController extends Controller
 
         $paymentDetails = [];
 
-        if ($transaksi->payment_method === 'qris' || ($transaksi->qr_string && $transaksi->qr_url)) {
+        if ($transaksi->qr_string || $transaksi->qr_url || strtolower((string) $transaksi->payment_method) === 'qris') {
             $paymentDetails['qris'] = [
                 'qr_string' => $transaksi->qr_string,
                 'qr_url' => $transaksi->qr_url,
                 'jumlah' => $jumlahTotal,
                 'jumlah_format' => $jumlahFormat,
             ];
-        } elseif ($transaksi->payment_method === 'bank_transfer' || ($transaksi->va_number && $transaksi->bank_va)) {
+        } elseif ($transaksi->va_number && $transaksi->bank_va) {
             $paymentDetails['virtual_account'] = [
                 'va_number' => $transaksi->va_number,
                 'bank' => strtoupper($transaksi->bank_va),

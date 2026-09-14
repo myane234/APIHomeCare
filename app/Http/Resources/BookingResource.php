@@ -102,6 +102,9 @@ class BookingResource extends JsonResource
                     'id_transaksi'      => $transaksi->id_transaksi,
                     'status_transaksi'  => $transaksi->status_transaksi,
                     'metode_pembayaran' => $transaksi->metode_pembayaran,
+                    'payment_method'    => $transaksi->payment_method,
+                    'va_number'         => $transaksi->va_number,
+                    'bank_va'           => $transaksi->bank_va,
                     'waktu_bayar'       => $transaksi->waktu_bayar
                         ? \Carbon\Carbon::parse($transaksi->waktu_bayar)->setTimezone('Asia/Jakarta')->translatedFormat('d M Y, H:i') . ' WIB'
                         : null,
