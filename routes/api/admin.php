@@ -103,7 +103,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/pendaftaran', [AdminNakesController::class, 'CreateNakesViaAdmin']);
     });
 
-    Route::post('/nakes/pendaftaran', [AdminNakesController::class, 'CreateNakesViaAdmin']);
 
     // Management Nakes - Super Admin
     Route::prefix('super-admin/nakes')->group(function () {
