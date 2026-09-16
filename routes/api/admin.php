@@ -105,7 +105,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
 
     // Management Nakes - Super Admin
-    Route::prefix('super-admin/nakes')->group(function () {
+    Route::prefix('admin/management/nakes')->group(function () {
         Route::get('/', [SuperAdminNakesController::class, 'index']);
         Route::get('/{id}', [SuperAdminNakesController::class, 'show']);
         Route::put('/{id}', [SuperAdminNakesController::class, 'update']);
