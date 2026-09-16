@@ -9,36 +9,40 @@ use Illuminate\Validation\Rule;
 
 class SuperAdminNakesController extends Controller
 {
-    public function index(Request $request)
-    {
-        
-        $search = $request->query('search');
-        $perPage = $request->query('per_page', 10);
+public function index(Request $request)
+{
+    $search = $request->query('search');
+    $perPage = $request->query('page', 10);
 
-        $query = TenagaMedis::with(['user', 'pasien', 'kategoriLayanan'])
-            ->orderBy('created_at', 'desc');
+    $query = TenagaMedis::with(['user', 'pasien', 'kategoriLayanan'])
+        ->orderBy('created_at', 'desc');
 
-        if ($search) {
-            $query->where(function ($q) use ($search) {
-                $q->where('nama_lengkap', 'like', "%{$search}%")
-                  ->orWhere('nik', 'like', "%{$search}%")
-                  ->orWhere('no_str', 'like', "%{$search}%")
-                  ->orWhere('jenis_tenaga_medis', 'like', "%{$search}%")
-                  ->orWhereHas('user', function ($userQuery) use ($search) {
-                      $userQuery->where('email', 'like', "%{$search}%");
-                  });
-            });
-        }
-
-        $data = $query->paginate($perPage);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Berhasil mengambil data Nakes',
-            'data'    => $data,
-        ]);
+    if ($search) {
+        $query->where(function ($q) use ($search) {
+            $q->where('nama_lengkap', 'like', "%{$search}%")
+              ->orWhere('nik', 'like', "%{$search}%")
+              ->orWhere('no_str', 'like', "%{$search}%")
+              ->orWhere('jenis_tenaga_medis', 'like', "%{$search}%")
+              ->orWhereHas('user', function ($userQuery) use ($search) {
+                  $userQuery->where('email', 'like', "%{$search}%");
+              });
+        });
     }
 
+    $data = $query->paginate($perPage);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Berhasil mengambil data Nakes',
+        'data'    => $data->items(),
+        'pagination' => [
+            'current_page' => $data->currentPage(),
+            'last_page'    => $data->lastPage(),    
+            'per_page'     => $data->perPage(),     
+            'total'        => $data->total(),     
+        ]
+    ]);
+}
     public function show(Request $request, $id)
     {
         $tenagaMedis = TenagaMedis::with(['user', 'pasien', 'kategoriLayanan'])->findOrFail($id);
