@@ -9,10 +9,24 @@ use Illuminate\Http\Request;
 class SuperAdminPasien extends Controller
 {
 
-    public function index()
+    public function index(Request $request)
     {
+       
+        $search = $request->query('search');
 
-        $pasien = Pasien::with('user')->get(); 
+   
+        $pasien = Pasien::with('user')
+            ->when($search, function ($query, $search) {
+             
+                $query->where('nama_lengkap', 'like', "%{$search}%")
+                      ->orWhere('nik', 'like', "%{$search}%")
+                      ->orWhere('no_hp', 'like', "%{$search}%")
+                   
+                      ->orWhereHas('user', function ($q) use ($search) {
+                          $q->where('email', 'like', "%{$search}%");
+                      });
+            })
+            ->get(); 
         
         return response()->json([
             'success' => true,

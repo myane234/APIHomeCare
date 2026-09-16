@@ -112,6 +112,7 @@ class BookingResource extends JsonResource
                         'harga_jual' => (float) $bhp->harga_jual,
                     ])->values(),
                     'urutan'            => $item->urutan,
+                    'durasi_menit'      => $item->durasi_menit,
                     'sl'                => (float) $item->sl,
                     'sb'                => (float) $item->sb,
                     'hak_nakes_layanan' => (float) $item->hak_nakes_layanan,

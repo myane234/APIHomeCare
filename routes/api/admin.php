@@ -92,6 +92,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::prefix('admin/nakes')->group(function () {
         Route::get('/requests', [AdminNakesController::class, 'index']);
         Route::get('/requests/{id}', [AdminNakesController::class, 'show']);
+        
 
         // Step Verification Routes
         Route::post('/requests/{id}/pelatihan', [AdminNakesController::class, 'setPelatihan']); // Fixed: setPelatihan
@@ -99,6 +100,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/requests/{id}/reject', [AdminNakesController::class, 'reject']);
 
         Route::get('/', [AdminNakesController::class, 'listActiveNakes']);
+        Route::post('/pendaftaran', [AdminNakesController::class, 'CreateNakesViaAdmin']);
     });
 
     Route::post('/nakes/pendaftaran', [AdminNakesController::class, 'CreateNakesViaAdmin']);

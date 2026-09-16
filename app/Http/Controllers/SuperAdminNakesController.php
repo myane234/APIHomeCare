@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Admin;
 use App\Models\TenagaMedis;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -10,85 +9,63 @@ use Illuminate\Validation\Rule;
 
 class SuperAdminNakesController extends Controller
 {
-    private function authorizeSuperAdmin(Request $request)
-    {
-        $user = $request->user();
-
-        if ($user instanceof Admin) {
-            $admin = $user;
-        } elseif ($user && isset($user->id_admin)) {
-            $admin = Admin::find($user->id_admin);
-        } else {
-            $admin = null;
-        }
-
-        $tier = strtolower(str_replace(['_', '-'], ' ', trim((string) $admin->tier_admin ?? '')));
-
-        if (!$admin || !in_array($tier, ['super admin', 'superadmin'], true)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Akses ditolak. Hanya Admin yang dapat mengelola data Nakes.'
-            ], 403);
-        }
-
-        return null;
-    }
-
     public function index(Request $request)
     {
-        $denied = $this->authorizeSuperAdmin($request);
-        if ($denied) {
-            return $denied;
+        
+        $search = $request->query('search');
+        $perPage = $request->query('per_page', 10);
+
+        $query = TenagaMedis::with(['user', 'pasien', 'kategoriLayanan'])
+            ->orderBy('created_at', 'desc');
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('nama_lengkap', 'like', "%{$search}%")
+                  ->orWhere('nik', 'like', "%{$search}%")
+                  ->orWhere('no_str', 'like', "%{$search}%")
+                  ->orWhere('jenis_tenaga_medis', 'like', "%{$search}%")
+                  ->orWhereHas('user', function ($userQuery) use ($search) {
+                      $userQuery->where('email', 'like', "%{$search}%");
+                  });
+            });
         }
 
-        $data = TenagaMedis::with(['user', 'pasien', 'kategoriLayanan'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $data = $query->paginate($perPage);
 
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengambil data Nakes',
-            'data' => $data,
-            'total' => $data->count(),
+            'data'    => $data,
         ]);
     }
 
     public function show(Request $request, $id)
     {
-        $denied = $this->authorizeSuperAdmin($request);
-        if ($denied) {
-            return $denied;
-        }
-
         $tenagaMedis = TenagaMedis::with(['user', 'pasien', 'kategoriLayanan'])->findOrFail($id);
 
         return response()->json([
             'success' => true,
-            'data' => $tenagaMedis,
+            'message' => 'Detail data Nakes berhasil diambil',
+            'data'    => $tenagaMedis,
         ]);
     }
 
     public function update(Request $request, $id)
     {
-        $denied = $this->authorizeSuperAdmin($request);
-        if ($denied) {
-            return $denied;
-        }
-
         $tenagaMedis = TenagaMedis::findOrFail($id);
 
         $validated = $request->validate([
-            'nama_lengkap' => ['sometimes', 'required', 'string', 'max:255'],
-            'nik' => ['sometimes', 'required', 'string', 'regex:/^[0-9]{16}$/'],
+            'nama_lengkap'       => ['sometimes', 'required', 'string', 'max:255'],
+            'nik'                => ['sometimes', 'required', 'string', 'regex:/^[0-9]{16}$/'],
             'jenis_tenaga_medis' => ['sometimes', 'required', 'string', 'max:100'],
-            'no_str' => ['sometimes', 'required', 'string', 'regex:/^[0-9]{16}$/'],
-            'lulusan' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'latitude' => ['sometimes', 'nullable', 'numeric'],
-            'longitude' => ['sometimes', 'nullable', 'numeric'],
-            'foto_profile' => ['sometimes', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
+            'no_str'             => ['sometimes', 'required', 'string', 'regex:/^[0-9]{16}$/'],
+            'lulusan'            => ['sometimes', 'nullable', 'string', 'max:255'],
+            'latitude'           => ['sometimes', 'nullable', 'numeric'],
+            'longitude'          => ['sometimes', 'nullable', 'numeric'],
+            'foto_profile'       => ['sometimes', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
             'id_wilayah_layanan' => ['sometimes', 'nullable', 'exists:wilayah_layanan,id'],
-            'alamat_lengkap' => ['sometimes', 'nullable', 'string', 'max:1000'],
-            'kategori_layanan' => ['sometimes', 'array'],
+            'alamat_lengkap'     => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'kategori_layanan'   => ['sometimes', 'array'],
             'kategori_layanan.*' => ['exists:kategori_layanans,id_kategori_layanan'],
         ]);
 
@@ -98,9 +75,9 @@ class SuperAdminNakesController extends Controller
                 $response = \Illuminate\Support\Facades\Http::withHeaders([
                     'User-Agent' => 'smartHomeCare/1.0'
                 ])->get('https://nominatim.openstreetmap.org/search', [
-                    'q' => $request->input('alamat_lengkap'),
+                    'q'      => $request->input('alamat_lengkap'),
                     'format' => 'json',
-                    'limit' => 1
+                    'limit'  => 1
                 ]);
 
                 if ($response->successful() && !empty($response->json())) {
@@ -130,17 +107,12 @@ class SuperAdminNakesController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Data Nakes berhasil diperbarui oleh Super Admin',
-            'data' => $tenagaMedis->fresh(),
+            'data'    => $tenagaMedis->fresh(),
         ]);
     }
 
     public function destroy(Request $request, $id)
     {
-        $denied = $this->authorizeSuperAdmin($request);
-        if ($denied) {
-            return $denied;
-        }
-
         $tenagaMedis = TenagaMedis::findOrFail($id);
         $user = $tenagaMedis->user;
 

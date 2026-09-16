@@ -588,6 +588,8 @@ class BookingController extends Controller
             'layanan_ids.*' => 'integer|exists:master_layanan,id_layanan',
             'id_layanan' => 'nullable',          // backward compat
             'id_kategori_tarif' => 'nullable|exists:master_kategori_tarif,id_kategori_tarif',
+            'durasi_layanan' => 'nullable|array',
+            'durasi_layanan.*' => 'nullable|integer|min:1',
             'id_tenaga_medis' => 'nullable',
             'tanggal_kunjungan' => 'required|date',
             'jam_kunjungan' => 'required',
@@ -687,6 +689,28 @@ class BookingController extends Controller
             );
 
         $idKategoriTarif = $kategoriTarifObj?->id_kategori_tarif;
+        $durasiLayananInput = $request->input('durasi_layanan', []);
+
+        foreach ($layananIds as $idLyn) {
+            $layanan = $semuaLayanan->get($idLyn);
+            if (!$layanan || $layanan->tipe_layanan !== 'durasi') {
+                continue;
+            }
+
+            $baseDuration = max(60, (int) ($layanan->durasi_menit ?: 60));
+            $selectedDuration = isset($durasiLayananInput[$idLyn])
+                ? (int) $durasiLayananInput[$idLyn]
+                : $baseDuration;
+
+            if ($selectedDuration < $baseDuration || $selectedDuration % $baseDuration !== 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Durasi layanan harus minimal ' . $baseDuration . ' menit dan berupa kelipatan ' . $baseDuration . ' menit.',
+                ], 422);
+            }
+
+            $durasiLayananInput[$idLyn] = $selectedDuration;
+        }
 
         $idLayananPrimary = $layananIds[0];
 
@@ -767,6 +791,14 @@ class BookingController extends Controller
 
             // SL: harga layanan + biaya tambahan kategori tarif (berlaku sama untuk semua layanan)
             $sl = (float) $layanan->harga;
+            $durasiMenit = null;
+            if ($layanan->tipe_layanan === 'durasi') {
+                $durasiDasar = max(60, (int) ($layanan->durasi_menit ?: 60));
+                $durasiMenit = isset($durasiLayananInput[$idLyn])
+                    ? (int) $durasiLayananInput[$idLyn]
+                    : $durasiDasar;
+                $sl *= $durasiMenit / $durasiDasar;
+            }
             if ($kategoriTarifObj && (float) $kategoriTarifObj->biaya_tambahan > 0) {
                 $sl += (float) $kategoriTarifObj->biaya_tambahan;
             }
@@ -805,6 +837,7 @@ class BookingController extends Controller
                 'hpp_bhp' => round($hppBhp, 2),
                 'hak_nakes_layanan' => round($feeNakesLyn, 2),
                 'is_transport' => (bool) $masterTarif?->is_transport,
+                'durasi_menit' => $durasiMenit,
             ];
         }
 
@@ -922,6 +955,7 @@ class BookingController extends Controller
                             'id_booking' => $booking->id_booking,
                             'id_layanan' => $item['id_layanan'],
                             'urutan' => $item['urutan'],
+                            'durasi_menit' => $item['durasi_menit'],
                             'sl' => $item['sl'],
                             'sb' => $item['sb'],
                             'hpp_bhp' => $item['hpp_bhp'],

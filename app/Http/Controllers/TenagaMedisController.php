@@ -24,6 +24,8 @@ class TenagaMedisController extends Controller
             ->first() : null;
     }
 
+    
+
     /**
      * Endpoint Pendaftaran Nakes
      */

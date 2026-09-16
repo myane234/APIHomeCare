@@ -30,6 +30,7 @@ class BookingLayanan extends Model
         'id_booking',
         'id_layanan',
         'urutan',
+        'durasi_menit',
         'sl',
         'sb',
         'hpp_bhp',
@@ -42,6 +43,7 @@ class BookingLayanan extends Model
         'hpp_bhp'             => 'decimal:2',
         'hak_nakes_layanan'   => 'decimal:2',
         'urutan'              => 'integer',
+        'durasi_menit'        => 'integer',
     ];
 
     // ─── Relations ──────────────────────────────────────────────────────────
