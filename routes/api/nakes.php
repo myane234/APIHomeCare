@@ -5,6 +5,7 @@ use App\Http\Controllers\TenagaMedisController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\NakesOperasionalController;
 use App\Http\Controllers\NakesBookingController;
+use App\Http\Controllers\RiwayatKunjunganController;
 use App\Http\Controllers\WebSocketController;
 
 Route::middleware(['auth:sanctum', 'role:nakes,tenaga medis'])->group(function () {
@@ -17,6 +18,8 @@ Route::middleware(['auth:sanctum', 'role:nakes,tenaga medis'])->group(function (
 
     // Order management for Nakes (NakesBookingController)
     Route::get('/nakes/booking', [NakesBookingController::class, 'index']);
+    Route::get('/nakes/riwayat-kunjungan', [RiwayatKunjunganController::class, 'index']);
+    Route::get('/nakes/riwayat-kunjungan/{id}', [RiwayatKunjunganController::class, 'show']);
     Route::get('/nakes/orders', [NakesBookingController::class, 'ordersQueue']);
     Route::get('/nakes/order/{id}', [NakesBookingController::class, 'show']);
     Route::post('/nakes/booking/{id}/status', [BookingController::class, 'nakesUpdateStatus']);

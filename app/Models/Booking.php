@@ -78,6 +78,11 @@ class Booking extends Model
         return $this->hasMany(BookingBhp::class, 'id_booking', 'id_booking');
     }
 
+    public function riwayatKunjungan()
+    {
+        return $this->hasMany(RiwayatKunjungan::class, 'id_booking', 'id_booking');
+    }
+
     /**
      * Generate nomor rekam medis dengan format P-YY-XXXX
      * P = Pasien

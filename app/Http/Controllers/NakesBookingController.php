@@ -300,6 +300,7 @@ class NakesBookingController extends Controller
             }
 
             $booking->refresh();
+            app(RiwayatKunjunganController::class)->syncFromBooking($booking);
             app(WebSocketController::class)->ensureChatRoom($booking->load(['pasien', 'tenagaMedis']));
 
             // Recalculate Transport Nakes
@@ -440,6 +441,7 @@ class NakesBookingController extends Controller
 
         $booking->status_booking = 'Tindakan';
         $booking->save();
+        app(RiwayatKunjunganController::class)->syncFromBooking($booking);
 
         // Inisialisasi awal record booking_bhp dari mapping_layanan_bhp jika belum ada
         $this->ensureBookingBhpInitialized($booking);
@@ -738,6 +740,7 @@ class NakesBookingController extends Controller
 
             $booking->status_booking = 'Selesai';
             $booking->save();
+            app(RiwayatKunjunganController::class)->syncFromBooking($booking);
 
             DB::commit();
 

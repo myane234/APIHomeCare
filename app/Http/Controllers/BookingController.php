@@ -2170,6 +2170,8 @@ class BookingController extends Controller
                 ]);
             }
 
+            $booking->refresh();
+            app(RiwayatKunjunganController::class)->syncFromBooking($booking);
             DB::commit();
 
             $booking->refresh()->load(['pasien', 'layanan', 'layananItems.layanan', 'tenagaMedis', 'transaksi']);
@@ -2314,6 +2316,9 @@ class BookingController extends Controller
 
         $booking->status_booking = $request->input('status_booking');
         $booking->save();
+        if (in_array($booking->status_booking, ['DiPerjalanan', 'Tindakan', 'Selesai'], true)) {
+            app(RiwayatKunjunganController::class)->syncFromBooking($booking);
+        }
 
         return response()->json([
             'success' => true,

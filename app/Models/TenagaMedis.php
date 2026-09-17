@@ -108,6 +108,11 @@ class TenagaMedis extends Model
         return $this->hasMany(OperasionalNakes::class, 'id_tenaga_medis', 'id_tenaga_medis');
     }
 
+    public function riwayatKunjungan()
+    {
+        return $this->hasMany(RiwayatKunjungan::class, 'id_tenaga_medis', 'id_tenaga_medis');
+    }
+
     public function bank()
     {
         return $this->belongsTo(MasterBank::class, 'id_bank', 'id_bank');
