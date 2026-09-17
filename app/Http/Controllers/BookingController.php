@@ -598,7 +598,6 @@ class BookingController extends Controller
             'latitude_kunjungan' => 'nullable|numeric',
             'longitude_kunjungan' => 'nullable|numeric',
             'catatan' => 'nullable|string',
-            'id_promo' => 'nullable|exists:promos,id_promo',
             'id_kota' => 'nullable',
         ]);
 
@@ -713,22 +712,12 @@ class BookingController extends Controller
             $durasiLayananInput[$idLyn] = $selectedDuration;
         }
 
-        $promo = null;
-        if (!empty($validate['id_promo'])) {
-            $promo = Promo::where('id_promo', $validate['id_promo'])
-                ->whereIn('id_layanan', $layananIds)
-                ->where('status_promo', 'Aktif')
-                ->whereDate('tanggal_mulai', '<=', now()->toDateString())
-                ->whereDate('tanggal_berakhir', '>=', now()->toDateString())
-                ->first();
-
-            if (!$promo) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Promo tidak aktif, sudah kedaluwarsa, atau tidak berlaku untuk layanan yang dipilih.',
-                ], 422);
-            }
-        }
+        $promo = Promo::whereIn('id_layanan', $layananIds)
+            ->where('status_promo', 'Aktif')
+            ->whereDate('tanggal_mulai', '<=', now()->toDateString())
+            ->whereDate('tanggal_berakhir', '>=', now()->toDateString())
+            ->orderByDesc('created_at')
+            ->first();
 
         if ($tenagaMedisId) {
             $tenagaMedis = TenagaMedis::where('status', 'approved')->find($tenagaMedisId);
@@ -967,7 +956,6 @@ class BookingController extends Controller
                         'medical_record_number' => $medicalRecordNumber,
                         'id_pasien' => $pasien->id_pasien,
                         'id_layanan' => $layananIds[0],   // primary layanan
-                        'id_promo' => $promo?->id_promo,
                         'id_kategori_tarif' => $idKategoriTarif,
                         'id_tenaga_medis' => $tenagaMedisId,
                         'tanggal_kunjungan' => $validate['tanggal_kunjungan'],

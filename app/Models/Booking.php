@@ -21,7 +21,6 @@ class Booking extends Model
         'id_kategori_tarif',
         'id_kota',
         'id_tenaga_medis',
-        'id_promo',
         'tanggal_kunjungan',
         'jam_kunjungan',
         'alamat_kunjungan',
