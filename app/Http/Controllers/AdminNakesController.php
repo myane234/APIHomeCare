@@ -8,7 +8,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\Users;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -430,16 +429,16 @@ class AdminNakesController extends Controller
     /**
      * Tambah Data Nakes Baru via Admin
      *
-     * Endpoint ini digunakan oleh Super Admin untuk mendaftarkan Tenaga Medis (Nakes) baru secara langsung.
-     * Admin dapat membuatkan akun user baru atau menghubungkan ke user_id yang sudah ada, 
-     * mengunggah berkas lengkap, serta menentukan status awal pendaftaran (pending, pelatihan, approved, rejected).
+    * Endpoint ini digunakan oleh Super Admin untuk mendaftarkan Tenaga Medis (Nakes) baru
+    * menggunakan user yang sudah terdaftar melalui email atau user_id.
+    * Admin dapat mengunggah berkas lengkap serta menentukan status awal pendaftaran
+    * (pending, pelatihan, approved, rejected).
      * Jika status di-set ke 'approved', role 'nakes' akan otomatis ditambahkan ke user.
      * 
      * @authenticated
      * 
-     * @bodyParam user_id int ID user yang sudah terdaftar (opsional jika buat user baru). Example: 5
-     * @bodyParam email string Email nakes untuk akun baru (wajib jika user_id tidak diisi). Example: nakes.budi@example.com
-     * @bodyParam password string Password akun baru min. 8 karakter (wajib jika user_id tidak diisi). Example: Password123!
+    * @bodyParam user_id int ID user yang sudah terdaftar (gunakan user_id atau email). Example: 5
+    * @bodyParam email string Email user yang sudah terdaftar (gunakan email atau user_id). Example: nakes.budi@example.com
      * @bodyParam status string Status pendaftaran nakes (pending|pelatihan|approved|rejected). Example: approved
      * @bodyParam admin_notes string Catatan khusus dari admin. Example: Berkas fisik dan keaslian STR telah diverifikasi.
      * @bodyParam nik string NIK Nakes (16 digit angka). Example: 3171012005900001
@@ -473,8 +472,8 @@ class AdminNakesController extends Controller
      *   "success": true,
      *   "message": "Berhasil menambahkan data Nakes baru oleh admin.",
      *   "data": {
-     *     "id": 12,
-     *     "user_id": 45,
+    *     "id_tenaga_medis": 12,
+    *     "id_user": 45,
      *     "nik": "3171012005900001",
      *     "nama_lengkap": "Dr. Budi Santoso, Sp.A",
      *     "nama_panggilan": "Budi",
@@ -542,10 +541,9 @@ class AdminNakesController extends Controller
 
     // Validasi data input admin + seluruh field biodata & berkas Nakes
     $validated = $request->validate([
-        // Akun User (Pilih user_id yang ada ATAU isi email & password untuk buat akun baru)
-        'user_id'              => ['nullable', 'exists:users,id'],
-        'email'                => ['required_without:user_id', 'nullable', 'email', 'unique:users,email'],
-        'password'             => ['required_without:user_id', 'nullable', 'string', 'min:8'],
+        // Akun User yang sudah terdaftar (isi salah satu: user_id atau email)
+        'user_id'              => ['nullable', 'exists:users,id_user'],
+        'email'                => ['required_without:user_id', 'nullable', 'email', 'exists:users,email'],
 
         // Status & Catatan Admin
         'status'               => ['required', 'in:pending,pelatihan,approved,rejected'],
@@ -562,6 +560,8 @@ class AdminNakesController extends Controller
         'no_telp'              => ['required', 'string', 'max:15'],
         'id_wilayah_layanan'   => ['required', 'integer', 'exists:master_provinsi,id_provinsi'],
         'alamat_lengkap'       => ['required', 'string', 'max:1000'],
+        'latitude'             => ['required', 'numeric', 'between:-90,90'],
+        'longitude'            => ['required', 'numeric', 'between:-180,180'],
         'foto_profile'         => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
 
         // Jenis Tenaga Medis
@@ -607,20 +607,28 @@ class AdminNakesController extends Controller
         'dokumen_tambahan.*.mimes'    => 'Dokumen tambahan harus berupa PDF, gambar, atau Word.',
     ]);
 
-    $tenagaMedis = DB::transaction(function () use ($request, $validated) {
-        // 1. Penanganan Akun User
-        $userId = $validated['user_id'] ?? null;
+    $user = !empty($validated['user_id'])
+        ? Users::find($validated['user_id'])
+        : Users::where('email', $validated['email'])->first();
 
-        if (!$userId) {
-            $user = Users::create([
-                'name'     => $validated['nama_lengkap'],
-                'email'    => $validated['email'],
-                'password' => Hash::make($validated['password']),
-            ]);
-            $userId = $user->id;
-        } else {
-            $user = Users::find($userId);
-        }
+    if (!$user) {
+        return response()->json([
+            'success' => false,
+            'message' => 'User dengan email atau user_id tersebut tidak ditemukan.'
+        ], 422);
+    }
+
+    $pasien = Pasien::where('id_user', $user->id_user)->first();
+
+    if (!$pasien) {
+        return response()->json([
+            'success' => false,
+            'message' => 'User tersebut belum terdaftar sebagai Pasien.'
+        ], 422);
+    }
+
+    $tenagaMedis = DB::transaction(function () use ($request, $validated, $user, $pasien) {
+        $userId = $user->id_user;
 
       
         $uploadFolder = 'nakes_documents/' . $userId;
@@ -645,7 +653,8 @@ class AdminNakesController extends Controller
 
     
         $nakes = TenagaMedis::create([
-            'user_id'            => $userId,
+            'id_user'            => $userId,
+            'id_pasien'          => $pasien->id_pasien,
             'nik'                => $validated['nik'],
             'nama_lengkap'       => $validated['nama_lengkap'],
             'nama_panggilan'     => $validated['nama_panggilan'],
@@ -656,6 +665,8 @@ class AdminNakesController extends Controller
             'no_telp'            => $validated['no_telp'],
             'id_wilayah_layanan' => $validated['id_wilayah_layanan'],
             'alamat_lengkap'     => $validated['alamat_lengkap'],
+            'latitude'           => $validated['latitude'],
+            'longitude'          => $validated['longitude'],
             'foto_profile'       => $fotoProfilePath,
 
             'jenis_tenaga_medis' => $validated['jenis_tenaga_medis'],
