@@ -13,6 +13,7 @@ use App\Models\MasterTarif;
 use App\Models\MasterKategoriTarif;
 use App\Models\MasterTarifTransport;
 use App\Models\MasterMetodePembayaran;
+use App\Models\Promo;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -597,7 +598,7 @@ class BookingController extends Controller
             'latitude_kunjungan' => 'nullable|numeric',
             'longitude_kunjungan' => 'nullable|numeric',
             'catatan' => 'nullable|string',
-            'id_promo' => 'nullable',
+            'id_promo' => 'nullable|exists:promos,id_promo',
             'id_kota' => 'nullable',
         ]);
 
@@ -712,7 +713,22 @@ class BookingController extends Controller
             $durasiLayananInput[$idLyn] = $selectedDuration;
         }
 
-        $idLayananPrimary = $layananIds[0];
+        $promo = null;
+        if (!empty($validate['id_promo'])) {
+            $promo = Promo::where('id_promo', $validate['id_promo'])
+                ->whereIn('id_layanan', $layananIds)
+                ->where('status_promo', 'Aktif')
+                ->whereDate('tanggal_mulai', '<=', now()->toDateString())
+                ->whereDate('tanggal_berakhir', '>=', now()->toDateString())
+                ->first();
+
+            if (!$promo) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Promo tidak aktif, sudah kedaluwarsa, atau tidak berlaku untuk layanan yang dipilih.',
+                ], 422);
+            }
+        }
 
         if ($tenagaMedisId) {
             $tenagaMedis = TenagaMedis::where('status', 'approved')->find($tenagaMedisId);
@@ -768,9 +784,11 @@ class BookingController extends Controller
         $masterTarifPrimary = null;
 
         $totalSl = 0.0;
+        $totalSlSebelumDiskon = 0.0;
         $totalSb = 0.0;
         $totalHppBhp = 0.0;
         $totalFeeNakesBase = 0.0;  
+        $diskonPromo = 0.0;
 
         $perLayananData = [];
 
@@ -803,6 +821,17 @@ class BookingController extends Controller
                 $sl += (float) $kategoriTarifObj->biaya_tambahan;
             }
 
+            $slSebelumDiskon = $sl;
+            $diskonLayanan = 0.0;
+
+            if ($promo && (int) $promo->id_layanan === (int) $idLyn) {
+                $diskonLayanan = $promo->tipe_diskon === 'nominal'
+                    ? min($sl, (float) $promo->nilai_diskon)
+                    : $sl * ((float) $promo->nilai_diskon / 100);
+                $diskonPromo += $diskonLayanan;
+                $sl -= $diskonLayanan;
+            }
+
             // SB & HPP BHP layanan ini
             $sb = 0.0;
             $hppBhp = 0.0;
@@ -824,6 +853,7 @@ class BookingController extends Controller
                 $feeNakesLyn = $sl * ($feeVal / 100);
             }
 
+            $totalSlSebelumDiskon += $slSebelumDiskon;
             $totalSl += $sl;
             $totalSb += $sb;
             $totalHppBhp += $hppBhp;
@@ -832,6 +862,8 @@ class BookingController extends Controller
             $perLayananData[] = [
                 'id_layanan' => $idLyn,
                 'urutan' => $urutan + 1,
+                'sl_sebelum_diskon' => round($slSebelumDiskon, 2),
+                'diskon_promo' => round($diskonLayanan, 2),
                 'sl' => round($sl, 2),
                 'sb' => round($sb, 2),
                 'hpp_bhp' => round($hppBhp, 2),
@@ -912,8 +944,8 @@ class BookingController extends Controller
             + $biayaAdministrasiAplikasi - $feeMidtrans;
 
         try {
-            return Cache::lock('create_booking_lock', 10)->block(5, function () use ($validate, $pasien, $layananIds, $semuaLayanan, $perLayananData, $tenagaMedisId, $alamatKunjungan, $idKategoriTarif, $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $totalHppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance) {
-                return DB::transaction(function () use ($validate, $pasien, $layananIds, $semuaLayanan, $perLayananData, $tenagaMedisId, $alamatKunjungan, $idKategoriTarif, $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $totalHppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance) {
+            return Cache::lock('create_booking_lock', 10)->block(5, function () use ($validate, $pasien, $layananIds, $semuaLayanan, $perLayananData, $tenagaMedisId, $alamatKunjungan, $idKategoriTarif, $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $totalHppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance, $diskonPromo, $promo, $totalSlSebelumDiskon) {
+                return DB::transaction(function () use ($validate, $pasien, $layananIds, $semuaLayanan, $perLayananData, $tenagaMedisId, $alamatKunjungan, $idKategoriTarif, $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $totalHppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance, $diskonPromo, $promo, $totalSlSebelumDiskon) {
 
                     // 1. Generate booking_code (Format: B-YYMMDDXXXXXXX)
                     $prefixBooking = 'B-' . date('ymd');
@@ -935,6 +967,7 @@ class BookingController extends Controller
                         'medical_record_number' => $medicalRecordNumber,
                         'id_pasien' => $pasien->id_pasien,
                         'id_layanan' => $layananIds[0],   // primary layanan
+                        'id_promo' => $promo?->id_promo,
                         'id_kategori_tarif' => $idKategoriTarif,
                         'id_tenaga_medis' => $tenagaMedisId,
                         'tanggal_kunjungan' => $validate['tanggal_kunjungan'],
@@ -991,6 +1024,8 @@ class BookingController extends Controller
                         return [
                             'id_layanan' => $item['id_layanan'],
                             'nama_layanan' => $l?->nama_layanan,
+                            'sl_sebelum_diskon' => (int) round($item['sl_sebelum_diskon']),
+                            'diskon_promo' => (int) round($item['diskon_promo']),
                             'sl' => (int) round($item['sl']),
                             'sb' => (int) round($item['sb']),
                         ];
@@ -1004,13 +1039,18 @@ class BookingController extends Controller
                             'booking_code' => $booking->booking_code,
                             'medical_record_number' => $booking->medical_record_number,
                             'order_id' => $orderId,
+                            'id_promo' => $promo?->id_promo,
                             'layanan' => $layananResponse,
                             'rincian_biaya' => [
+                                'total_sl_sebelum_diskon' => (int) round($totalSlSebelumDiskon),
                                 'total_sl' => $tarifLayananJasaMedis,
                                 'total_sb' => $tarifBahanHabisPakai,
                                 'st' => $tarifTransportasiFinal,
                                 'ba' => $biayaAdministrasiAplikasi,
                                 'ppn' => $nominalPpnPajak,
+                                'diskon_promo' => round($diskonPromo),
+                                'tipe_diskon_promo' => $promo?->tipe_diskon,
+                                'nilai_diskon_promo' => $promo ? (float) $promo->nilai_diskon : 0,
                             ],
                             'jumlah_total' => $totalTagihanPasien,
                             'distance_km' => round($distance, 2),

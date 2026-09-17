@@ -13,9 +13,10 @@ class Promo extends Model
     protected $primaryKey = 'id_promo';
 
     protected $fillable = [
-        'nama_paket',
+        'id_layanan',
         'deskripsi',
-        'diskon_persen',
+        'tipe_diskon',
+        'nilai_diskon',
         'tanggal_mulai',
         'tanggal_berakhir',
         'status_promo',
@@ -23,7 +24,7 @@ class Promo extends Model
     ];
 
     protected $casts = [
-        'diskon_persen' => 'decimal:2',
+        'nilai_diskon' => 'decimal:2',
         'tanggal_mulai' => 'date',
         'tanggal_berakhir' => 'date',
     ];
@@ -39,8 +40,8 @@ class Promo extends Model
         return url(\Illuminate\Support\Facades\Storage::disk('public')->url($this->gambar_promo));
     }
 
-    public function layanans()
+    public function layanan()
     {
-        return $this->belongsToMany(MasterLayanan::class, 'promo_layanan', 'id_promo', 'id_layanan');
+        return $this->belongsTo(MasterLayanan::class, 'id_layanan', 'id_layanan');
     }
 }

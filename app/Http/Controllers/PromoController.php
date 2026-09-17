@@ -5,17 +5,17 @@ namespace App\Http\Controllers;
 use App\Models\Promo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 /**
  * @group CMS Promo
- * Endpoint Untuk Paket Bundling
+ * Endpoint Untuk Promo Layanan
  */
 class PromoController extends Controller
 {
     public function index()
     {
-        // Load relasi layanan
-        $promos = Promo::with('layanans')
+        $promos = Promo::with('layanan')
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -28,21 +28,23 @@ class PromoController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'nama_paket' => ['required', 'string', 'max:255'],
+            'id_layanan' => ['required', 'exists:master_layanan,id_layanan'],
             'deskripsi' => ['required', 'string'],
-            'diskon_persen' => ['required', 'numeric', 'min:0', 'max:100'],
+            'tipe_diskon' => ['required', Rule::in(['persen', 'nominal'])],
+            'nilai_diskon' => [
+                'required',
+                'numeric',
+                'min:0',
+                Rule::when($request->input('tipe_diskon') === 'persen', ['max:100']),
+            ],
             'tanggal_mulai' => ['required', 'date'],
             'tanggal_berakhir' => ['required', 'date', 'after_or_equal:tanggal_mulai'],
             'status_promo' => ['required', 'in:Aktif,Tidak Aktif'],
-            'layanan_ids' => ['required', 'array'], // Input ID layanan dalam bentuk array
-            'layanan_ids.*' => ['exists:master_layanan,id_layanan'],
             'gambar_promo' => ['sometimes','nullable','image','max:2048'],
         ]);
 
         // create promo without image first
         $promoData = $validated;
-        unset($promoData['layanan_ids']);
-
         $promo = Promo::create($promoData);
 
         // Handle image upload separately
@@ -52,20 +54,16 @@ class PromoController extends Controller
             $promo->save();
         }
 
-        // Simpan relasi ke tabel pivot
-        $promo->layanans()->sync($request->layanan_ids);
-
         return response()->json([
             'success' => true,
-            'message' => 'Paket bundling berhasil dibuat',
-            'data' => $promo->load('layanans'),
+            'message' => 'Promo layanan berhasil dibuat',
+            'data' => $promo->load('layanan'),
         ], 201);
     }
 
     public function show(Promo $promo)
     {
-        // Memuat layanan saat menampilkan detail
-        $promo->load('layanans');
+        $promo->load('layanan');
         
         return response()->json([
             'success' => true,
@@ -76,14 +74,19 @@ class PromoController extends Controller
     public function update(Request $request, Promo $promo)
     {
         $validated = $request->validate([
-            'nama_paket' => ['sometimes', 'required', 'string', 'max:255'],
+            'id_layanan' => ['sometimes', 'required', 'exists:master_layanan,id_layanan'],
             'deskripsi' => ['sometimes', 'required', 'string'],
-            'diskon_persen' => ['sometimes', 'required', 'numeric', 'min:0', 'max:100'],
+            'tipe_diskon' => ['sometimes', Rule::in(['persen', 'nominal'])],
+            'nilai_diskon' => [
+                'sometimes',
+                'required',
+                'numeric',
+                'min:0',
+                Rule::when(($request->input('tipe_diskon') ?? $promo->tipe_diskon) === 'persen', ['max:100']),
+            ],
             'tanggal_mulai' => ['sometimes', 'required', 'date'],
             'tanggal_berakhir' => ['sometimes', 'required', 'date', 'after_or_equal:tanggal_mulai'],
             'status_promo' => ['sometimes', 'required', 'in:Aktif,Tidak Aktif'],
-            'layanan_ids' => ['sometimes', 'required', 'array'],
-            'layanan_ids.*' => ['exists:master_layanan,id_layanan'],
             'gambar_promo' => ['sometimes','nullable','image','max:2048'],
         ]);
 
@@ -99,20 +102,15 @@ class PromoController extends Controller
         $promo->fill($validated);
         $promo->save();
 
-        if ($request->has('layanan_ids')) {
-            $promo->layanans()->sync($request->layanan_ids);
-        }
-
         return response()->json([
             'success' => true,
-            'message' => 'Paket bundling berhasil diubah',
-            'data' => $promo->load('layanans'),
+            'message' => 'Promo layanan berhasil diubah',
+            'data' => $promo->load('layanan'),
         ], 200);
     }
 
     public function destroy(Promo $promo)
     {
-        $promo->layanans()->detach(); // Hapus relasi sebelum delete
         if ($promo->gambar_promo) {
             Storage::disk('public')->delete($promo->gambar_promo);
         }
@@ -126,7 +124,7 @@ class PromoController extends Controller
 
     public function getActivePromos()
     {
-        $promos = Promo::with('layanans')
+        $promos = Promo::with('layanan')
             ->where('status_promo', 'Aktif')
             ->whereDate('tanggal_mulai', '<=', now()->toDateString())
             ->whereDate('tanggal_berakhir', '>=', now()->toDateString())
