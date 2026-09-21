@@ -399,7 +399,7 @@ class BookingController extends Controller
                 ->where('id_kategori_tarif', $category->id_kategori_tarif)
                 ->where(function ($query) use ($serviceId) {
                     $query->where('id_layanan', $serviceId)
-                        ->orWhereHas('layananTermasuk', fn ($pivot) => $pivot->where('master_layanan.id_layanan', $serviceId));
+                        ->orWhereHas('layananTermasuk', fn($pivot) => $pivot->where('master_layanan.id_layanan', $serviceId));
                 })
                 ->first();
 
@@ -584,7 +584,7 @@ class BookingController extends Controller
             return $this->charge($request);
         }
 
-      
+
         $validate = $request->validate([
             'layanan_ids' => 'nullable|array|min:1',
             'layanan_ids.*' => 'integer|exists:master_layanan,id_layanan',
@@ -602,7 +602,7 @@ class BookingController extends Controller
             'id_kota' => 'nullable',
         ]);
 
-        
+
         if (!empty($validate['layanan_ids'])) {
             $layananIds = array_values(array_unique(array_map('intval', $validate['layanan_ids'])));
         } else {
@@ -654,7 +654,7 @@ class BookingController extends Controller
             ], 422);
         }
 
-       
+
         $patientCoordinates = $this->resolveCoordinates(
             $validate['latitude_kunjungan'] ?? null,
             $validate['longitude_kunjungan'] ?? null,
@@ -673,7 +673,7 @@ class BookingController extends Controller
         $validate['latitude_kunjungan'] = $patientLat;
         $validate['longitude_kunjungan'] = $patientLng;
 
-      
+
         $tenagaMedisId = $validate['id_tenaga_medis'] ?? null;
         if (is_array($tenagaMedisId)) {
             $tenagaMedisId = $tenagaMedisId[0] ?? null;
@@ -770,14 +770,14 @@ class BookingController extends Controller
             return $query->first();
         };
 
-    
+
         $masterTarifPrimary = null;
 
         $totalSl = 0.0;
         $totalSlSebelumDiskon = 0.0;
         $totalSb = 0.0;
         $totalHppBhp = 0.0;
-        $totalFeeNakesBase = 0.0;  
+        $totalFeeNakesBase = 0.0;
         $diskonPromo = 0.0;
 
         $perLayananData = [];
@@ -787,7 +787,7 @@ class BookingController extends Controller
             $layanan = $semuaLayanan->get($idLyn);
             $masterTarif = $cariMasterTarif($idLyn);
 
-       
+
             if ($urutan === 0) {
                 $masterTarifPrimary = $masterTarif;
 
@@ -866,7 +866,7 @@ class BookingController extends Controller
 
         // Transport tidak dikenakan jika SEMUA layanan include transport
         // Transport hanya dihitung bila Master Tarif terpilih mengaktifkannya.
-        $transportIncluded = collect($perLayananData)->contains(fn ($item) => $item['is_transport'] ?? false);
+        $transportIncluded = collect($perLayananData)->contains(fn($item) => $item['is_transport'] ?? false);
         $tarifTransportasiFinal = 0.0;
 
         if ($transportIncluded) {
@@ -1073,7 +1073,7 @@ class BookingController extends Controller
 
     /**
      * Charge pembayaran BHP tambahan dengan kode dan transaksi Midtrans terpisah.
-    * POST /api/booking/charge-biaya-tambahan
+     * POST /api/booking/charge-biaya-tambahan
      */
     public function chargeAdditionalBhp(Request $request)
     {
@@ -1314,278 +1314,278 @@ class BookingController extends Controller
      * Step 2: API Direct Midtrans Charge (Eksekusi Pembayaran via Core API)
      * POST /api/booking/charge
      */
-   public function charge(Request $request)
-{
-    $validated = $request->validate([
-        'id_booking' => 'required|exists:bookings,id_booking',
-        'payment_type' => 'required|string|max:50',
-    ]);
-
-    $paymentType = $validated['payment_type'];
-
-    // 1. Ambil keyword bank dan dukung format payment_type bank yang tersimpan di master
-    $bank = strtolower($request->input('bank_transfer.bank', ''));
-    $searchKeys = [$paymentType];
-    if ($paymentType === 'bank_transfer' && $bank !== '') {
-        $searchKeys = array_unique([
-            $paymentType,
-            $bank,
-            "{$bank}_va",
-            "{$bank}_transfer",
+    public function charge(Request $request)
+    {
+        $validated = $request->validate([
+            'id_booking' => 'required|exists:bookings,id_booking',
+            'payment_type' => 'required|string|max:50',
         ]);
-    }
 
-    // 2. Cek ketersediaan di database master
-    $metode = MasterMetodePembayaran::whereIn('payment_type', $searchKeys)
-        ->where('is_active', true)
-        ->whereHas('kategori', fn($q) => $q->where('is_active', true))
-        ->first();
+        $paymentType = $validated['payment_type'];
 
-    if (!$metode) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Metode pembayaran tidak tersedia atau sedang dinonaktifkan.',
-        ], 422);
-    }
-
-    $booking = Booking::with([
-        'transaksi',
-        'pasien.user',
-        'layanan',
-        'kategoriTarif',
-        'layananItems.layanan.kategori',
-        'layananItems.layanan.bhpItems',
-        'bookingBhp.bhpItem',
-    ])->find($request->input('id_booking'));
-
-    if (!$booking || !$booking->transaksi) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Booking atau data transaksi tidak ditemukan.'
-        ], 404);
-    }
-
-    $transaksi = $booking->transaksi;
-    $orderId = $transaksi->midtrans_order_id ?? ('BOOKING-' . $booking->id_booking . '-' . time());
-
-    $semuaLayanan = $booking->layananItems->isNotEmpty()
-        ? $booking->layananItems->map(fn($item) => $item->layanan)->filter()
-        : collect([$booking->layanan])->filter();
-
-    $stTransport = (float) $transaksi->st;
-    $jarakNakesAcuan = 0.0;
-    $tierTransport = 0;
-
-    if ($stTransport <= 0 && $this->bookingUsesTransport($booking)) {
-        $transportMaster = MasterTarifTransport::query()->first();
-
-        if ($transportMaster && $booking->latitude_kunjungan && $booking->longitude_kunjungan) {
-            $nearestNakes = $this->findNearestNakes(
-                (float) $booking->latitude_kunjungan,
-                (float) $booking->longitude_kunjungan,
-                $booking->id_layanan
-            )->first();
-
-            if (!$nearestNakes) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Nakes tidak tersedia di wilayah Anda.',
-                ], 422);
-            }
-
-            $jarakNakesAcuan = (float) ($nearestNakes->distance_km ?? 0);
-            if ($jarakNakesAcuan > 40) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Nakes tidak tersedia di wilayah Anda. Jarak layanan maksimal adalah 40 km.',
-                    'distance_km' => round($jarakNakesAcuan, 2),
-                ], 422);
-            }
-
-            $tierTransport = (int) ceil($jarakNakesAcuan / 10);
-            $stTransport = $this->calculateTransportTariff($transportMaster, $jarakNakesAcuan);
-
-            $transaksi->update([
-                'st' => $stTransport,
-                'hak_nakes' => (float) $transaksi->hak_nakes + $stTransport,
+        // 1. Ambil keyword bank dan dukung format payment_type bank yang tersimpan di master
+        $bank = strtolower($request->input('bank_transfer.bank', ''));
+        $searchKeys = [$paymentType];
+        if ($paymentType === 'bank_transfer' && $bank !== '') {
+            $searchKeys = array_unique([
+                $paymentType,
+                $bank,
+                "{$bank}_va",
+                "{$bank}_transfer",
             ]);
-            $transaksi->refresh();
-        }
-    }
-
-
-    $totalDasar = (float) $transaksi->sl
-        + (float) $transaksi->sb
-        + $stTransport
-        + (float) $transaksi->ba
-        + (float) $transaksi->ppn;
-
-    if ($totalDasar <= 0) {
-        $totalDasar = max(0, (float) $transaksi->jumlah_total - (float) ($transaksi->sb_tambahan ?? 0));
-    }
-
-    $nilaiBiayaTransaksi = max(0, (float) $metode->nilai_potongan);
-    $biayaTransaksi = $metode->tipe_potongan === 'persen'
-        ? $totalDasar * min(100, $nilaiBiayaTransaksi) / 100
-        : $nilaiBiayaTransaksi;
-    $jumlahTotalCharge = (int) round($totalDasar + $biayaTransaksi);
-
-    
-    $payload = [
-        'payment_type' => $paymentType,
-        'transaction_details' => [
-            'order_id' => $orderId,
-            'gross_amount' => $jumlahTotalCharge,
-        ],
-        'customer_details' => [
-            'first_name' => $booking->pasien?->nama_lengkap ?? 'Pasien',
-            'email' => $booking->pasien?->user?->email ?? 'no-reply@example.com',
-        ],
-        'custom_expiry' => [
-            'expiry_duration' => (int) env('MIDTRANS_EXPIRY_DURATION', 15),
-            'unit' => env('MIDTRANS_EXPIRY_UNIT', 'minutes'),
-        ],
-    ];
-
-
-    if ($request->has($paymentType) && is_array($request->input($paymentType))) {
-        $payload[$paymentType] = $request->input($paymentType);
-    }
-
-    
-    if ($paymentType === 'shopeepay') {
-        $shopeepayData = $payload['shopeepay'] ?? [];
-        if (empty($shopeepayData['callback_url'])) {
-          
-            $shopeepayData['callback_url'] = env('MIDTRANS_CALLBACK_URL', url('/payment/finish'));
-        }
-        $payload['shopeepay'] = $shopeepayData;
-    }
-
-    if ($paymentType === 'qris' && empty($payload['qris'])) {
-        $payload['qris'] = ['acquirer' => 'gopay'];
-    }
-
-    if ($paymentType === 'bank_transfer' && !isset($payload['bank_transfer'])) {
-        $payload['bank_transfer'] = $request->input('bank_transfer', ['bank' => $bank]);
-    }
-
-    $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
-    $url = config('services.midtrans.is_production', false)
-        ? 'https://api.midtrans.com/v2/charge'
-        : 'https://api.sandbox.midtrans.com/v2/charge';
-
-    try {
-        $client = Http::withBasicAuth($serverKey, '');
-        if (config('app.env') === 'local') {
-            $client->withoutVerifying();
         }
 
-        $response = $client->post($url, $payload);
-        $responseData = $response->json();
+        // 2. Cek ketersediaan di database master
+        $metode = MasterMetodePembayaran::whereIn('payment_type', $searchKeys)
+            ->where('is_active', true)
+            ->whereHas('kategori', fn($q) => $q->where('is_active', true))
+            ->first();
 
-        if ($response->successful()) {
-            $paymentDetails = [
-                'midtrans_transaction_id' => $responseData['transaction_id'] ?? null,
-                'midtrans_order_id' => $responseData['order_id'] ?? $orderId,
-                'midtrans_response' => $responseData,
-            ];
+        if (!$metode) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Metode pembayaran tidak tersedia atau sedang dinonaktifkan.',
+            ], 422);
+        }
 
-            if (isset($responseData['va_numbers'][0])) {
-                $paymentDetails['va_number'] = $responseData['va_numbers'][0]['va_number'] ?? null;
-                $paymentDetails['bank_va'] = $responseData['va_numbers'][0]['bank'] ?? null;
-            } elseif (isset($responseData['permata_va_number'])) {
-                $paymentDetails['va_number'] = $responseData['permata_va_number'];
-                $paymentDetails['bank_va'] = 'permata';
+        $booking = Booking::with([
+            'transaksi',
+            'pasien.user',
+            'layanan',
+            'kategoriTarif',
+            'layananItems.layanan.kategori',
+            'layananItems.layanan.bhpItems',
+            'bookingBhp.bhpItem',
+        ])->find($request->input('id_booking'));
+
+        if (!$booking || !$booking->transaksi) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking atau data transaksi tidak ditemukan.'
+            ], 404);
+        }
+
+        $transaksi = $booking->transaksi;
+        $orderId = $transaksi->midtrans_order_id ?? ('BOOKING-' . $booking->id_booking . '-' . time());
+
+        $semuaLayanan = $booking->layananItems->isNotEmpty()
+            ? $booking->layananItems->map(fn($item) => $item->layanan)->filter()
+            : collect([$booking->layanan])->filter();
+
+        $stTransport = (float) $transaksi->st;
+        $jarakNakesAcuan = 0.0;
+        $tierTransport = 0;
+
+        if ($stTransport <= 0 && $this->bookingUsesTransport($booking)) {
+            $transportMaster = MasterTarifTransport::query()->first();
+
+            if ($transportMaster && $booking->latitude_kunjungan && $booking->longitude_kunjungan) {
+                $nearestNakes = $this->findNearestNakes(
+                    (float) $booking->latitude_kunjungan,
+                    (float) $booking->longitude_kunjungan,
+                    $booking->id_layanan
+                )->first();
+
+                if (!$nearestNakes) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Nakes tidak tersedia di wilayah Anda.',
+                    ], 422);
+                }
+
+                $jarakNakesAcuan = (float) ($nearestNakes->distance_km ?? 0);
+                if ($jarakNakesAcuan > 40) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Nakes tidak tersedia di wilayah Anda. Jarak layanan maksimal adalah 40 km.',
+                        'distance_km' => round($jarakNakesAcuan, 2),
+                    ], 422);
+                }
+
+                $tierTransport = (int) ceil($jarakNakesAcuan / 10);
+                $stTransport = $this->calculateTransportTariff($transportMaster, $jarakNakesAcuan);
+
+                $transaksi->update([
+                    'st' => $stTransport,
+                    'hak_nakes' => (float) $transaksi->hak_nakes + $stTransport,
+                ]);
+                $transaksi->refresh();
+            }
+        }
+
+
+        $totalDasar = (float) $transaksi->sl
+            + (float) $transaksi->sb
+            + $stTransport
+            + (float) $transaksi->ba
+            + (float) $transaksi->ppn;
+
+        if ($totalDasar <= 0) {
+            $totalDasar = max(0, (float) $transaksi->jumlah_total - (float) ($transaksi->sb_tambahan ?? 0));
+        }
+
+        $nilaiBiayaTransaksi = max(0, (float) $metode->nilai_potongan);
+        $biayaTransaksi = $metode->tipe_potongan === 'persen'
+            ? $totalDasar * min(100, $nilaiBiayaTransaksi) / 100
+            : $nilaiBiayaTransaksi;
+        $jumlahTotalCharge = (int) round($totalDasar + $biayaTransaksi);
+
+
+        $payload = [
+            'payment_type' => $paymentType,
+            'transaction_details' => [
+                'order_id' => $orderId,
+                'gross_amount' => $jumlahTotalCharge,
+            ],
+            'customer_details' => [
+                'first_name' => $booking->pasien?->nama_lengkap ?? 'Pasien',
+                'email' => $booking->pasien?->user?->email ?? 'no-reply@example.com',
+            ],
+            'custom_expiry' => [
+                'expiry_duration' => (int) env('MIDTRANS_EXPIRY_DURATION', 15),
+                'unit' => env('MIDTRANS_EXPIRY_UNIT', 'minutes'),
+            ],
+        ];
+
+
+        if ($request->has($paymentType) && is_array($request->input($paymentType))) {
+            $payload[$paymentType] = $request->input($paymentType);
+        }
+
+
+        if ($paymentType === 'shopeepay') {
+            $shopeepayData = $payload['shopeepay'] ?? [];
+            if (empty($shopeepayData['callback_url'])) {
+
+                $shopeepayData['callback_url'] = env('MIDTRANS_CALLBACK_URL', url('/payment/finish'));
+            }
+            $payload['shopeepay'] = $shopeepayData;
+        }
+
+        if ($paymentType === 'qris' && empty($payload['qris'])) {
+            $payload['qris'] = ['acquirer' => 'gopay'];
+        }
+
+        if ($paymentType === 'bank_transfer' && !isset($payload['bank_transfer'])) {
+            $payload['bank_transfer'] = $request->input('bank_transfer', ['bank' => $bank]);
+        }
+
+        $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
+        $url = config('services.midtrans.is_production', false)
+            ? 'https://api.midtrans.com/v2/charge'
+            : 'https://api.sandbox.midtrans.com/v2/charge';
+
+        try {
+            $client = Http::withBasicAuth($serverKey, '');
+            if (config('app.env') === 'local') {
+                $client->withoutVerifying();
             }
 
-            $bankVa = $paymentDetails['bank_va'] ?? $bank;
-            $paymentMethodLabel = $paymentType === 'bank_transfer' && $bankVa !== ''
-                ? strtoupper($bankVa) . ' VA'
-                : ($metode->nama_metode ?: ucfirst(str_replace('_', ' ', $paymentType)));
+            $response = $client->post($url, $payload);
+            $responseData = $response->json();
 
-            $paymentDetails['payment_method'] = $paymentMethodLabel;
-            $paymentDetails['metode_pembayaran'] = $paymentMethodLabel;
+            if ($response->successful()) {
+                $paymentDetails = [
+                    'midtrans_transaction_id' => $responseData['transaction_id'] ?? null,
+                    'midtrans_order_id' => $responseData['order_id'] ?? $orderId,
+                    'midtrans_response' => $responseData,
+                ];
 
-        
-            if (isset($responseData['payment_code'])) {
-                $paymentDetails['payment_code'] = $responseData['payment_code'];
-                $paymentDetails['store'] = $responseData['store'] ?? null;
-            }
+                if (isset($responseData['va_numbers'][0])) {
+                    $paymentDetails['va_number'] = $responseData['va_numbers'][0]['va_number'] ?? null;
+                    $paymentDetails['bank_va'] = $responseData['va_numbers'][0]['bank'] ?? null;
+                } elseif (isset($responseData['permata_va_number'])) {
+                    $paymentDetails['va_number'] = $responseData['permata_va_number'];
+                    $paymentDetails['bank_va'] = 'permata';
+                }
 
-            
-            if (isset($responseData['bill_key'])) {
-                $paymentDetails['bill_key'] = $responseData['bill_key'];
-                $paymentDetails['biller_code'] = $responseData['biller_code'] ?? null;
-            }
+                $bankVa = $paymentDetails['bank_va'] ?? $bank;
+                $paymentMethodLabel = $paymentType === 'bank_transfer' && $bankVa !== ''
+                    ? strtoupper($bankVa) . ' VA'
+                    : ($metode->nama_metode ?: ucfirst(str_replace('_', ' ', $paymentType)));
 
-            
-            if (isset($responseData['qr_string'])) {
-                $paymentDetails['qr_string'] = $responseData['qr_string'];
-            }
+                $paymentDetails['payment_method'] = $paymentMethodLabel;
+                $paymentDetails['metode_pembayaran'] = $paymentMethodLabel;
 
-            if (isset($responseData['actions']) && is_array($responseData['actions'])) {
-                foreach ($responseData['actions'] as $action) {
-                    if (in_array($action['name'] ?? '', ['generate-qr-code', 'deeplink-redirect', 'desktop-web-checkout'])) {
-                        $paymentDetails['qr_url'] = $action['url'];
-                        break;
+
+                if (isset($responseData['payment_code'])) {
+                    $paymentDetails['payment_code'] = $responseData['payment_code'];
+                    $paymentDetails['store'] = $responseData['store'] ?? null;
+                }
+
+
+                if (isset($responseData['bill_key'])) {
+                    $paymentDetails['bill_key'] = $responseData['bill_key'];
+                    $paymentDetails['biller_code'] = $responseData['biller_code'] ?? null;
+                }
+
+
+                if (isset($responseData['qr_string'])) {
+                    $paymentDetails['qr_string'] = $responseData['qr_string'];
+                }
+
+                if (isset($responseData['actions']) && is_array($responseData['actions'])) {
+                    foreach ($responseData['actions'] as $action) {
+                        if (in_array($action['name'] ?? '', ['generate-qr-code', 'deeplink-redirect', 'desktop-web-checkout'])) {
+                            $paymentDetails['qr_url'] = $action['url'];
+                            break;
+                        }
                     }
                 }
+
+                $transaksi->update($paymentDetails);
+                $transaksi->update([
+                    'jumlah_total' => $jumlahTotalCharge,
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Transaksi charge Midtrans berhasil dibuat.',
+                    'data' => array_merge($responseData, [
+                        'id_booking' => $booking->id_booking,
+                        'booking' => (new BookingResource($booking))->resolve(),
+                        'kategori_tarif' => $booking->kategoriTarif ? [
+                            'id_kategori_tarif' => $booking->kategoriTarif->id_kategori_tarif,
+                            'nama_kategori' => $booking->kategoriTarif->nama_kategori,
+                            'biaya_tambahan' => (float) $booking->kategoriTarif->biaya_tambahan,
+                            'is_default' => (bool) $booking->kategoriTarif->is_default,
+                            'hari_berlaku' => $booking->kategoriTarif->hari_berlaku,
+                            'jam_mulai' => $booking->kategoriTarif->jam_mulai,
+                            'jam_selesai' => $booking->kategoriTarif->jam_selesai,
+                        ] : null,
+                        'order_id' => $responseData['order_id'] ?? $orderId,
+                        'jumlah_total' => $jumlahTotalCharge,
+                        'jumlah_total_dasar' => $totalDasar,
+                        'st_transport' => $stTransport,
+                        'jarak_nakes_acuan' => round($jarakNakesAcuan, 2),
+                        'tier_transport' => $tierTransport,
+                        'biaya_transaksi' => round($biayaTransaksi, 2),
+                        'tipe_potongan' => $metode->tipe_potongan,
+                        'nilai_potongan' => $nilaiBiayaTransaksi,
+                        'payment_type' => $paymentMethodLabel,
+                        'payment_type_code' => $paymentType,
+                        'metode_pembayaran' => $paymentMethodLabel,
+                        'payment_method' => $paymentMethodLabel,
+                        'va_number' => $paymentDetails['va_number'] ?? null,
+                        'bank_va' => $paymentDetails['bank_va'] ?? null,
+                        'jumlah_total_format' => 'Rp ' . number_format($jumlahTotalCharge, 0, ',', '.'),
+                    ])
+                ], $response->status());
             }
 
-            $transaksi->update($paymentDetails);
-            $transaksi->update([
-                'jumlah_total' => $jumlahTotalCharge,
-            ]);
-
             return response()->json([
-                'success' => true,
-                'message' => 'Transaksi charge Midtrans berhasil dibuat.',
-                'data' => array_merge($responseData, [
-                    'id_booking' => $booking->id_booking,
-                    'booking' => (new BookingResource($booking))->resolve(),
-                    'kategori_tarif' => $booking->kategoriTarif ? [
-                        'id_kategori_tarif' => $booking->kategoriTarif->id_kategori_tarif,
-                        'nama_kategori' => $booking->kategoriTarif->nama_kategori,
-                        'biaya_tambahan' => (float) $booking->kategoriTarif->biaya_tambahan,
-                        'is_default' => (bool) $booking->kategoriTarif->is_default,
-                        'hari_berlaku' => $booking->kategoriTarif->hari_berlaku,
-                        'jam_mulai' => $booking->kategoriTarif->jam_mulai,
-                        'jam_selesai' => $booking->kategoriTarif->jam_selesai,
-                    ] : null,
-                    'order_id' => $responseData['order_id'] ?? $orderId,
-                    'jumlah_total' => $jumlahTotalCharge,
-                    'jumlah_total_dasar' => $totalDasar,
-                    'st_transport' => $stTransport,
-                    'jarak_nakes_acuan' => round($jarakNakesAcuan, 2),
-                    'tier_transport' => $tierTransport,
-                    'biaya_transaksi' => round($biayaTransaksi, 2),
-                    'tipe_potongan' => $metode->tipe_potongan,
-                    'nilai_potongan' => $nilaiBiayaTransaksi,
-                    'payment_type' => $paymentMethodLabel,
-                    'payment_type_code' => $paymentType,
-                    'metode_pembayaran' => $paymentMethodLabel,
-                    'payment_method' => $paymentMethodLabel,
-                    'va_number' => $paymentDetails['va_number'] ?? null,
-                    'bank_va' => $paymentDetails['bank_va'] ?? null,
-                    'jumlah_total_format' => 'Rp ' . number_format($jumlahTotalCharge, 0, ',', '.'),
-                ])
+                'success' => false,
+                'message' => $responseData['status_message'] ?? 'Gagal membuat charge pembayaran Midtrans.',
+                'error' => $responseData
             ], $response->status());
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal meneruskan pembayaran ke Midtrans: ' . $e->getMessage()
+            ], 500);
         }
-
-        return response()->json([
-            'success' => false,
-            'message' => $responseData['status_message'] ?? 'Gagal membuat charge pembayaran Midtrans.',
-            'error' => $responseData
-        ], $response->status());
-
-    } catch (\Throwable $e) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Gagal meneruskan pembayaran ke Midtrans: ' . $e->getMessage()
-        ], 500);
     }
-}
 
     /**
      * API Detail Booking berdasarkan ID
