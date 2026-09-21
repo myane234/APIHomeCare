@@ -92,7 +92,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::prefix('admin/nakes')->group(function () {
         Route::get('/requests', [AdminNakesController::class, 'index']);
         Route::get('/requests/{id}', [AdminNakesController::class, 'show']);
-        
+
 
         // Step Verification Routes
         Route::post('/requests/{id}/pelatihan', [AdminNakesController::class, 'setPelatihan']); // Fixed: setPelatihan
@@ -137,9 +137,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     Route::get('/manage-admin/{id}', [AdminController::class, 'show']);
     Route::put('/manage-admin/{id}', [AdminController::class, 'update']);
-    
+
     Route::delete('/manage-admin/{id}', [AdminController::class, 'destroy']);
-    
+
     Route::get('/manage-admin/bookings', [BookingController::class, 'adminIndex']);
     Route::get('/admin/bookings', [BookingController::class, 'adminIndex']);
 
@@ -161,7 +161,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::put('admin/profile/ubah-password', [AdminController::class, 'changePassword']);
         Route::post('/', [AdminController::class, 'updateProfile']);
     });
-    
+
 
     // Management Pasien
     Route::prefix('admin/pasien')->group(function () {
@@ -285,6 +285,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/transaksi', [LaporanController::class, 'laporanTransaksi']);
         Route::get('/booking', [LaporanController::class, 'laporanBooking']);
         Route::get('/nakes', [LaporanController::class, 'laporanNakes']);
+
+        //  laporan + ?format=csv|xlsx
+        Route::get('/transaksi/export', [LaporanController::class, 'exportTransaksi']);
+        Route::get('/booking/export', [LaporanController::class, 'exportBooking']);
+        Route::get('/nakes/export', [LaporanController::class, 'exportNakes']);
     });
 
     // Dashboard Statistik Agregat - Admin

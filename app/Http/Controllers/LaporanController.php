@@ -9,6 +9,7 @@ use App\Models\TenagaMedis;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
+use Rap2hpoutre\FastExcel\FastExcel;
 
 class LaporanController extends Controller
 {
@@ -44,18 +45,18 @@ class LaporanController extends Controller
 
         $lunasQuery = (clone $query)->where(function ($q) {
             $q->where('status_transaksi', 'Lunas')
-              ->orWhere('status_transaksi', 'settlement')
-              ->orWhere('status_transaksi', 'success');
+                ->orWhere('status_transaksi', 'settlement')
+                ->orWhere('status_transaksi', 'success');
         });
 
-        $totalPendapatan  = (float) $lunasQuery->sum('jumlah_total');
-        $totalHakNakes    = (float) $lunasQuery->sum('hak_nakes');
-        $totalProfitHc    = (float) $lunasQuery->sum('profit_hc');
-        $totalLayanan     = (float) $lunasQuery->sum('sl');
-        $totalBhp         = (float) $lunasQuery->sum('sb');
-        $totalTransport   = (float) $lunasQuery->sum('st');
-        $totalAdmin       = (float) $lunasQuery->sum('ba');
-        $totalPpn         = (float) $lunasQuery->sum('ppn');
+        $totalPendapatan = (float) $lunasQuery->sum('jumlah_total');
+        $totalHakNakes = (float) $lunasQuery->sum('hak_nakes');
+        $totalProfitHc = (float) $lunasQuery->sum('profit_hc');
+        $totalLayanan = (float) $lunasQuery->sum('sl');
+        $totalBhp = (float) $lunasQuery->sum('sb');
+        $totalTransport = (float) $lunasQuery->sum('st');
+        $totalAdmin = (float) $lunasQuery->sum('ba');
+        $totalPpn = (float) $lunasQuery->sum('ppn');
 
         $query->orderBy('created_at', 'desc');
 
@@ -65,16 +66,16 @@ class LaporanController extends Controller
             'success' => true,
             'message' => 'Berhasil mengambil Laporan Transaksi',
             'summary' => [
-                'total_transaksi'  => $totalTransaksiCount,
+                'total_transaksi' => $totalTransaksiCount,
                 'total_pendapatan' => $totalPendapatan,
-                'total_hak_nakes'  => $totalHakNakes,
-                'total_profit_hc'  => $totalProfitHc,
-                'breakdown_biaya'  => [
+                'total_hak_nakes' => $totalHakNakes,
+                'total_profit_hc' => $totalProfitHc,
+                'breakdown_biaya' => [
                     'jasa_layanan' => $totalLayanan,
-                    'bhp'          => $totalBhp,
-                    'transport'    => $totalTransport,
+                    'bhp' => $totalBhp,
+                    'transport' => $totalTransport,
                     'administrasi' => $totalAdmin,
-                    'ppn'          => $totalPpn,
+                    'ppn' => $totalPpn,
                 ]
             ],
             'pagination' => $pagination,
@@ -116,8 +117,14 @@ class LaporanController extends Controller
         ]);
 
         $query = Booking::with([
-            'pasien', 'layanan', 'kategoriTarif', 'layananItems.layanan',
-            'tenagaMedis', 'transaksi', 'transaksiTambahanTerakhir', 'bookingBhp.bhpItem',
+            'pasien',
+            'layanan',
+            'kategoriTarif',
+            'layananItems.layanan',
+            'tenagaMedis',
+            'transaksi',
+            'transaksiTambahanTerakhir',
+            'bookingBhp.bhpItem',
         ]);
 
         $this->applyBookingReportFilters($query, $request, $validated);
@@ -151,35 +158,49 @@ class LaporanController extends Controller
             ? BookingResource::collection($items->items())
             : $items;
 
-        return [$data, [
-            'total' => $items->total(),
-            'count' => $items->count(),
-            'per_page' => $items->perPage(),
-            'current_page' => $items->currentPage(),
-            'total_pages' => $items->lastPage(),
-            'has_more_pages' => $items->hasMorePages(),
-            'from' => $items->firstItem(),
-            'to' => $items->lastItem(),
-        ]];
+        return [
+            $data,
+            [
+                'total' => $items->total(),
+                'count' => $items->count(),
+                'per_page' => $items->perPage(),
+                'current_page' => $items->currentPage(),
+                'total_pages' => $items->lastPage(),
+                'has_more_pages' => $items->hasMorePages(),
+                'from' => $items->firstItem(),
+                'to' => $items->lastItem(),
+            ]
+        ];
     }
 
     private function applyBookingReportFilters($query, Request $request, array $validated): void
     {
         $this->whereInReport($query, 'status_booking', $request->input('status_booking'), [
-            'Pending', 'DiPerjalanan', 'Tindakan', 'Selesai', 'Dibatalkan',
+            'Pending',
+            'DiPerjalanan',
+            'Tindakan',
+            'Selesai',
+            'Dibatalkan',
         ]);
 
         $tanggalDari = $validated['tanggal_dari'] ?? $validated['start_date'] ?? null;
         $tanggalSampai = $validated['tanggal_sampai'] ?? $validated['end_date'] ?? null;
-        if ($tanggalDari) $query->whereDate('tanggal_kunjungan', '>=', $tanggalDari);
-        if ($tanggalSampai) $query->whereDate('tanggal_kunjungan', '<=', $tanggalSampai);
-        if ($request->filled('dibuat_dari')) $query->whereDate('created_at', '>=', $validated['dibuat_dari']);
-        if ($request->filled('dibuat_sampai')) $query->whereDate('created_at', '<=', $validated['dibuat_sampai']);
-        if ($request->filled('bulan')) $query->whereMonth('tanggal_kunjungan', $validated['bulan']);
-        if ($request->filled('tahun')) $query->whereYear('tanggal_kunjungan', $validated['tahun']);
+        if ($tanggalDari)
+            $query->whereDate('tanggal_kunjungan', '>=', $tanggalDari);
+        if ($tanggalSampai)
+            $query->whereDate('tanggal_kunjungan', '<=', $tanggalSampai);
+        if ($request->filled('dibuat_dari'))
+            $query->whereDate('created_at', '>=', $validated['dibuat_dari']);
+        if ($request->filled('dibuat_sampai'))
+            $query->whereDate('created_at', '<=', $validated['dibuat_sampai']);
+        if ($request->filled('bulan'))
+            $query->whereMonth('tanggal_kunjungan', $validated['bulan']);
+        if ($request->filled('tahun'))
+            $query->whereYear('tanggal_kunjungan', $validated['tahun']);
 
         foreach (['id_pasien', 'id_tenaga_medis', 'id_kota', 'id_kategori_tarif'] as $column) {
-            if ($request->filled($column)) $query->where($column, $validated[$column]);
+            if ($request->filled($column))
+                $query->where($column, $validated[$column]);
         }
 
         if ($request->filled('id_layanan')) {
@@ -204,7 +225,8 @@ class LaporanController extends Controller
             $query->whereHas('transaksi', fn($transaction) => $transaction
                 ->where('metode_pembayaran', $method)->orWhere('payment_method', $method));
         }
-        if ($request->filled('booking_code')) $query->where('booking_code', 'like', '%' . $validated['booking_code'] . '%');
+        if ($request->filled('booking_code'))
+            $query->where('booking_code', 'like', '%' . $validated['booking_code'] . '%');
 
         if ($request->filled('search')) {
             $search = trim($validated['search']);
@@ -224,9 +246,12 @@ class LaporanController extends Controller
             ->map(fn($item) => trim((string) $item))->filter()
             ->when($allowed, fn(Collection $items) => $items->filter(fn($item) => in_array($item, $allowed, true)))
             ->values()->all();
-        if (!$values) return;
-        if ($relation) $query->whereHas($relation, fn($related) => $related->whereIn($column, $values));
-        else $query->whereIn($column, $values);
+        if (!$values)
+            return;
+        if ($relation)
+            $query->whereHas($relation, fn($related) => $related->whereIn($column, $values));
+        else
+            $query->whereIn($column, $values);
     }
 
     private function bookingReportSummary($query): array
@@ -267,15 +292,15 @@ class LaporanController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('nama_lengkap', 'like', '%' . $search . '%')
-                  ->orWhereHas('user', function ($u) use ($search) {
-                      $u->where('email', 'like', '%' . $search . '%');
-                  })
-                  ->orWhere('no_str', 'like', '%' . $search . '%');
+                    ->orWhereHas('user', function ($u) use ($search) {
+                        $u->where('email', 'like', '%' . $search . '%');
+                    })
+                    ->orWhere('no_str', 'like', '%' . $search . '%');
             });
         }
 
         $startDate = $request->start_date;
-        $endDate   = $request->end_date;
+        $endDate = $request->end_date;
 
         $nakesList = $query->get()->map(function ($nakes) use ($startDate, $endDate) {
             $bookingQuery = Booking::where('id_tenaga_medis', $nakes->id_tenaga_medis);
@@ -287,42 +312,41 @@ class LaporanController extends Controller
                 $bookingQuery->whereDate('tanggal_kunjungan', '<=', $endDate);
             }
 
-            $totalBooking   = (clone $bookingQuery)->count();
-            $totalSelesai   = (clone $bookingQuery)->where('status_booking', 'Selesai')->count();
+            $totalBooking = (clone $bookingQuery)->count();
+            $totalSelesai = (clone $bookingQuery)->where('status_booking', 'Selesai')->count();
             $totalDibatalkan = (clone $bookingQuery)->where('status_booking', 'Dibatalkan')->count();
 
-            // Hak nakes dari transaksi booking yang selesai
+
             $bookingIds = (clone $bookingQuery)->where('status_booking', 'Selesai')->pluck('id_booking');
             $totalHakNakes = Transaksi::whereIn('id_booking', $bookingIds)->sum('hak_nakes');
 
             return [
-                'id_tenaga_medis'    => $nakes->id_tenaga_medis,
-                'nama_lengkap'       => $nakes->nama_lengkap,
+                'id_tenaga_medis' => $nakes->id_tenaga_medis,
+                'nama_lengkap' => $nakes->nama_lengkap,
                 'jenis_tenaga_medis' => $nakes->jenis_tenaga_medis,
-                'profesi'            => $nakes->jenis_tenaga_medis,
-                'no_str'             => $nakes->no_str,
-                'nomor_str'          => $nakes->no_str,
-                'status'             => $nakes->status,
-                'total_booking'      => $totalBooking,
-                'total_selesai'      => $totalSelesai,
-                'total_dibatalkan'   => $totalDibatalkan,
-                'total_hak_nakes'    => (float) $totalHakNakes,
-                'rating'             => $nakes->rating ?? 5.0,
+                'profesi' => $nakes->jenis_tenaga_medis,
+                'no_str' => $nakes->no_str,
+                'nomor_str' => $nakes->no_str,
+                'status' => $nakes->status,
+                'total_booking' => $totalBooking,
+                'total_selesai' => $totalSelesai,
+                'total_dibatalkan' => $totalDibatalkan,
+                'total_hak_nakes' => (float) $totalHakNakes,
+                'rating' => $nakes->rating ?? 5.0,
             ];
         });
 
-        // Summary Agregat
-        $grandTotalNakes       = $nakesList->count();
-        $grandTotalCompleted   = $nakesList->sum('total_selesai');
-        $grandTotalHakNakes    = $nakesList->sum('total_hak_nakes');
+        $grandTotalNakes = $nakesList->count();
+        $grandTotalCompleted = $nakesList->sum('total_selesai');
+        $grandTotalHakNakes = $nakesList->sum('total_hak_nakes');
         [$nakesData, $pagination] = $this->paginateCollection($nakesList, $request);
 
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengambil Laporan Kinerja Nakes',
             'summary' => [
-                'total_nakes'          => $grandTotalNakes,
-                'total_order_selesai'  => $grandTotalCompleted,
+                'total_nakes' => $grandTotalNakes,
+                'total_order_selesai' => $grandTotalCompleted,
                 'total_akumulasi_hak_nakes' => $grandTotalHakNakes,
             ],
             'pagination' => $pagination,
@@ -330,4 +354,217 @@ class LaporanController extends Controller
         ], 200);
     }
 
+
+    /**
+     * Export Laporan Booking ke CSV atau XLSX.
+     * plus ?format=csv (default) atau ?format=xlsx
+     *
+     * GET /admin/laporan/booking/export
+     */
+    public function exportBooking(Request $request)
+    {
+        $validated = $request->validate([
+            'tanggal_dari' => ['nullable', 'date'],
+            'tanggal_sampai' => ['nullable', 'date', 'after_or_equal:tanggal_dari'],
+            'start_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'dibuat_dari' => ['nullable', 'date'],
+            'dibuat_sampai' => ['nullable', 'date', 'after_or_equal:dibuat_dari'],
+            'status_booking' => ['nullable'],
+            'status_pembayaran' => ['nullable', Rule::in(['berhasil', 'success', 'gagal', 'failed', 'pending'])],
+            'status_transaksi' => ['nullable'],
+            'id_pasien' => ['nullable', 'integer'],
+            'id_tenaga_medis' => ['nullable', 'integer'],
+            'id_layanan' => ['nullable', 'integer'],
+            'id_kota' => ['nullable', 'integer'],
+            'id_kategori_tarif' => ['nullable', 'integer'],
+            'metode_pembayaran' => ['nullable', 'string', 'max:100'],
+            'booking_code' => ['nullable', 'string', 'max:100'],
+            'search' => ['nullable', 'string', 'max:150'],
+            'bulan' => ['nullable', 'integer', 'between:1,12'],
+            'tahun' => ['nullable', 'integer', 'between:2000,2100'],
+            'sort_by' => [Rule::in(['created_at', 'tanggal_kunjungan', 'status_booking', 'booking_code'])],
+            'sort_order' => [Rule::in(['asc', 'desc'])],
+            'format' => ['nullable', Rule::in(['csv', 'xlsx'])],
+        ]);
+
+        $format = strtolower($request->input('format', 'csv'));
+
+        $query = Booking::with([
+            'pasien',
+            'layanan',
+            'kategoriTarif',
+            'layananItems.layanan',
+            'tenagaMedis',
+            'transaksi',
+        ]);
+
+        $this->applyBookingReportFilters($query, $request, $validated);
+        $query->orderBy($validated['sort_by'] ?? 'tanggal_kunjungan', $validated['sort_order'] ?? 'desc')
+            ->orderBy('id_booking', 'desc');
+
+        $rows = $query->get()->map(fn($b) => [
+            'Kode Booking' => $b->booking_code ?? '-',
+            'Tanggal Kunjungan' => $b->tanggal_kunjungan ?? '-',
+            'Jam Kunjungan' => $b->jam_kunjungan ?? '-',
+            'Status Booking' => $b->status_booking ?? '-',
+            'Nama Pasien' => $b->pasien?->nama_lengkap ?? '-',
+            'No. Telp Pasien' => $b->pasien?->no_telp ?? '-',
+            'Nama Nakes' => $b->tenagaMedis?->nama_lengkap ?? '-',
+            'Profesi Nakes' => $b->tenagaMedis?->jenis_tenaga_medis ?? '-',
+            'Layanan' => $b->layananItems->isNotEmpty()
+                ? $b->layananItems->map(fn($i) => $i->layanan?->nama_layanan)->filter()->implode(', ')
+                : ($b->layanan?->nama_layanan ?? '-'),
+            'Kategori Tarif' => $b->kategoriTarif?->nama_kategori ?? '-',
+            'Alamat Kunjungan' => $b->alamat_kunjungan ?? '-',
+            'Metode Pembayaran' => $b->transaksi?->metode_pembayaran ?? '-',
+            'Status Transaksi' => $b->transaksi?->status_transaksi ?? '-',
+            'Total SL (Rp)' => (float) ($b->transaksi?->sl ?? 0),
+            'Total SB (Rp)' => (float) ($b->transaksi?->sb ?? 0),
+            'SB Tambahan (Rp)' => (float) ($b->transaksi?->sb_tambahan ?? 0),
+            'Transport (Rp)' => (float) ($b->transaksi?->st ?? 0),
+            'Biaya Admin (Rp)' => (float) ($b->transaksi?->ba ?? 0),
+            'PPN (Rp)' => (float) ($b->transaksi?->ppn ?? 0),
+            'Total Pembayaran (Rp)' => (float) ($b->transaksi?->jumlah_total ?? 0),
+            'Hak Nakes (Rp)' => (float) ($b->transaksi?->hak_nakes ?? 0),
+            'Profit HC (Rp)' => (float) ($b->transaksi?->profit_hc ?? 0),
+            'Waktu Bayar' => $b->transaksi?->waktu_bayar ?? '-',
+            'Dibuat Pada' => $b->created_at?->format('Y-m-d H:i:s') ?? '-',
+        ]);
+
+        $filename = 'laporan-booking-' . now()->format('Ymd-His');
+        return $this->streamExport($rows, $filename, $format);
+    }
+
+    /**
+     * Export Laporan Transaksi ke CSV atau XLSX.
+     * ?format=csv (default) atau ?format=xlsx
+     *
+     * GET /admin/laporan/transaksi/export
+     */
+    public function exportTransaksi(Request $request)
+    {
+        $format = strtolower($request->input('format', 'csv'));
+
+        $query = Transaksi::with(['booking.pasien', 'booking.layanan', 'booking.tenagaMedis']);
+
+        if ($request->filled('start_date'))
+            $query->whereDate('created_at', '>=', $request->start_date);
+        if ($request->filled('end_date'))
+            $query->whereDate('created_at', '<=', $request->end_date);
+        if ($request->filled('status_transaksi'))
+            $query->where('status_transaksi', $request->status_transaksi);
+        if ($request->filled('metode_pembayaran'))
+            $query->where('metode_pembayaran', $request->metode_pembayaran);
+
+        $query->orderBy('created_at', 'desc');
+
+        $rows = $query->get()->map(fn($t) => [
+            'ID Transaksi' => $t->id_transaksi ?? '-',
+            'Order ID Midtrans' => $t->midtrans_order_id ?? '-',
+            'Kode Booking' => $t->booking?->booking_code ?? '-',
+            'Nama Pasien' => $t->booking?->pasien?->nama_lengkap ?? '-',
+            'Nama Nakes' => $t->booking?->tenagaMedis?->nama_lengkap ?? '-',
+            'Layanan' => $t->booking?->layanan?->nama_layanan ?? '-',
+            'Metode Pembayaran' => $t->metode_pembayaran ?? '-',
+            'Status Transaksi' => $t->status_transaksi ?? '-',
+            'SL (Rp)' => (float) ($t->sl ?? 0),
+            'SB (Rp)' => (float) ($t->sb ?? 0),
+            'SB Tambahan (Rp)' => (float) ($t->sb_tambahan ?? 0),
+            'Transport / ST (Rp)' => (float) ($t->st ?? 0),
+            'Biaya Admin / BA (Rp)' => (float) ($t->ba ?? 0),
+            'PPN (Rp)' => (float) ($t->ppn ?? 0),
+            'Fee Midtrans (Rp)' => (float) ($t->fee_midtrans ?? 0),
+            'Total Pembayaran (Rp)' => (float) ($t->jumlah_total ?? 0),
+            'Hak Nakes (Rp)' => (float) ($t->hak_nakes ?? 0),
+            'Profit HC (Rp)' => (float) ($t->profit_hc ?? 0),
+            'HPP BHP (Rp)' => (float) ($t->hpp_bhp ?? 0),
+            'HPP BHP Tambahan (Rp)' => (float) ($t->hpp_bhp_tambahan ?? 0),
+            'Waktu Bayar' => $t->waktu_bayar ?? '-',
+            'Dibuat Pada' => $t->created_at?->format('Y-m-d H:i:s') ?? '-',
+        ]);
+
+        $filename = 'laporan-transaksi-' . now()->format('Ymd-His');
+        return $this->streamExport($rows, $filename, $format);
+    }
+
+    /**
+     * Export Laporan Kinerja Nakes ke CSV atau XLSX.
+     * ?format=csv (default) atau ?format=xlsx
+     *
+     * GET /admin/laporan/nakes/export
+     */
+    public function exportNakes(Request $request)
+    {
+        $format = strtolower($request->input('format', 'csv'));
+        $search = $request->input('search');
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
+
+        $query = TenagaMedis::query();
+        if ($search) {
+            $query->where(fn($q) => $q
+                ->where('nama_lengkap', 'like', "%{$search}%")
+                ->orWhereHas('user', fn($u) => $u->where('email', 'like', "%{$search}%"))
+                ->orWhere('no_str', 'like', "%{$search}%"));
+        }
+
+        $rows = $query->get()->map(function ($nakes) use ($startDate, $endDate) {
+            $bq = Booking::where('id_tenaga_medis', $nakes->id_tenaga_medis);
+            if ($startDate)
+                $bq->whereDate('tanggal_kunjungan', '>=', $startDate);
+            if ($endDate)
+                $bq->whereDate('tanggal_kunjungan', '<=', $endDate);
+
+            $totalBooking = (clone $bq)->count();
+            $totalSelesai = (clone $bq)->where('status_booking', 'Selesai')->count();
+            $totalDibatalkan = (clone $bq)->where('status_booking', 'Dibatalkan')->count();
+            $totalProses = (clone $bq)->whereIn('status_booking', ['DiPerjalanan', 'Tindakan'])->count();
+            $bookingIds = (clone $bq)->where('status_booking', 'Selesai')->pluck('id_booking');
+            $totalHakNakes = (float) Transaksi::whereIn('id_booking', $bookingIds)->sum('hak_nakes');
+
+            return [
+                'Nama Nakes' => $nakes->nama_lengkap,
+                'Profesi' => $nakes->jenis_tenaga_medis ?? '-',
+                'No. STR' => $nakes->no_str ?? '-',
+                'Status Akun' => $nakes->status ?? '-',
+                'Rating' => $nakes->rating ?? 5.0,
+                'Total Booking' => $totalBooking,
+                'Selesai' => $totalSelesai,
+                'Dibatalkan' => $totalDibatalkan,
+                'Sedang Proses' => $totalProses,
+                'Total Hak Nakes (Rp)' => $totalHakNakes,
+            ];
+        });
+
+        $filename = 'laporan-nakes-' . now()->format('Ymd-His');
+        return $this->streamExport($rows, $filename, $format);
+    }
+
+    /**
+     * Helper: stream koleksi ke response CSV atau XLSX.
+     */
+    private function streamExport(Collection $rows, string $filename, string $format)
+    {
+        if ($format === 'xlsx') {
+            return (new FastExcel($rows))->download("{$filename}.xlsx");
+        }
+        $callback = function () use ($rows) {
+            $handle = fopen('php://output', 'w');
+
+            fwrite($handle, "\xEF\xBB\xBF");
+
+            if ($rows->isNotEmpty()) {
+                fputcsv($handle, array_keys($rows->first()));
+            }
+            foreach ($rows as $row) {
+                fputcsv($handle, array_values($row));
+            }
+            fclose($handle);
+        };
+
+        return response()->streamDownload($callback, "{$filename}.csv", [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
 }

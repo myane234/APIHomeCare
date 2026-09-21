@@ -11,16 +11,20 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * @group WS 
- * Controller untuk integrasi WebSocket Service Go (192.168.18.12:8088)
+ * Controller untuk integrasi WebSocket Service Go
  */
 class WebSocketController extends Controller
 {
     private string $wsServerHost;
     private string $wsServerPort;
+    private ?string $wsBaseUrl;
 
     public function __construct()
     {
-        $this->wsServerHost = env('WEBSOCKET_HOST', '192.168.18.12');
+        $this->wsBaseUrl = env('WEBSOCKET_URL') !== null && trim((string) env('WEBSOCKET_URL')) !== ''
+            ? rtrim((string) env('WEBSOCKET_URL'), '/')
+            : null;
+        $this->wsServerHost = env('WEBSOCKET_HOST', '127.0.0.1');
         $this->wsServerPort = (string) env('WEBSOCKET_PORT', '8088');
     }
 
@@ -466,7 +470,7 @@ class WebSocketController extends Controller
 
     private function buildWsUrl($bookingId, $userId = null, ?string $userType = null): string
     {
-        $wsUrl = "ws://{$this->wsServerHost}:{$this->wsServerPort}/ws";
+        $wsUrl = $this->wsBaseUrl ?? "ws://{$this->wsServerHost}:{$this->wsServerPort}/ws";
         if ($bookingId) {
             $parameters = ['booking_id' => (int) $bookingId];
             if ($userId !== null && $userType !== null) {
