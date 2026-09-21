@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 abstract class Controller
 {
@@ -32,7 +32,7 @@ abstract class Controller
 
         $perPage = max(1, min(100, (int) $perPage ?: $defaultPerPage));
         $currentPage = LengthAwarePaginator::resolveCurrentPage();
-        $paginator = new \Illuminate\Pagination\LengthAwarePaginator(
+        $paginator = new LengthAwarePaginator(
             $items->forPage($currentPage, $perPage)->values(),
             $items->count(),
             $perPage,
