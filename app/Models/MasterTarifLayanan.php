@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class MasterTarifLayanan extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table      = 'master_tarif_layanan';
     protected $primaryKey = 'id_tarif';

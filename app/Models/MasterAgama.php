@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class MasterAgama extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'master_agama';
     protected $primaryKey = 'id_agama';

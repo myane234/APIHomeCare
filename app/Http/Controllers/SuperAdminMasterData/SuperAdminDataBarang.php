@@ -12,14 +12,15 @@ class SuperAdminDataBarang extends Controller
     /**
      * Tampilkan semua daftar item BHP
      */
-    public function index()
+    public function index(Request $request)
     {
-        $bhpItems = BhpItem::all();
+        [$bhpItems, $pagination] = $this->paginateQuery(BhpItem::query(), $request);
 
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengambil data item BHP',
-            'data'    => $bhpItems
+            'data'    => $bhpItems,
+            'pagination' => $pagination
         ], 200);
     }
 

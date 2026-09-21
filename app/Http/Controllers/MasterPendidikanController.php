@@ -11,11 +11,14 @@ use Illuminate\Validation\Rule;
  */
 class MasterPendidikanController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        [$data, $pagination] = $this->paginateQuery(MasterPendidikan::orderBy('nama_pendidikan'), $request);
+
         return response()->json([
             'success' => true,
-            'data' => MasterPendidikan::orderBy('nama_pendidikan')->get(),
+            'data' => $data,
+            'pagination' => $pagination,
         ]);
     }
 

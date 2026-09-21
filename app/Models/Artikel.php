@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Storage;
 
 class Artikel extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
     
     protected $table = 'artikels';
 

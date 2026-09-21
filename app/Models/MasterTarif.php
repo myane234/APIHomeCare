@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class MasterTarif extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'master_tarif';
     protected $primaryKey = 'id_master_tarif';

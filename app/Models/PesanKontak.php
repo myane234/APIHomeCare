@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class PesanKontak extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'pesan_kontaks';
 

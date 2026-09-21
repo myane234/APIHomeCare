@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Chat extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'chats';
     protected $primaryKey = 'id_chat';

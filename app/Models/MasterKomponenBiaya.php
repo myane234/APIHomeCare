@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class MasterKomponenBiaya extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'master_komponen_biaya';
     protected $primaryKey = 'id_komponen';

@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class WilayahLayanan extends Model
 {
+    use \App\Models\Concerns\AuditableSoftDeletes;
+
     protected $table = 'master_provinsi';
     protected $primaryKey = 'id_provinsi';
     

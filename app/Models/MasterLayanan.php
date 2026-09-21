@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Storage;
  */
 class MasterLayanan extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table      = 'master_layanan';
     protected $primaryKey = 'id_layanan';

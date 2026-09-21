@@ -68,14 +68,15 @@ class KomponenTarifController extends Controller
     /**
      * Get all master komponen tarif
      */
-    public function index()
+    public function index(Request $request)
     {
-        $data = MasterKomponenBiaya::all();
+        [$data, $pagination] = $this->paginateQuery(MasterKomponenBiaya::query(), $request);
 
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengambil daftar komponen biaya',
-            'data' => $data
+            'data' => $data,
+            'pagination' => $pagination
         ], 200);
     }
 

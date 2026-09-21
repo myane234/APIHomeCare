@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Storage;
 
 class Ulasan extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'ulasans';
 

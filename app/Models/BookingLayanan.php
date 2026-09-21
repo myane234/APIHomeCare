@@ -22,7 +22,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class BookingLayanan extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'booking_layanan';
 

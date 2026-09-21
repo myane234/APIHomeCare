@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class OperasionalNakes extends Model
 {
+    use \App\Models\Concerns\AuditableSoftDeletes;
+
     protected $table = 'operasional_nakes';
     protected $primaryKey = 'id_operasional_nakes';
 

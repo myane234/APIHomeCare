@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Promo extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
     
     protected $table = 'promos';
     protected $primaryKey = 'id_promo';

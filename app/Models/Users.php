@@ -15,7 +15,7 @@ use Laravel\Sanctum\HasApiTokens;
 
 class Users extends Authenticatable implements MustVerifyEmail 
 {
-    use HasFactory, HasApiTokens, Notifiable, MustVerifyEmailTrait; 
+    use HasFactory, HasApiTokens, Notifiable, MustVerifyEmailTrait, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'users';
     protected $primaryKey = 'id_user'; 

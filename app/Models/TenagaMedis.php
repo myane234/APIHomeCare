@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class TenagaMedis extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'tenaga_medis';
     protected $primaryKey = 'id_tenaga_medis';

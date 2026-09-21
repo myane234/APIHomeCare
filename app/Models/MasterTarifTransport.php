@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class MasterTarifTransport extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'master_tarif_transport';
     protected $primaryKey = 'id_transport';

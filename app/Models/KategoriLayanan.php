@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 
 class KategoriLayanan extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'kategori_layanans';
     protected $primaryKey = 'id_kategori_layanan';

@@ -57,6 +57,10 @@ class BookingResource extends JsonResource
                 : null,
             'created_at_raw'    => $this->created_at,
             'updated_at_raw'    => $this->updated_at,
+            'created_by'        => $this->created_by,
+            'updated_by'        => $this->updated_by,
+            'deleted_by'        => $this->deleted_by,
+            'deleted_at'        => $this->deleted_at,
 
             // ─── Pasien ──────────────────────────────────────────────────
             'pasien'            => $this->when($this->relationLoaded('pasien') && $this->pasien, [

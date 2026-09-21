@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Request;
 
 class ActivityLog extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'activity_logs';
     protected $primaryKey = 'id_log';

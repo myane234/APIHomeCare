@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class BookingBhp extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'booking_bhp';
     protected $primaryKey = 'id_booking_bhp';

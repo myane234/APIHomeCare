@@ -10,7 +10,7 @@ use App\Models\NakesRequest;
 
 class Pasien extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'pasiens';
     protected $primaryKey = 'id_pasien';

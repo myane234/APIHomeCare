@@ -33,13 +33,14 @@ class KategoriPembayaranController extends Controller
      *  ]
      * }
      */
-    public function index()
+    public function index(Request $request)
     {
-        $kategori = MasterKategoriPembayaran::all();
+        [$kategori, $pagination] = $this->paginateQuery(MasterKategoriPembayaran::query(), $request);
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengambil daftar kategori pembayaran',
-            'data' => $kategori
+            'data' => $kategori,
+            'pagination' => $pagination
         ], 200);
     }
 

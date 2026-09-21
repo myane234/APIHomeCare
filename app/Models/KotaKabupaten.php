@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class KotaKabupaten extends Model
 {
+    use \App\Models\Concerns\AuditableSoftDeletes;
+
     protected $table = 'master_kota_kabupaten';
     protected $primaryKey = 'id_kota';
 

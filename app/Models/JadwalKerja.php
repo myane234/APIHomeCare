@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class JadwalKerja extends Model
 {
+    use \App\Models\Concerns\AuditableSoftDeletes;
+
     protected $table = 'jadwal_kerjas';
     protected $primaryKey = 'id_jadwal';
 

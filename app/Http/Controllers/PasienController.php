@@ -19,12 +19,13 @@ use App\Enums\JenisKelamin;
 class PasienController extends Controller
 {
 
-    public function index()
+    public function index(Request $request)
     {
-        $pasien = Pasien::query()->get();
+        [$pasien, $pagination] = $this->paginateQuery(Pasien::query(), $request);
         return response()->json([
             'success' => true,
-            'data' => $pasien
+            'data' => $pasien,
+            'pagination' => $pagination
         ], 200);
     }
 

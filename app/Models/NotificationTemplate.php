@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class NotificationTemplate extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'notification_templates';
 

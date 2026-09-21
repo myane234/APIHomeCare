@@ -26,12 +26,15 @@ class SuperAdminPasien extends Controller
                           $q->where('email', 'like', "%{$search}%");
                       });
             })
-            ->get(); 
+            ;
+
+        [$pasien, $pagination] = $this->paginateQuery($pasien, $request);
         
         return response()->json([
             'success' => true,
             'message' => 'Daftar semua pasien berhasil diambil.',
-            'data'    => $pasien
+            'data'    => $pasien,
+            'pagination' => $pagination
         ], 200);
     }
 

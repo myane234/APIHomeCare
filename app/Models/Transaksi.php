@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Transaksi extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table      = 'transaksis';
     protected $primaryKey = 'id_transaksi';

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class TransaksiTambahan extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'transaksi_tambahan';
     protected $primaryKey = 'id_transaksi_tambahan';

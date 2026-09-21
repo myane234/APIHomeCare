@@ -9,7 +9,7 @@ use Laravel\Sanctum\HasApiTokens;
 
 class Admin extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'admins';
     protected $primaryKey = 'id_admin';

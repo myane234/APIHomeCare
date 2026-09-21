@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class MasterBank extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'master_bank';
     protected $primaryKey = 'id_bank';

@@ -36,15 +36,15 @@ class MasterBankController extends Controller
      *   ]
      * }
      */
-    public function index()
+    public function index(Request $request)
     {
-        $banks = MasterBank::where('is_active', true)
-            ->orderBy('nama_bank')
-            ->get();
+        [$banks, $pagination] = $this->paginateQuery(MasterBank::where('is_active', true)
+            ->orderBy('nama_bank'), $request);
 
         return response()->json([
             'success' => true,
-            'data'    => $banks
+            'data'    => $banks,
+            'pagination' => $pagination
         ]);
     }
 
@@ -71,13 +71,14 @@ class MasterBankController extends Controller
      *   ]
      * }
      */
-    public function adminIndex()
+    public function adminIndex(Request $request)
     {
-        $banks = MasterBank::orderBy('nama_bank')->get();
+        [$banks, $pagination] = $this->paginateQuery(MasterBank::orderBy('nama_bank'), $request);
 
         return response()->json([
             'success' => true,
-            'data'    => $banks
+            'data'    => $banks,
+            'pagination' => $pagination
         ]);
     }
 

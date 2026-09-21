@@ -34,13 +34,14 @@ class KategoriLayananController extends Controller
      *  ]
      * }
      */
-    public function index()
+    public function index(Request $request)
     {
-        $kategori = KategoriLayanan::all();
+        [$kategori, $pagination] = $this->paginateQuery(KategoriLayanan::query(), $request);
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengambil daftar kategori layanan',
-            'data' => $kategori
+            'data' => $kategori,
+            'pagination' => $pagination
         ], 200);
     }
 

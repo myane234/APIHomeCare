@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class SeoConfig extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'seo_configs';
 

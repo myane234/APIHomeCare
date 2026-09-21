@@ -35,14 +35,15 @@ class BhpController extends Controller
      *  ]
      * }
      */
-    public function index()
+    public function index(Request $request)
     {
-        $data = BhpItem::all();
+        [$data, $pagination] = $this->paginateQuery(BhpItem::query(), $request);
 
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengambil daftar BHP',
-            'data' => $data
+            'data' => $data,
+            'pagination' => $pagination
         ], 200);
     }
 

@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Storage;
 
 class GlobalConfig extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'global_configs';
 

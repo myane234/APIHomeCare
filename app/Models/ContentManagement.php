@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Storage;
 
 class ContentManagement extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table = 'content_managements';
 

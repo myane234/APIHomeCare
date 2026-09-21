@@ -21,7 +21,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class BhpItem extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
 
     protected $table      = 'master_bhp';
     protected $primaryKey = 'id_bhp';
