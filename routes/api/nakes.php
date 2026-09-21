@@ -26,8 +26,8 @@ Route::middleware(['auth:sanctum', 'role:nakes,tenaga medis'])->group(function (
     Route::post('/nakes/booking/{id}/terima', [NakesBookingController::class, 'acceptBooking']);
     Route::post('/nakes/booking/{id}/tolak', [NakesBookingController::class, 'rejectBooking']);
     Route::post('/nakes/booking/{id}/tindakan', [NakesBookingController::class, 'startTindakan']);
-    Route::get('/nakes/booking/{id}/bhp', [NakesBookingController::class, 'getBhpList']);
-    Route::post('/nakes/booking/{id}/bhp', [NakesBookingController::class, 'updateBhp']);
+    Route::get('/nakes/booking/{booking_code}/bhp', [NakesBookingController::class, 'getBhpList']);
+    Route::post('/nakes/booking/{booking_code}/bhp', [NakesBookingController::class, 'updateBhp']);
     Route::post('/nakes/booking/{id}/selesai', [NakesBookingController::class, 'completeBooking']);
 });
 

@@ -1083,6 +1083,22 @@ class BookingController extends Controller
         ]);
 
         $booking = Booking::with(['pasien.user', 'bookingBhp'])->find($validated['id_booking']);
+
+        if (!$booking || $booking->status_booking !== 'Tindakan') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pembayaran BHP tambahan hanya dapat dilakukan saat booking berstatus Tindakan.',
+            ], 422);
+        }
+
+        $pasien = $request->user()?->pasien;
+        if (!$pasien || (int) $booking->id_pasien !== (int) $pasien->id_pasien) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda tidak memiliki akses ke booking ini.',
+            ], 403);
+        }
+
         $sbTambahan = (float) $booking->bookingBhp->sum('total_sb_tambahan');
         $hppTambahan = (float) $booking->bookingBhp->sum('total_hpp_tambahan');
 
@@ -1237,6 +1253,59 @@ class BookingController extends Controller
                 'message' => 'Gagal meneruskan pembayaran BHP tambahan ke Midtrans: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Pasien mengecek tagihan BHP tambahan yang dapat dibayar.
+     * GET /api/booking/{id}/biaya-tambahan
+     */
+    public function additionalBhpPaymentStatus(Request $request, $booking_code)
+    {
+        $pasien = $request->user()?->pasien;
+
+        $booking = Booking::with(['bookingBhp.bhpItem', 'transaksiTambahanTerakhir'])
+            ->where('booking_code', $booking_code)
+            ->first();
+
+        if (!$booking || !$pasien || (int) $booking->id_pasien !== (int) $pasien->id_pasien) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking tidak ditemukan atau bukan milik pasien ini.',
+            ], 404);
+        }
+
+        $total = (float) $booking->bookingBhp->sum('total_sb_tambahan');
+        $transaksiTambahan = $booking->transaksiTambahanTerakhir;
+        $canPay = $booking->status_booking === 'Tindakan'
+            && $total > 0
+            && (!$transaksiTambahan || in_array($transaksiTambahan->status_transaksi, ['Belum Bayar', 'Pending'], true));
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Status biaya BHP tambahan berhasil diambil.',
+            'data' => [
+                'id_booking' => $booking->id_booking,
+                'booking_code' => $booking->booking_code,
+                'status_booking' => $booking->status_booking,
+                'tersedia' => $total > 0,
+                'dapat_dibayar' => $canPay,
+                'nominal' => $total > 0 ? $total : null,
+                'nominal_format' => $total > 0 ? 'Rp ' . number_format($total, 0, ',', '.') : null,
+                'status_transaksi' => $transaksiTambahan?->status_transaksi,
+                'kode_booking_tambahan' => $transaksiTambahan?->kode_booking,
+                'order_id' => $transaksiTambahan?->midtrans_order_id,
+                'items' => $booking->bookingBhp
+                    ->filter(fn($item) => (float) $item->total_sb_tambahan > 0)
+                    ->values()
+                    ->map(fn($item) => [
+                        'id_bhp' => $item->id_bhp,
+                        'nama_bhp' => $item->bhpItem?->nama_bhp,
+                        'qty_tambahan' => (int) $item->qty_tambahan,
+                        'harga_jual' => (float) $item->harga_jual,
+                        'total' => (float) $item->total_sb_tambahan,
+                    ]),
+            ],
+        ]);
     }
 
 
@@ -1521,7 +1590,7 @@ class BookingController extends Controller
     /**
      * API Detail Booking berdasarkan ID
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
         $booking = Booking::with([
             'pasien',
@@ -1541,6 +1610,16 @@ class BookingController extends Controller
             ], 404);
         }
 
+        // Ownership check: pasien hanya boleh akses booking miliknya
+        $user = $request->user();
+        $pasien = $user?->pasien;
+        if ($pasien && (int) $booking->id_pasien !== (int) $pasien->id_pasien) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking tidak ditemukan.',
+            ], 404);
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Detail booking',
@@ -1552,11 +1631,21 @@ class BookingController extends Controller
      * API Menampilkan Payment Details untuk Pembayaran
      * GET /api/booking/{id}/payment-details
      */
-    public function getPaymentDetails($id)
+    public function getPaymentDetails(Request $request, $id)
     {
         $booking = Booking::with(['layanan', 'layananItems.layanan', 'transaksi'])->find($id);
 
         if (!$booking || !$booking->transaksi) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data booking atau transaksi tidak ditemukan.'
+            ], 404);
+        }
+
+        // Ownership check: pasien hanya boleh akses booking miliknya
+        $user = $request->user();
+        $pasien = $user?->pasien;
+        if ($pasien && (int) $booking->id_pasien !== (int) $pasien->id_pasien) {
             return response()->json([
                 'success' => false,
                 'message' => 'Data booking atau transaksi tidak ditemukan.'
@@ -1663,7 +1752,7 @@ class BookingController extends Controller
     /**
      * API Laporan / Ringkasan Transaksi satu Booking.
      */
-    public function laporan($id)
+    public function laporan(Request $request, $id)
     {
         $booking = Booking::with([
             'pasien',
@@ -1674,6 +1763,13 @@ class BookingController extends Controller
         ])->find($id);
 
         if (!$booking) {
+            return response()->json(['success' => false, 'message' => 'Booking tidak ditemukan.'], 404);
+        }
+
+        // Ownership check: pasien hanya boleh akses laporan booking miliknya
+        $user = $request->user();
+        $pasien = $user?->pasien;
+        if ($pasien && (int) $booking->id_pasien !== (int) $pasien->id_pasien) {
             return response()->json(['success' => false, 'message' => 'Booking tidak ditemukan.'], 404);
         }
 
@@ -2170,6 +2266,18 @@ class BookingController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Detail order belum tersedia karena pembayaran belum selesai.',
+            ], 404);
+        }
+
+        // Ownership check: nakes hanya boleh akses booking yang di-assign ke dia
+        // atau yang masih open (belum ada nakes yang di-assign)
+        $isAssignedToThisNakes = $booking->id_tenaga_medis !== null
+            && (int) $booking->id_tenaga_medis === (int) $nakes->id_tenaga_medis;
+        $isOpenOrder = $booking->id_tenaga_medis === null;
+        if (!$isAssignedToThisNakes && !$isOpenOrder) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking tidak ditemukan.',
             ], 404);
         }
 

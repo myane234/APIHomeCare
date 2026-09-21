@@ -5,7 +5,6 @@ use App\Http\Controllers\BookingController;
 use App\Http\Controllers\WebSocketController;
 
 Route::post('/booking/charge', [BookingController::class, 'charge']);
-Route::post('/booking/charge-biaya-tambahan', [BookingController::class, 'chargeAdditionalBhp']);
 Route::get('/booking/nakes-terdekat', [BookingController::class, 'getNearestNakesList']);
 
 Route::middleware(['auth:sanctum'])->group(function () {
@@ -23,6 +22,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/booking/transaksi/{id_transaksi}', [BookingController::class, 'checkStatus']);
     Route::get('/booking/{id}/laporan', [BookingController::class, 'laporan']);
     Route::get('/booking/{id}/payment-details', [BookingController::class, 'getPaymentDetails']);
+    Route::get('/booking/{booking_code}/biaya-tambahan', [BookingController::class, 'additionalBhpPaymentStatus']);
+    Route::post('/booking/charge-biaya-tambahan', [BookingController::class, 'chargeAdditionalBhp']);
     Route::get('/booking/{id}', [BookingController::class, 'show']);
     Route::patch('/booking/{id}/status', [BookingController::class, 'updateStatus']);
 

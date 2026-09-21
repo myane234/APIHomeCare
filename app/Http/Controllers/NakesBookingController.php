@@ -499,11 +499,30 @@ class NakesBookingController extends Controller
     /**
      * API Nakes: Ambil Daftar BHP yang dapat/sudah digunakan pada booking ini.
      */
-    public function getBhpList(Request $request, $id)
+    public function getBhpList(Request $request, $booking_code)
     {
-        $booking = Booking::with(['layananItems.layanan.bhpItems', 'layanan.bhpItems', 'bookingBhp.bhpItem'])->find($id);
+        $nakes = $this->getLoggedNakes($request);
+
+        if (!$nakes) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Profil Tenaga Medis tidak ditemukan.'
+            ], 403);
+        }
+
+        $booking = Booking::with(['layananItems.layanan.bhpItems', 'layanan.bhpItems', 'bookingBhp.bhpItem'])
+            ->where('booking_code', $booking_code)
+            ->first();
 
         if (!$booking) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking tidak ditemukan.'
+            ], 404);
+        }
+
+        // Ownership check: hanya nakes yang di-assign yang bisa lihat BHP
+        if ((int) $booking->id_tenaga_medis !== (int) $nakes->id_tenaga_medis) {
             return response()->json([
                 'success' => false,
                 'message' => 'Booking tidak ditemukan.'
@@ -545,7 +564,7 @@ class NakesBookingController extends Controller
      * API Nakes: Perbarui Kuantitas BHP saat/sebelum Tindakan Selesai.
      * Nakes hanya bisa menambah quantity (qty_real >= qty_default).
      */
-    public function updateBhp(Request $request, $id)
+    public function updateBhp(Request $request, $booking_code)
     {
         $nakes = $this->getLoggedNakes($request);
 
@@ -556,7 +575,9 @@ class NakesBookingController extends Controller
             ], 403);
         }
 
-        $booking = Booking::with('transaksi')->find($id);
+        $booking = Booking::with('transaksi')
+            ->where('booking_code', $booking_code)
+            ->first();
 
         if (!$booking) {
             return response()->json([
@@ -565,10 +586,18 @@ class NakesBookingController extends Controller
             ], 404);
         }
 
-        if ($booking->status_booking === 'Selesai' || $booking->status_booking === 'Dibatalkan') {
+        // Ownership check: hanya nakes yang di-assign yang bisa update BHP
+        if ((int) $booking->id_tenaga_medis !== (int) $nakes->id_tenaga_medis) {
             return response()->json([
                 'success' => false,
-                'message' => 'BHP tidak dapat diperbarui karena booking sudah ' . $booking->status_booking
+                'message' => 'Booking tidak ditemukan.'
+            ], 404);
+        }
+
+        if ($booking->status_booking !== 'Tindakan') {
+            return response()->json([
+                'success' => false,
+                'message' => 'BHP tambahan hanya dapat dimasukkan saat booking berstatus Tindakan.'
             ], 400);
         }
 
