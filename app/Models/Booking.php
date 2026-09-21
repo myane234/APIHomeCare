@@ -66,7 +66,8 @@ class Booking extends Model
 
     public function transaksiTambahanTerakhir()
     {
-        return $this->hasOne(TransaksiTambahan::class, 'id_booking', 'id_booking')->latestOfMany();
+        return $this->hasOne(TransaksiTambahan::class, 'id_booking', 'id_booking')
+            ->latestOfMany('id_transaksi_tambahan');
     }
 
     /**

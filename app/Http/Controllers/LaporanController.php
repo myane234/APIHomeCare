@@ -8,7 +8,6 @@ use App\Models\Transaksi;
 use App\Models\TenagaMedis;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Validation\Rule;
 
 class LaporanController extends Controller
@@ -331,32 +330,4 @@ class LaporanController extends Controller
         ], 200);
     }
 
-    private function paginateCollection(Collection $items, Request $request): array
-    {
-        $perPage = $request->input('per_page', 15);
-        if ($perPage === 'all') {
-            return [$items->values(), null];
-        }
-
-        $perPage = max(1, min(100, (int) $perPage));
-        $currentPage = LengthAwarePaginator::resolveCurrentPage();
-        $paginator = new LengthAwarePaginator(
-            $items->forPage($currentPage, $perPage)->values(),
-            $items->count(),
-            $perPage,
-            $currentPage,
-            ['path' => LengthAwarePaginator::resolveCurrentPath(), 'query' => $request->query()]
-        );
-
-        return [$paginator, [
-            'total' => $paginator->total(),
-            'count' => $paginator->count(),
-            'per_page' => $paginator->perPage(),
-            'current_page' => $paginator->currentPage(),
-            'total_pages' => $paginator->lastPage(),
-            'has_more_pages' => $paginator->hasMorePages(),
-            'from' => $paginator->firstItem(),
-            'to' => $paginator->lastItem(),
-        ]];
-    }
 }
