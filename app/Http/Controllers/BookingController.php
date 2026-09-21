@@ -8,6 +8,7 @@ use App\Models\BookingLayanan;
 use App\Models\MasterLayanan;
 use App\Models\TenagaMedis;
 use App\Models\Transaksi;
+use App\Models\TransaksiTambahan;
 use App\Http\Controllers\WebSocketController;
 use App\Models\MasterTarif;
 use App\Models\MasterKategoriTarif;
@@ -255,7 +256,7 @@ class BookingController extends Controller
         $sortBy = $request->input('sort_by', 'created_at');
         $sortOrder = $request->input('sort_order', 'desc');
 
-        $query = Booking::with(['pasien', 'layanan', 'kategoriTarif', 'layananItems.layanan', 'tenagaMedis', 'transaksi', 'bookingBhp.bhpItem']);
+        $query = Booking::with(['pasien', 'layanan', 'kategoriTarif', 'layananItems.layanan', 'tenagaMedis', 'transaksi', 'transaksiTambahanTerakhir', 'bookingBhp.bhpItem']);
 
         // Filter by status
         if ($request->filled('status_booking')) {
@@ -1070,6 +1071,174 @@ class BookingController extends Controller
         return $tierCount * (float) $transportMaster->tarif_per_10_km;
     }
 
+    /**
+     * Charge pembayaran BHP tambahan dengan kode dan transaksi Midtrans terpisah.
+    * POST /api/booking/charge-biaya-tambahan
+     */
+    public function chargeAdditionalBhp(Request $request)
+    {
+        $validated = $request->validate([
+            'id_booking' => 'required|exists:bookings,id_booking',
+            'payment_type' => 'required|string|max:50',
+        ]);
+
+        $booking = Booking::with(['pasien.user', 'bookingBhp'])->find($validated['id_booking']);
+        $sbTambahan = (float) $booking->bookingBhp->sum('total_sb_tambahan');
+        $hppTambahan = (float) $booking->bookingBhp->sum('total_hpp_tambahan');
+
+        if ($sbTambahan <= 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tidak ada biaya BHP tambahan yang perlu dibayar.',
+            ], 422);
+        }
+
+        $paymentType = $validated['payment_type'];
+        $bank = strtolower($request->input('bank_transfer.bank', ''));
+        $searchKeys = [$paymentType];
+        if ($paymentType === 'bank_transfer' && $bank !== '') {
+            $searchKeys = array_unique([$paymentType, $bank, "{$bank}_va", "{$bank}_transfer"]);
+        }
+
+        $metode = MasterMetodePembayaran::whereIn('payment_type', $searchKeys)
+            ->where('is_active', true)
+            ->whereHas('kategori', fn($query) => $query->where('is_active', true))
+            ->first();
+
+        if (!$metode) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Metode pembayaran tidak tersedia atau sedang dinonaktifkan.',
+            ], 422);
+        }
+
+        $tambahan = TransaksiTambahan::where('id_booking', $booking->id_booking)
+            ->whereIn('status_transaksi', ['Belum Bayar', 'Pending'])
+            ->latest('id_transaksi_tambahan')
+            ->first();
+
+        if ($tambahan && (float) $tambahan->sb_tambahan !== $sbTambahan) {
+            $tambahan = null;
+        }
+
+        if (!$tambahan) {
+            $kodeBooking = 'ADD-BHP-' . $booking->booking_code . '-' . now()->format('ymdHis') . random_int(10, 99);
+            $tambahan = TransaksiTambahan::create([
+                'id_booking' => $booking->id_booking,
+                'kode_booking' => $kodeBooking,
+                'midtrans_order_id' => $kodeBooking,
+                'jumlah_total' => $sbTambahan,
+                'sb_tambahan' => $sbTambahan,
+                'hpp_bhp_tambahan' => $hppTambahan,
+                'status_transaksi' => 'Belum Bayar',
+            ]);
+        }
+
+        $nilaiBiayaTransaksi = max(0, (float) $metode->nilai_potongan);
+        $biayaTransaksi = $metode->tipe_potongan === 'persen'
+            ? $sbTambahan * min(100, $nilaiBiayaTransaksi) / 100
+            : $nilaiBiayaTransaksi;
+        $jumlahTotalCharge = (int) round($sbTambahan + $biayaTransaksi);
+        $payload = [
+            'payment_type' => $paymentType,
+            'transaction_details' => [
+                'order_id' => $tambahan->midtrans_order_id,
+                'gross_amount' => $jumlahTotalCharge,
+            ],
+            'customer_details' => [
+                'first_name' => $booking->pasien?->nama_lengkap ?? 'Pasien',
+                'email' => $booking->pasien?->user?->email ?? 'no-reply@example.com',
+            ],
+            'custom_expiry' => [
+                'expiry_duration' => (int) env('MIDTRANS_EXPIRY_DURATION', 15),
+                'unit' => env('MIDTRANS_EXPIRY_UNIT', 'minutes'),
+            ],
+        ];
+
+        if ($request->has($paymentType) && is_array($request->input($paymentType))) {
+            $payload[$paymentType] = $request->input($paymentType);
+        }
+        if ($paymentType === 'qris' && empty($payload['qris'])) {
+            $payload['qris'] = ['acquirer' => 'gopay'];
+        }
+        if ($paymentType === 'bank_transfer' && !isset($payload['bank_transfer'])) {
+            $payload['bank_transfer'] = ['bank' => $bank];
+        }
+
+        $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
+        $url = config('services.midtrans.is_production', false)
+            ? 'https://api.midtrans.com/v2/charge'
+            : 'https://api.sandbox.midtrans.com/v2/charge';
+
+        try {
+            $client = Http::withBasicAuth($serverKey, '');
+            if (config('app.env') === 'local') {
+                $client->withoutVerifying();
+            }
+            $response = $client->post($url, $payload);
+            $responseData = $response->json();
+
+            if (!$response->successful()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $responseData['status_message'] ?? 'Gagal membuat charge BHP tambahan.',
+                    'error' => $responseData,
+                ], $response->status());
+            }
+
+            $paymentDetails = [
+                'midtrans_transaction_id' => $responseData['transaction_id'] ?? null,
+                'midtrans_order_id' => $responseData['order_id'] ?? $tambahan->midtrans_order_id,
+                'midtrans_response' => $responseData,
+                'payment_method' => $paymentType === 'bank_transfer' && $bank !== '' ? strtoupper($bank) . ' VA' : ($metode->nama_metode ?: ucfirst(str_replace('_', ' ', $paymentType))),
+                'metode_pembayaran' => $paymentType === 'bank_transfer' && $bank !== '' ? strtoupper($bank) . ' VA' : ($metode->nama_metode ?: ucfirst(str_replace('_', ' ', $paymentType))),
+            ];
+            if (isset($responseData['va_numbers'][0])) {
+                $paymentDetails['va_number'] = $responseData['va_numbers'][0]['va_number'] ?? null;
+                $paymentDetails['bank_va'] = $responseData['va_numbers'][0]['bank'] ?? null;
+            } elseif (isset($responseData['permata_va_number'])) {
+                $paymentDetails['va_number'] = $responseData['permata_va_number'];
+                $paymentDetails['bank_va'] = 'permata';
+            }
+            if (isset($responseData['qr_string'])) {
+                $paymentDetails['qr_string'] = $responseData['qr_string'];
+            }
+            foreach (($responseData['actions'] ?? []) as $action) {
+                if (in_array($action['name'] ?? '', ['generate-qr-code', 'deeplink-redirect', 'desktop-web-checkout'], true)) {
+                    $paymentDetails['qr_url'] = $action['url'] ?? null;
+                    break;
+                }
+            }
+
+            $tambahan->update($paymentDetails + ['jumlah_total' => $jumlahTotalCharge]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Pembayaran BHP tambahan berhasil dibuat.',
+                'data' => array_merge($responseData, [
+                    'id_booking' => $booking->id_booking,
+                    'id_transaksi_tambahan' => $tambahan->id_transaksi_tambahan,
+                    'booking_code' => $tambahan->kode_booking,
+                    'order_id' => $tambahan->midtrans_order_id,
+                    'jumlah_total' => $jumlahTotalCharge,
+                    'jumlah_total_dasar' => $sbTambahan,
+                    'biaya_transaksi' => round($biayaTransaksi, 2),
+                    'payment_type_code' => $paymentType,
+                    'payment_method' => $paymentDetails['payment_method'],
+                    'metode_pembayaran' => $paymentDetails['metode_pembayaran'],
+                    'va_number' => $paymentDetails['va_number'] ?? null,
+                    'bank_va' => $paymentDetails['bank_va'] ?? null,
+                    'jumlah_total_format' => 'Rp ' . number_format($jumlahTotalCharge, 0, ',', '.'),
+                ]),
+            ], $response->status());
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal meneruskan pembayaran BHP tambahan ke Midtrans: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
 
 
     /**
@@ -1178,13 +1347,12 @@ class BookingController extends Controller
 
     $totalDasar = (float) $transaksi->sl
         + (float) $transaksi->sb
-        + (float) ($transaksi->sb_tambahan ?? 0)
         + $stTransport
         + (float) $transaksi->ba
         + (float) $transaksi->ppn;
 
     if ($totalDasar <= 0) {
-        $totalDasar = (float) $transaksi->jumlah_total;
+        $totalDasar = max(0, (float) $transaksi->jumlah_total - (float) ($transaksi->sb_tambahan ?? 0));
     }
 
     $nilaiBiayaTransaksi = max(0, (float) $metode->nilai_potongan);
@@ -2290,7 +2458,7 @@ class BookingController extends Controller
                 ],
             ]);
         } else {
-            // Jika BELUM BAYAR: batalkan booking sepenuhnya
+
             $booking->status_booking = 'Dibatalkan';
             $booking->save();
 

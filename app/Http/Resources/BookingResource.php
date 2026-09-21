@@ -169,6 +169,36 @@ class BookingResource extends JsonResource
                 ];
             }),
 
+            'biaya_tambahan_pasien' => $this->when($this->relationLoaded('transaksi') && $transaksi, function () use ($transaksi) {
+                $tambahan = $this->relationLoaded('transaksiTambahanTerakhir')
+                    ? $this->transaksiTambahanTerakhir
+                    : null;
+                $nominal = (float) ($transaksi->sb_tambahan ?? 0);
+                if ($nominal <= 0) {
+                    $nominal = (float) ($tambahan?->jumlah_total ?? 0);
+                }
+
+                if ($nominal <= 0) {
+                    return null;
+                }
+
+                return [
+                    'id_transaksi_tambahan' => $tambahan?->id_transaksi_tambahan,
+                    'kode_booking' => $tambahan?->kode_booking,
+                    'order_id' => $tambahan?->midtrans_order_id,
+                    'nominal' => $nominal,
+                    'nominal_format' => 'Rp ' . number_format($nominal, 0, ',', '.'),
+                    'status_transaksi' => $tambahan?->status_transaksi ?? 'Belum Bayar',
+                    'metode_pembayaran' => $tambahan?->metode_pembayaran,
+                    'payment_method' => $tambahan?->payment_method,
+                    'va_number' => $tambahan?->va_number,
+                    'bank_va' => $tambahan?->bank_va,
+                    'qr_string' => $tambahan?->qr_string,
+                    'qr_url' => $tambahan?->qr_url,
+                    'waktu_bayar' => $tambahan?->waktu_bayar,
+                ];
+            }),
+
             // ─── Detail BHP Tambahan (saat/setelah tindakan) ─────────────
             'booking_bhp'       => $this->when($this->relationLoaded('bookingBhp'), fn() => $this->bookingBhp->map(fn($item) => [
                 'id_booking_bhp'     => $item->id_booking_bhp,

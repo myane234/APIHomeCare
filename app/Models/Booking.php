@@ -59,6 +59,16 @@ class Booking extends Model
         return $this->hasOne(Transaksi::class, 'id_booking', 'id_booking');
     }
 
+    public function transaksiTambahan()
+    {
+        return $this->hasMany(TransaksiTambahan::class, 'id_booking', 'id_booking');
+    }
+
+    public function transaksiTambahanTerakhir()
+    {
+        return $this->hasOne(TransaksiTambahan::class, 'id_booking', 'id_booking')->latestOfMany();
+    }
+
     /**
      * Detail per-layanan dalam booking (multi-layanan).
      * Diurutkan berdasarkan kolom `urutan` (layanan utama = 1).

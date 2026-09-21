@@ -5,6 +5,7 @@ use App\Http\Controllers\BookingController;
 use App\Http\Controllers\WebSocketController;
 
 Route::post('/booking/charge', [BookingController::class, 'charge']);
+Route::post('/booking/charge-biaya-tambahan', [BookingController::class, 'chargeAdditionalBhp']);
 Route::get('/booking/nakes-terdekat', [BookingController::class, 'getNearestNakesList']);
 
 Route::middleware(['auth:sanctum'])->group(function () {

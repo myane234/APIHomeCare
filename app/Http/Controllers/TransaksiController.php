@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Booking;
 use App\Models\Transaksi;
+use App\Models\TransaksiTambahan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Midtrans\Config;
@@ -264,6 +265,49 @@ class TransaksiController extends Controller
             'order_id' => 'required|string',
         ]);
 
+        $additionalTransaction = TransaksiTambahan::where('id_booking', $validate['id_booking'])
+            ->where('midtrans_order_id', $validate['order_id'])
+            ->first();
+
+        if ($additionalTransaction) {
+            Config::$serverKey = config('services.midtrans.server_key');
+            Config::$isProduction = config('services.midtrans.is_production');
+            Config::$isSanitized = config('services.midtrans.is_sanitized');
+            Config::$is3ds = config('services.midtrans.is_3ds');
+
+            try {
+                $status = Transaction::status($validate['order_id']);
+                $transactionStatus = $status->transaction_status ?? null;
+
+                if (in_array($transactionStatus, ['capture', 'settlement'])) {
+                    $additionalTransaction->update([
+                        'status_transaksi' => 'Lunas',
+                        'waktu_bayar' => now(),
+                    ]);
+                } elseif (in_array($transactionStatus, ['deny', 'cancel', 'expire'])) {
+                    $additionalTransaction->update(['status_transaksi' => 'Gagal']);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Status pembayaran BHP tambahan telah diperbarui.',
+                    'data' => [
+                        'transaction_status' => $transactionStatus,
+                        'booking_status' => Booking::find($validate['id_booking'])?->status_booking,
+                        'status_transaksi' => $additionalTransaction->fresh()->status_transaksi,
+                        'booking_code' => $additionalTransaction->kode_booking,
+                    ],
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('Midtrans confirm additional payment error: ' . $e->getMessage());
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gagal memverifikasi pembayaran BHP tambahan.',
+                ], 500);
+            }
+        }
+
         $booking = Booking::with(['transaksi', 'layananItems.layanan'])->findOrFail($validate['id_booking']);
         $transaction = $booking->transaksi;
 
@@ -356,6 +400,20 @@ class TransaksiController extends Controller
 
         if (!$orderId) {
             return response()->json(['status' => 'error', 'message' => 'Order ID tidak ditemukan.'], 400);
+        }
+
+        $additionalTransaction = TransaksiTambahan::where('midtrans_order_id', $orderId)->first();
+        if ($additionalTransaction) {
+            if (in_array($transactionStatus, ['capture', 'settlement'])) {
+                $additionalTransaction->update([
+                    'status_transaksi' => 'Lunas',
+                    'waktu_bayar' => now(),
+                ]);
+            } elseif (in_array($transactionStatus, ['deny', 'cancel', 'expire'])) {
+                $additionalTransaction->update(['status_transaksi' => 'Gagal']);
+            }
+
+            return response()->json(['status' => 'success']);
         }
 
         $bookingId = null;
