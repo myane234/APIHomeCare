@@ -53,6 +53,8 @@ return new class extends Migration
         'users',
         'wilayah_layanan',
         'point_settings',
+        'booking_bhp',
+        'booking_layanan',
     ];
 
     private array $auditColumns = ['created_by', 'updated_by', 'deleted_by'];
