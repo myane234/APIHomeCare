@@ -36,13 +36,13 @@ class DatabaseSeeder extends Seeder
             
             
             GlobalConfigSeeder::class,
+            PointSettingSeeder::class,
             LegalitySeeder::class,
             MasterTarifTransportSeeder::class,
             MasterTarifSeeder::class,
             UlasanSeeder::class,
         ]);
 
-        // Jika ingin membuat data pasien tetap langsung di sini, silakan:
         Pasien::factory(10)->create();
 
         Pasien::factory(5)->create([

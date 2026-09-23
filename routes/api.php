@@ -26,3 +26,4 @@ require __DIR__ . '/api/booking.php';
 require __DIR__ . '/api/transaksi.php';
 require __DIR__ . '/api/jadwal.php';
 require __DIR__ . '/api/chat.php';
+require __DIR__ . '/api/point.php';

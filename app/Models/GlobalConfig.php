@@ -29,7 +29,7 @@ class GlobalConfig extends Model
 
     protected $casts = [
         'maintenance_mode' => 'boolean',
-        'socials' => 'array',
+        'socials'          => 'array',
     ];
 
     /**
