@@ -11,36 +11,89 @@ trait AuditableSoftDeletes
     public static function bootAuditableSoftDeletes(): void
     {
         static::creating(function ($model): void {
-            $actorId = self::actorId();
-            if ($actorId !== null && self::hasColumn($model, 'created_by') && $model->created_by === null) {
-                $model->created_by = $actorId;
+            $actor = self::actorName();
+            if ($actor !== null && self::hasColumn($model, 'created_by') && $model->created_by === null) {
+                $model->created_by = $actor;
             }
-            if ($actorId !== null && self::hasColumn($model, 'updated_by')) {
-                $model->updated_by = $actorId;
+            if ($actor !== null && self::hasColumn($model, 'updated_by')) {
+                $model->updated_by = $actor;
             }
         });
 
         static::updating(function ($model): void {
-            $actorId = self::actorId();
-            if ($actorId !== null && self::hasColumn($model, 'updated_by')) {
-                $model->updated_by = $actorId;
+            $actor = self::actorName();
+            if ($actor !== null && self::hasColumn($model, 'updated_by')) {
+                $model->updated_by = $actor;
             }
         });
 
         static::deleting(function ($model): void {
-            $actorId = self::actorId();
-            if ($actorId !== null && self::hasColumn($model, 'deleted_by')) {
-                $model->deleted_by = $actorId;
+            $actor = self::actorName();
+            if ($actor !== null && self::hasColumn($model, 'deleted_by')) {
+                $model->deleted_by = $actor;
                 $model->saveQuietly();
             }
         });
     }
 
-    private static function actorId(): ?int
+    /**
+     * Resolve nama aktor dari user yang sedang login.
+     *
+     * Urutan prioritas:
+     *   1. Admin       → nama_lengkap
+     *   2. TenagaMedis → nama_lengkap (via relasi)
+     *   3. Pasien      → nama_lengkap (via relasi)
+     *   4. Users       → email (fallback jika tidak ada relasi)
+     *
+     * @return string|null
+     */
+    private static function actorName(): ?string
     {
         try {
             $user = request()->user();
-            return $user ? (int) $user->getKey() : null;
+
+            if (!$user) {
+                return null;
+            }
+
+            // Guard: Admin (model App\Models\Admin)
+            if ($user instanceof \App\Models\Admin) {
+                return $user->nama_lengkap ?? $user->email;
+            }
+
+            // Guard: Users — coba ambil nama dari relasi
+            if ($user instanceof \App\Models\Users) {
+                // TenagaMedis memiliki nama_lengkap
+                if ($user->relationLoaded('tenagaMedis') && $user->tenagaMedis) {
+                    return $user->tenagaMedis->nama_lengkap;
+                }
+
+                // Lazy-load tenagaMedis jika belum di-load
+                $tenagaMedis = $user->tenagaMedis()->first();
+                if ($tenagaMedis) {
+                    return $tenagaMedis->nama_lengkap;
+                }
+
+                // Pasien memiliki nama_lengkap
+                if ($user->relationLoaded('pasien') && $user->pasien) {
+                    return $user->pasien->nama_lengkap;
+                }
+
+                $pasien = $user->pasien()->first();
+                if ($pasien) {
+                    return $pasien->nama_lengkap;
+                }
+
+                // Fallback: email
+                return $user->email;
+            }
+
+            // Fallback generik: coba properti umum
+            return $user->nama_lengkap
+                ?? $user->name
+                ?? $user->email
+                ?? (string) $user->getKey();
+
         } catch (\Throwable) {
             return null;
         }
