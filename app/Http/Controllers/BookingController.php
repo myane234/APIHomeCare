@@ -1227,6 +1227,11 @@ class BookingController extends Controller
             }
 
             $tambahan->update($paymentDetails + ['jumlah_total' => $jumlahTotalCharge]);
+            Log::info('Charge BHP Tambahan - Berhasil dibuat', [
+                'id_transaksi_tambahan' => $tambahan->id_transaksi_tambahan,
+                'order_id' => $tambahan->midtrans_order_id,
+                'transaction_id' => $paymentDetails['midtrans_transaction_id'],
+            ]);
 
             return response()->json([
                 'success' => true,
