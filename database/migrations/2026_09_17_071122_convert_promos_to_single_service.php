@@ -4,13 +4,14 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     public function up(): void
     {
-        Schema::table('promos', function (Blueprint $table) {
-            $table->unsignedBigInteger('id_layanan')->nullable()->after('id_promo');
-        });
+        if (!Schema::hasColumn('promos', 'id_layanan')) {
+            Schema::table('promos', function (Blueprint $table) {
+                $table->unsignedBigInteger('id_layanan')->nullable()->after('id_promo');
+            });
+        }
 
         foreach (Schema::getConnection()->table('promo_layanan')->get() as $promoLayanan) {
             Schema::getConnection()->table('promos')
@@ -20,8 +21,17 @@ return new class extends Migration
         }
 
         Schema::table('promos', function (Blueprint $table) {
-            $table->foreign('id_layanan')->references('id_layanan')->on('master_layanan')->cascadeOnDelete();
-            $table->dropColumn('nama_paket');
+
+            $foreignKeys = collect(Schema::getForeignKeys('promos'))->pluck('name');
+            $fkName = 'promos_id_layanan_foreign';
+            if (!$foreignKeys->contains($fkName)) {
+                $table->foreign('id_layanan')->references('id_layanan')->on('master_layanan')->cascadeOnDelete();
+            }
+
+
+            if (Schema::hasColumn('promos', 'nama_paket')) {
+                $table->dropColumn('nama_paket');
+            }
         });
     }
 
