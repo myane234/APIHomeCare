@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\MasterKategoriTarif;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -17,10 +16,19 @@ return new class extends Migration {
                 ->nullOnDelete();
         });
 
-        $reguler = MasterKategoriTarif::firstOrCreate(
-            ['nama_kategori' => 'REGULER'],
-            ['is_default' => true]
-        );
+        $reguler = DB::table('master_kategori_tarif')
+            ->where('nama_kategori', 'REGULER')
+            ->first();
+
+        if (!$reguler) {
+            $id = DB::table('master_kategori_tarif')->insertGetId([
+                'nama_kategori' => 'REGULER',
+                'is_default' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $reguler = (object) ['id_kategori_tarif' => $id];
+        }
 
         DB::table('master_tarif')
             ->whereNull('id_kategori_tarif')
@@ -34,10 +42,18 @@ return new class extends Migration {
             );
         });
 
-        MasterKategoriTarif::firstOrCreate(
-            ['nama_kategori' => 'CITO'],
-            ['is_default' => false]
-        );
+        $cito = DB::table('master_kategori_tarif')
+            ->where('nama_kategori', 'CITO')
+            ->first();
+
+        if (!$cito) {
+            DB::table('master_kategori_tarif')->insert([
+                'nama_kategori' => 'CITO',
+                'is_default' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
     }
 
     public function down(): void
@@ -52,8 +68,13 @@ return new class extends Migration {
             );
         });
 
-        MasterKategoriTarif::whereIn('nama_kategori', ['REGULER', 'CITO'])
-            ->whereDoesntHave('masterTarifs')
+        DB::table('master_kategori_tarif')
+            ->whereIn('nama_kategori', ['REGULER', 'CITO'])
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('master_tarif')
+                    ->whereColumn('master_tarif.id_kategori_tarif', 'master_kategori_tarif.id_kategori_tarif');
+            })
             ->delete();
     }
 };
