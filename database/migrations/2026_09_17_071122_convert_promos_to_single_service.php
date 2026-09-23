@@ -38,9 +38,18 @@ return new class extends Migration {
     public function down(): void
     {
         Schema::table('promos', function (Blueprint $table) {
-            $table->string('nama_paket')->nullable();
-            $table->dropForeign(['id_layanan']);
-            $table->dropColumn('id_layanan');
+            if (!Schema::hasColumn('promos', 'nama_paket')) {
+                $table->string('nama_paket')->nullable();
+            }
+
+            $foreignKeys = collect(Schema::getForeignKeys('promos'))->pluck('name');
+            if ($foreignKeys->contains('promos_id_layanan_foreign')) {
+                $table->dropForeign(['id_layanan']);
+            }
+
+            if (Schema::hasColumn('promos', 'id_layanan')) {
+                $table->dropColumn('id_layanan');
+            }
         });
     }
 };
