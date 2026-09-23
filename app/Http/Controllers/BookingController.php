@@ -15,6 +15,8 @@ use App\Models\MasterKategoriTarif;
 use App\Models\MasterTarifTransport;
 use App\Models\MasterMetodePembayaran;
 use App\Models\Promo;
+use App\Services\PointService;
+use App\Models\PointSetting;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -600,6 +602,9 @@ class BookingController extends Controller
             'longitude_kunjungan' => 'nullable|numeric',
             'catatan' => 'nullable|string',
             'id_kota' => 'nullable',
+            // Point redeem
+            'use_points'    => 'nullable|boolean',   // true = pasien mau pakai poin
+            'points_to_use' => 'nullable|integer|min:0', // jumlah poin yang ingin dipakai
         ]);
 
 
@@ -933,9 +938,44 @@ class BookingController extends Controller
             + ($tarifBahanHabisPakai - $totalHppBhp)
             + $biayaAdministrasiAplikasi - $feeMidtrans;
 
+        // ── Kalkulasi diskon poin ──────────────────────────────────────────
+        // Pasien bisa memilih pakai poin atau tidak (use_points = true/false)
+        // points_to_use = jumlah poin yang ingin dipakai (0 = tidak pakai)
+        // 1 poin = Rp 1
+        $usePoints    = (bool) ($validate['use_points'] ?? false);
+        $pointsToUse  = 0;
+        $diskonPoin   = 0;
+
+        if ($usePoints && $pasien->points_balance > 0) {
+            $requestedPoints = isset($validate['points_to_use'])
+                ? (int) $validate['points_to_use']
+                : 0;
+
+            /** @var \App\Services\PointService $pointService */
+            $pointService = app(\App\Services\PointService::class);
+            $preview = $pointService->previewRedeem(
+                totalTagihan:  $totalTagihanPasien,
+                pointsBalance: (int) $pasien->points_balance,
+                pointsToUse:   $requestedPoints,
+            );
+
+            if ($preview['error'] !== null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gagal menggunakan poin: ' . $preview['error'],
+                ], 422);
+            }
+
+            $pointsToUse = $preview['points_to_use'];
+            $diskonPoin  = $preview['discount_rp'];
+        }
+
+        // Total akhir setelah potongan poin
+        $totalTagihanSetelahPoin = $totalTagihanPasien - $diskonPoin;
+
         try {
-            return Cache::lock('create_booking_lock', 10)->block(5, function () use ($validate, $pasien, $layananIds, $semuaLayanan, $perLayananData, $tenagaMedisId, $alamatKunjungan, $idKategoriTarif, $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $totalHppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance, $diskonPromo, $promo, $totalSlSebelumDiskon) {
-                return DB::transaction(function () use ($validate, $pasien, $layananIds, $semuaLayanan, $perLayananData, $tenagaMedisId, $alamatKunjungan, $idKategoriTarif, $totalTagihanPasien, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $totalHppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance, $diskonPromo, $promo, $totalSlSebelumDiskon) {
+            return Cache::lock('create_booking_lock', 10)->block(5, function () use ($validate, $pasien, $layananIds, $semuaLayanan, $perLayananData, $tenagaMedisId, $alamatKunjungan, $idKategoriTarif, $totalTagihanPasien, $totalTagihanSetelahPoin, $pointsToUse, $diskonPoin, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $totalHppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance, $diskonPromo, $promo, $totalSlSebelumDiskon) {
+                return DB::transaction(function () use ($validate, $pasien, $layananIds, $semuaLayanan, $perLayananData, $tenagaMedisId, $alamatKunjungan, $idKategoriTarif, $totalTagihanPasien, $totalTagihanSetelahPoin, $pointsToUse, $diskonPoin, $tarifLayananJasaMedis, $tarifBahanHabisPakai, $tarifTransportasiFinal, $biayaAdministrasiAplikasi, $nominalPpnPajak, $persentasePpnPajak, $persentaseBagianNakes, $feeMidtrans, $totalHppBhp, $nominalHakNakes, $estimasiProfitHomeCare, $distance, $diskonPromo, $promo, $totalSlSebelumDiskon) {
 
                     // 1. Generate booking_code (Format: B-YYMMDDXXXXXXX)
                     $prefixBooking = 'B-' . date('ymd');
@@ -991,7 +1031,7 @@ class BookingController extends Controller
                     Transaksi::create([
                         'id_booking' => $booking->id_booking,
                         'midtrans_order_id' => $orderId,
-                        'jumlah_total' => $totalTagihanPasien,
+                        'jumlah_total' => $totalTagihanSetelahPoin,
                         'metode_pembayaran' => 'Pending',
                         'status_transaksi' => 'Belum Bayar',
                         'sl' => $tarifLayananJasaMedis,
@@ -1005,7 +1045,21 @@ class BookingController extends Controller
                         'hpp_bhp' => $totalHppBhp,
                         'hak_nakes' => $nominalHakNakes,
                         'profit_hc' => $estimasiProfitHomeCare,
+                        'points_used' => $pointsToUse,
+                        'points_discount' => $diskonPoin,
                     ]);
+
+                    // 5b. REDEEM poin jika pasien memilih pakai poin
+                    if ($pointsToUse > 0) {
+                        /** @var \App\Services\PointService $pointService */
+                        $pointService = app(\App\Services\PointService::class);
+                        $pointService->redeem(
+                            pasien: $pasien,
+                            pointsToRedeem: $pointsToUse,
+                            booking: $booking,
+                            note: "Diskon booking #{$booking->booking_code} (Rp " . number_format($diskonPoin, 0, ',', '.') . ")",
+                        );
+                    }
 
                     // 6. Bangun info layanan untuk response
                     $layananResponse = array_map(function ($item) use ($semuaLayanan) {
@@ -1040,9 +1094,17 @@ class BookingController extends Controller
                                 'diskon_promo' => round($diskonPromo),
                                 'tipe_diskon_promo' => $promo?->tipe_diskon,
                                 'nilai_diskon_promo' => $promo ? (float) $promo->nilai_diskon : 0,
+                                'diskon_poin' => $diskonPoin,
+                                'points_used' => $pointsToUse,
                             ],
-                            'jumlah_total' => $totalTagihanPasien,
+                            'jumlah_total_sebelum_poin' => $totalTagihanPasien,
+                            'jumlah_total' => $totalTagihanSetelahPoin,
                             'distance_km' => round($distance, 2),
+                            'point_info' => [
+                                'points_used'       => $pointsToUse,
+                                'discount_rp'       => $diskonPoin,
+                                'points_balance_after' => max(0, (int) $pasien->points_balance - $pointsToUse),
+                            ],
                         ],
                     ], 201);
                 });

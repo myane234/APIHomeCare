@@ -14,9 +14,10 @@ use Illuminate\Support\Facades\Log;
  * PointService
  *
  * Mengelola seluruh logika mutasi poin pasien:
- *   - earn()   : Tambah poin saat transaksi/booking selesai
- *   - redeem() : Potong poin saat pasien memakai poin (reserved)
- *   - expireAll() : Hanguskan semua EARN yang sudah melewati expired_at
+ *   - earn()         : Tambah poin saat transaksi/booking selesai
+ *   - redeem()       : Potong poin saat pasien memakai poin untuk diskon
+ *   - previewRedeem(): Kalkulasi preview diskon poin sebelum booking dibuat
+ *   - expireAll()    : Hanguskan semua EARN yang sudah melewati expired_at
  */
 class PointService
 {
@@ -89,22 +90,28 @@ class PointService
     }
 
     /**
-     * Potong poin (REDEEM) saat pasien memakai poin untuk diskon.
+     * Potong poin (REDEEM) saat pasien memakai poin untuk diskon booking.
      *
-     * @param  Pasien    $pasien
-     * @param  int       $pointsToRedeem  Jumlah poin yang akan dipakai
-     * @param  string    $note            Keterangan (mis. "Diskon booking #xxx")
+     * @param  Pasien        $pasien
+     * @param  int           $pointsToRedeem  Jumlah poin yang akan dipakai
+     * @param  Booking|null  $booking         Booking terkait (opsional)
+     * @param  string        $note            Keterangan
      * @return PointTransaction
      *
-     * @throws \RuntimeException  Jika saldo tidak cukup
+     * @throws \InvalidArgumentException  Jika pointsToRedeem <= 0
+     * @throws \RuntimeException          Jika saldo tidak cukup
      */
-    public function redeem(Pasien $pasien, int $pointsToRedeem, string $note = 'Redeem poin'): PointTransaction
-    {
+    public function redeem(
+        Pasien $pasien,
+        int $pointsToRedeem,
+        ?Booking $booking = null,
+        string $note = 'Redeem poin'
+    ): PointTransaction {
         if ($pointsToRedeem <= 0) {
             throw new \InvalidArgumentException('Jumlah poin redeem harus lebih dari 0.');
         }
 
-        return DB::transaction(function () use ($pasien, $pointsToRedeem, $note) {
+        return DB::transaction(function () use ($pasien, $pointsToRedeem, $booking, $note) {
             $pasien = Pasien::where('id_pasien', $pasien->id_pasien)->lockForUpdate()->first();
 
             if ($pasien->points_balance < $pointsToRedeem) {
@@ -117,6 +124,7 @@ class PointService
 
             $pt = PointTransaction::create([
                 'id_pasien'    => $pasien->id_pasien,
+                'id_booking'   => $booking?->id_booking,
                 'type'         => PointTransaction::TYPE_REDEEM,
                 'amount'       => $pointsToRedeem,
                 'balance_after'=> $newBalance,
@@ -129,6 +137,105 @@ class PointService
 
             return $pt;
         });
+    }
+
+    /**
+     * Preview kalkulasi diskon poin sebelum booking dibuat.
+     *
+     * Tidak melakukan mutasi apapun ke database.
+     * Digunakan oleh endpoint preview dan juga oleh BookingController.store().
+     *
+     * Skema:
+     *   - 1 poin = Rp 1
+     *   - Pasien bebas memilih pakai berapa poin (0 = tidak pakai)
+     *   - Maks poin yang bisa dipakai: min(saldo, floor(total * max_percent / 100))
+     *   - Tagihan tidak boleh jadi 0 (minimal Rp 1 tetap dibayar)
+     *
+     * @param  int|float $totalTagihan   Total tagihan sebelum diskon poin
+     * @param  int       $pointsBalance  Saldo poin pasien
+     * @param  int|null  $pointsToUse    Poin yang ingin dipakai pasien (null = auto-hitung maks)
+     * @return array{
+     *     is_active: bool,
+     *     points_balance: int,
+     *     points_to_use: int,
+     *     discount_rp: int,
+     *     total_after_discount: int,
+     *     max_points_redeemable: int,
+     *     max_discount_rp: int,
+     *     max_discount_percent: int,
+     *     error: string|null
+     * }
+     */
+    public function previewRedeem(
+        int|float $totalTagihan,
+        int $pointsBalance,
+        ?int $pointsToUse = null
+    ): array {
+        $setting = PointSetting::current();
+
+        $base = [
+            'is_active'            => $setting->is_active,
+            'points_balance'       => $pointsBalance,
+            'max_discount_percent' => $setting->max_point_discount_percent,
+        ];
+
+        // Hitung batas maksimal terlebih dahulu
+        $maxInfo = PointSetting::calculateMaxRedeemablePoints($totalTagihan, $pointsBalance);
+
+        $base['max_points_redeemable'] = $maxInfo['max_points_redeemable'];
+        $base['max_discount_rp']       = $maxInfo['max_discount_rp'];
+
+        if (!$setting->is_active) {
+            return array_merge($base, [
+                'points_to_use'        => 0,
+                'discount_rp'          => 0,
+                'total_after_discount' => (int) $totalTagihan,
+                'error'                => 'Fitur poin sedang tidak aktif.',
+            ]);
+        }
+
+        // Jika pasien tidak kirim pointsToUse, default ke 0 (tidak pakai poin)
+        $pointsToUse = $pointsToUse ?? 0;
+
+        if ($pointsToUse < 0) {
+            return array_merge($base, [
+                'points_to_use'        => 0,
+                'discount_rp'          => 0,
+                'total_after_discount' => (int) $totalTagihan,
+                'error'                => 'Jumlah poin tidak boleh negatif.',
+            ]);
+        }
+
+        // Validasi tidak melebihi saldo
+        if ($pointsToUse > $pointsBalance) {
+            return array_merge($base, [
+                'points_to_use'        => 0,
+                'discount_rp'          => 0,
+                'total_after_discount' => (int) $totalTagihan,
+                'error'                => "Saldo poin tidak cukup. Tersedia: {$pointsBalance}, diminta: {$pointsToUse}.",
+            ]);
+        }
+
+        // Validasi tidak melebihi batas maks
+        if ($pointsToUse > $maxInfo['max_points_redeemable']) {
+            return array_merge($base, [
+                'points_to_use'        => 0,
+                'discount_rp'          => 0,
+                'total_after_discount' => (int) $totalTagihan,
+                'error'                => "Maksimal penggunaan poin adalah {$maxInfo['max_points_redeemable']} poin "
+                                        . "({$setting->max_point_discount_percent}% dari total tagihan).",
+            ]);
+        }
+
+        $discountRp          = $pointsToUse; // 1 poin = Rp 1
+        $totalAfterDiscount  = (int) $totalTagihan - $discountRp;
+
+        return array_merge($base, [
+            'points_to_use'        => $pointsToUse,
+            'discount_rp'          => $discountRp,
+            'total_after_discount' => $totalAfterDiscount,
+            'error'                => null,
+        ]);
     }
 
     /**
@@ -175,7 +282,6 @@ class PointService
                 $newBalance   = max(0, $pasien->points_balance - $totalExpired);
 
                 // Buat record EXPIRED per baris EARN
-                $now = now();
                 foreach ($earnRows as $earn) {
                     PointTransaction::create([
                         'id_pasien'         => $idPasien,

@@ -13,11 +13,13 @@ use Illuminate\Support\Facades\Cache;
  * PointTransactionController
  *
  * Endpoint untuk:
- *   [Pasien]  GET  /api/points/balance       – saldo + ringkasan poin
- *   [Pasien]  GET  /api/points/history       – riwayat mutasi poin (paginate)
- *   [Admin]   GET  /api/admin/point-settings – baca konfigurasi poin
- *   [Admin]   PUT  /api/admin/point-settings – update konfigurasi poin
- *   [Admin]   POST /api/admin/points/expire  – trigger expire manual
+ *   [Pasien]  GET  /api/points/balance              – saldo + ringkasan poin
+ *   [Pasien]  GET  /api/points/history              – riwayat mutasi poin (paginate)
+ *   [Pasien]  GET  /api/points/preview-booking      – preview diskon poin untuk booking
+ *   [Admin]   GET  /api/admin/point-settings        – baca konfigurasi poin
+ *   [Admin]   PUT  /api/admin/point-settings        – update konfigurasi poin (termasuk max_point_discount_percent)
+ *   [Admin]   POST /api/admin/points/expire         – trigger expire manual
+ *   [Admin]   GET  /api/admin/points/history        – riwayat semua pasien
  */
 class PointTransactionController extends Controller
 {
@@ -25,15 +27,26 @@ class PointTransactionController extends Controller
     {
     }
 
-    // Pasien Endpoint
-
+    // ================================================================
+    // PASIEN ENDPOINTS
+    // ================================================================
 
     /**
      * Saldo & ringkasan poin pasien yang sedang login.
      *
      * @group Poin Pasien
      * @authenticated
-     * @response 200 {"success":true,"data":{"points_balance":150,"point_rate":10000,"point_expiry_days":365}}
+     * @response 200 {
+     *   "success": true,
+     *   "data": {
+     *     "points_balance": 150,
+     *     "soon_expiring_30d": 50,
+     *     "point_rate": 10000,
+     *     "point_expiry_days": 365,
+     *     "is_active": true,
+     *     "max_point_discount_percent": 50
+     *   }
+     * }
      */
     public function balance(Request $request): JsonResponse
     {
@@ -54,11 +67,12 @@ class PointTransactionController extends Controller
         return response()->json([
             'success' => true,
             'data'    => [
-                'points_balance'      => (int) $pasien->points_balance,
-                'soon_expiring_30d'   => (int) $soonExpiring,
-                'point_rate'          => $setting->point_rate,
-                'point_expiry_days'   => $setting->point_expiry_days,
-                'is_active'           => $setting->is_active,
+                'points_balance'             => (int) $pasien->points_balance,
+                'soon_expiring_30d'          => (int) $soonExpiring,
+                'point_rate'                 => $setting->point_rate,
+                'point_expiry_days'          => $setting->point_expiry_days,
+                'is_active'                  => $setting->is_active,
+                'max_point_discount_percent' => $setting->max_point_discount_percent,
             ],
         ]);
     }
@@ -110,9 +124,62 @@ class PointTransactionController extends Controller
         ]);
     }
 
+    /**
+     * Preview kalkulasi diskon poin untuk booking yang akan dibuat.
+     *
+     * Pasien mengirim total tagihan + jumlah poin yang ingin dipakai,
+     * sistem mengembalikan rincian diskon tanpa mengubah data apapun.
+     *
+     * @group Poin Pasien
+     * @authenticated
+     * @bodyParam total_tagihan integer required Total tagihan sebelum diskon poin. Example: 200000
+     * @bodyParam points_to_use integer Jumlah poin yang ingin dipakai. 0 = tidak pakai. Example: 50000
+     * @response 200 {
+     *   "success": true,
+     *   "data": {
+     *     "is_active": true,
+     *     "points_balance": 150000,
+     *     "points_to_use": 50000,
+     *     "discount_rp": 50000,
+     *     "total_after_discount": 150000,
+     *     "max_points_redeemable": 100000,
+     *     "max_discount_rp": 100000,
+     *     "max_discount_percent": 50,
+     *     "error": null
+     *   }
+     * }
+     */
+    public function previewBooking(Request $request): JsonResponse
+    {
+        $request->validate([
+            'total_tagihan' => 'required|integer|min:1',
+            'points_to_use' => 'nullable|integer|min:0',
+        ]);
 
+        $pasien = $request->user()?->pasien;
+
+        if (!$pasien) {
+            return response()->json(['success' => false, 'message' => 'Pasien tidak ditemukan.'], 404);
+        }
+
+        $preview = $this->pointService->previewRedeem(
+            totalTagihan:  (int) $request->input('total_tagihan'),
+            pointsBalance: (int) $pasien->points_balance,
+            pointsToUse:   $request->filled('points_to_use') ? (int) $request->input('points_to_use') : 0,
+        );
+
+        $statusCode = $preview['error'] ? 422 : 200;
+
+        return response()->json([
+            'success' => $preview['error'] === null,
+            'data'    => $preview,
+        ], $statusCode);
+    }
+
+
+    // ================================================================
     // ADMIN ENDPOINTS
-
+    // ================================================================
 
     /**
      * Baca konfigurasi poin saat ini.
@@ -127,11 +194,12 @@ class PointTransactionController extends Controller
         return response()->json([
             'success' => true,
             'data'    => [
-                'point_rate'        => $setting->point_rate,
-                'point_expiry_days' => $setting->point_expiry_days,
-                'is_active'         => $setting->is_active,
-                'updated_by'        => $setting->updated_by,
-                'updated_at'        => $setting->updated_at?->toDateTimeString(),
+                'point_rate'                 => $setting->point_rate,
+                'point_expiry_days'          => $setting->point_expiry_days,
+                'is_active'                  => $setting->is_active,
+                'max_point_discount_percent' => $setting->max_point_discount_percent,
+                'updated_by'                 => $setting->updated_by,
+                'updated_at'                 => $setting->updated_at?->toDateTimeString(),
             ],
         ]);
     }
@@ -141,34 +209,38 @@ class PointTransactionController extends Controller
      *
      * @group Admin – Konfigurasi Poin
      * @authenticated
-     * @bodyParam point_rate integer required Nominal Rp untuk 1 poin. Min: 1000. Example: 10000
+     * @bodyParam point_rate integer required Nominal Rp untuk mendapatkan 1 poin. Min: 1000. Example: 10000
      * @bodyParam point_expiry_days integer required Masa berlaku poin (hari). Min: 1. Example: 365
      * @bodyParam is_active boolean Aktifkan fitur poin. Example: true
+     * @bodyParam max_point_discount_percent integer Persentase maks dari total tagihan yang bisa dipotong poin (1–100). Default: 50. Example: 50
      */
     public function updateSettings(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'point_rate'        => 'required|integer|min:1000',
-            'point_expiry_days' => 'required|integer|min:1|max:3650',
-            'is_active'         => 'nullable|boolean',
+            'point_rate'                 => 'required|integer|min:1000',
+            'point_expiry_days'          => 'required|integer|min:1|max:3650',
+            'is_active'                  => 'nullable|boolean',
+            'max_point_discount_percent' => 'nullable|integer|min:1|max:100',
         ]);
 
         $setting = PointSetting::firstOrCreate(['id' => 1]);
         $setting->fill([
-            'point_rate'        => $validated['point_rate'],
-            'point_expiry_days' => $validated['point_expiry_days'],
-            'is_active'         => $validated['is_active'] ?? $setting->is_active,
-            'updated_by'        => (string) ($request->user()?->id_admin ?? $request->user()?->getKey()),
+            'point_rate'                 => $validated['point_rate'],
+            'point_expiry_days'          => $validated['point_expiry_days'],
+            'is_active'                  => $validated['is_active'] ?? $setting->is_active,
+            'max_point_discount_percent' => $validated['max_point_discount_percent'] ?? $setting->max_point_discount_percent,
+            'updated_by'                 => (string) ($request->user()?->id_admin ?? $request->user()?->getKey()),
         ]);
-        $setting->save(); 
+        $setting->save();
 
         return response()->json([
             'success' => true,
             'message' => 'Konfigurasi poin berhasil diperbarui.',
             'data'    => [
-                'point_rate'        => $setting->point_rate,
-                'point_expiry_days' => $setting->point_expiry_days,
-                'is_active'         => $setting->is_active,
+                'point_rate'                 => $setting->point_rate,
+                'point_expiry_days'          => $setting->point_expiry_days,
+                'is_active'                  => $setting->is_active,
+                'max_point_discount_percent' => $setting->max_point_discount_percent,
             ],
         ]);
     }
