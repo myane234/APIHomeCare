@@ -135,6 +135,18 @@ class HubungiKamiController extends Controller
             'pesan.required' => 'Pesan wajib diisi.',
         ]);
 
+        // Validasi email: cek disposable/palsu (blacklist domain + MX record DNS)
+        $emailError = $this->validateEmailReliability($validated['email']);
+        if ($emailError) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal.',
+                'errors'  => [
+                    'email' => [$emailError],
+                ],
+            ], 422);
+        }
+
         // Jika no_wa dikirim tetapi no_hp kosong, gunakan no_wa sebagai nilai no_hp
         if (empty($validated['no_hp']) && !empty($validated['no_wa'])) {
             $validated['no_hp'] = $validated['no_wa'];
@@ -150,6 +162,86 @@ class HubungiKamiController extends Controller
             'message' => 'Pesan Anda berhasil terkirim. Tim kami akan segera menghubungi Anda.',
             'data'    => $pesan,
         ], 201);
+    }
+
+    /**
+     * Validasi keandalan email:
+     * Layer 1 — Cek domain terhadap blacklist layanan email disposable/sementara.
+     * Layer 2 — Cek keberadaan MX record DNS pada domain email.
+     *
+     * @param  string $email
+     * @return string|null  Pesan error jika email tidak valid, null jika valid.
+     */
+    private function validateEmailReliability(string $email): ?string
+    {
+        // Layer 1: Blacklist domain email disposable / sementara
+        $disposableDomains = [
+            'mailinator.com', 'guerrillamail.com', 'guerrillamail.net', 'guerrillamail.org',
+            'guerrillamail.biz', 'guerrillamail.de', 'guerrillamail.info',
+            'tempmail.com', 'temp-mail.org', 'temp-mail.io', 'throwam.com',
+            'yopmail.com', 'yopmail.fr', 'cool.fr.nf', 'jetable.fr.nf',
+            'nospam.ze.tc', 'nomail.xl.cx', 'mega.zik.dj', 'speed.1s.fr',
+            'courriel.fr.nf', 'moncourrier.fr.nf', 'monemail.fr.nf', 'monmail.fr.nf',
+            'sharklasers.com', 'guerrillamailblock.com', 'grr.la', 'ozziesok.com',
+            'spam4.me', 'trashmail.com', 'trashmail.at', 'trashmail.io',
+            'trashmail.me', 'trashmail.net', 'dispostable.com', 'maildrop.cc',
+            'mailnull.com', 'spamgourmet.com', 'spamgourmet.net', 'spamgourmet.org',
+            'binkmail.com', 'bob.email', 'dropmail.me', 'emlpro.com',
+            'emltmp.com', 'fakeinbox.com', 'filzmail.com', 'fleckens.hu',
+            'getonemail.com', 'girlsundertheinfluence.com', 'haltospam.com',
+            'ieatspam.eu', 'ieatspam.info', 'inoutmail.de', 'inoutmail.eu',
+            'inoutmail.info', 'inoutmail.net', 'jetable.com', 'jetable.fr.nf',
+            'kasmail.com', 'killmail.com', 'klassmaster.com', 'klzlk.com',
+            'kurzepost.de', 'lol.ovpn.to', 'lookugly.com', 'mailexpire.com',
+            'mailme.lv', 'mailnew.com', 'mailscrap.com', 'mailsiphon.com',
+            'mailzilla.com', 'mbx.cc', 'mt2009.com', 'mt2014.com',
+            'notsharingmy.info', 'objectmail.com', 'obobbo.com', 'odaymail.com',
+            'onewaymail.com', 'pookmail.com', 'privacy.net', 'proxymail.eu',
+            'rcpt.at', 'recode.me', 'recursor.net', 'regbypass.com',
+            'safetymail.info', 'safetypost.de', 'selfdestructingmail.com',
+            'sendspamhere.com', 'shieldedmail.com', 'skeefmail.com', 'slopsbox.com',
+            'smellfear.com', 'snakemail.com', 'sneakemail.com', 'sofimail.com',
+            'sogetthis.com', 'spam.la', 'spamavert.com', 'spambox.us',
+            'spamcannon.com', 'spamcannon.net', 'spamcero.com', 'spamcon.org',
+            'spamday.com', 'spamex.com', 'spamfree24.org', 'spamgoes.in',
+            'spamherelots.com', 'spamhereplease.com', 'spamhole.com', 'spamify.com',
+            'spaminator.de', 'spamkill.info', 'spaml.com', 'spaml.de',
+            'spammotel.com', 'spamobox.com', 'spamoff.de', 'spamslicer.com',
+            'spamstack.net', 'spamthis.co.uk', 'spamthisplease.com', 'spamtroll.net',
+            'supergreatmail.com', 'suremail.info', 'sweetxxx.de', 'tafmail.com',
+            'temporaryemail.net', 'temporaryemail.us', 'temporaryforwarding.com',
+            'temporaryinbox.com', 'tempr.email', 'thankyou2010.com', 'thisisnotmyrealemail.com',
+            'throwam.com', 'tilien.com', 'tmailinator.com', 'toomail.biz',
+            'topranklist.de', 'tradermail.info', 'trash-mail.at', 'trash-mail.com',
+            'trash-mail.de', 'trash-mail.ga', 'trash-mail.io', 'trash-mail.net',
+            'trash2009.com', 'trashdevil.com', 'trashdevil.de', 'trashemail.de',
+            'trashimail.de', 'trashmail.app', 'trashmail.fr', 'trashmail.io',
+            'trashmail.org', 'trashmail.xyz', 'trbvm.com', 'trkur.com',
+            'turual.com', 'twinmail.de', 'tyldd.com', 'uggsrock.com',
+            'umail.net', 'upliftnow.com', 'uplipht.com', 'uroid.com',
+            'veryrealemail.com', 'vidchart.com', 'viditag.com', 'vomoto.com',
+            'vpn.st', 'vsimcard.com', 'walkmail.net', 'walkmail.ru',
+            'wetrainbayarea.com', 'wetrainbayarea.org', 'whyspam.me',
+            'willhackforfood.biz', 'wuzupmail.net', 'www.e4ward.com', 'www.mailinator.com',
+            'xagloo.com', 'xemaps.com', 'xents.com', 'xmaily.com',
+            'xoxy.net', 'xyzfree.net', 'yapped.net', 'yeah.net',
+            'yogamaven.com', 'yopmail.net', 'yopmail.pp.ua', 'youmails.net',
+            'yourspamgoeshere.com', 'zehnminutenmail.de', 'zippymail.info',
+            'zoemail.com', 'zoemail.net', 'zoemail.org', 'zomg.info',
+        ];
+
+        $domain = strtolower(substr(strrchr($email, '@'), 1));
+
+        if (in_array($domain, $disposableDomains)) {
+            return 'Email yang dimasukkan menggunakan layanan email sementara. Silakan gunakan email aktif Anda (contoh: Gmail, Yahoo, Outlook).';
+        }
+
+        // Layer 2: Cek MX Record DNS — pastikan domain memiliki mail server yang valid
+        if (!checkdnsrr($domain, 'MX')) {
+            return 'Email yang dimasukkan tidak valid karena domain-nya tidak memiliki server email aktif. Silakan periksa kembali email Anda.';
+        }
+
+        return null;
     }
 
     /**
