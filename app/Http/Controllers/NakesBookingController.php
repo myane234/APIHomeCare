@@ -603,6 +603,8 @@ class NakesBookingController extends Controller
 
         $request->validate([
             'items' => 'required|array',
+            'items.*.id_booking_bhp' => 'nullable|integer',
+            'items.*.id_layanan' => 'nullable|integer',
             'items.*.id_bhp' => 'required|integer',
             'items.*.qty_real' => 'required|integer|min:0',
         ]);
@@ -616,11 +618,23 @@ class NakesBookingController extends Controller
 
             foreach ($request->input('items') as $inputItem) {
                 $idBhp = $inputItem['id_bhp'];
+                $idLayanan = $inputItem['id_layanan'] ?? null;
+                $idBookingBhp = $inputItem['id_booking_bhp'] ?? null;
                 $qtyRealInput = (int) $inputItem['qty_real'];
 
-                $bookingBhp = BookingBhp::where('id_booking', $booking->id_booking)
-                    ->where('id_bhp', $idBhp)
-                    ->first();
+                // Cari record spesifik: prioritaskan id_booking_bhp, lalu kombinasi id_layanan+id_bhp, lalu fallback ke id_bhp saja
+                $query = BookingBhp::where('id_booking', $booking->id_booking)
+                    ->where('id_bhp', $idBhp);
+
+                if ($idBookingBhp) {
+                    $bookingBhp = BookingBhp::where('id_booking', $booking->id_booking)
+                        ->where('id_booking_bhp', $idBookingBhp)
+                        ->first();
+                } elseif ($idLayanan) {
+                    $bookingBhp = $query->where('id_layanan', $idLayanan)->first();
+                } else {
+                    $bookingBhp = $query->first();
+                }
 
                 if ($bookingBhp) {
                     $qtyDefault = (int) $bookingBhp->qty_default;
