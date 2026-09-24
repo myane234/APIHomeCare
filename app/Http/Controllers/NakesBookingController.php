@@ -218,7 +218,7 @@ class NakesBookingController extends Controller
      */
     public function show(Request $request, $id)
     {
-        $booking = Booking::with(['pasien', 'layanan.kategori', 'layananItems.layanan.kategori', 'tenagaMedis', 'transaksi', 'bookingBhp.bhpItem'])->find($id);
+        $booking = Booking::with(['pasien', 'layanan.kategori', 'layananItems.layanan.kategori', 'tenagaMedis', 'transaksi', 'bookingBhp.bhpItem', 'transaksiTambahanTerakhir'])->find($id);
 
         if (!$booking) {
             return response()->json([
