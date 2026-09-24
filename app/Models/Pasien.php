@@ -23,12 +23,16 @@ class Pasien extends Model
         'golongan_darah',
         'jenis_kelamin',
         'alamat_utama',
+        'latitude',
+        'longitude',
         'avatar',
-        'points_balance',  // saldo poin aktif pasien
+        'points_balance',  
     ];
 
     protected $casts = [
         'points_balance' => 'integer',
+        'latitude'       => 'float',
+        'longitude'      => 'float',
     ];
 
     /**

@@ -66,35 +66,40 @@ class CoreAuthController extends Controller
     public function register(Request $request)
     {
         $validate = $request->validate([
-            'email' => ['required', 'string', 'email', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8'],
-            'nama_lengkap' => ['required', 'string'],
-            'no_hp' => ['nullable', 'string'],
-            'nik' => ['required', 'string', 'size:16'],
+            'email'          => ['required', 'string', 'email', 'unique:users,email'],
+            'password'       => ['required', 'string', 'min:8'],
+            'nama_lengkap'   => ['required', 'string'],
+            'no_hp'          => ['nullable', 'string'],
+            'nik'            => ['required', 'string', 'size:16'],
             'golongan_darah' => ['nullable', 'in:A,B,AB,O'],
-            'jenis_kelamin' => ['required', 'in:L,P'],
-            'alamat_utama' => ['required', 'string']
+            'jenis_kelamin'  => ['required', 'in:L,P'],
+
+            'alamat_utama'   => ['nullable', 'required_with:latitude,longitude', 'string'],
+            'latitude'       => ['nullable', 'required_with:alamat_utama,longitude', 'numeric', 'between:-90,90'],
+            'longitude'      => ['nullable', 'required_with:alamat_utama,latitude', 'numeric', 'between:-180,180'],
         ]);
 
         $createdUser = null;
 
         $pasien = DB::transaction(function () use ($validate, &$createdUser) {
             $createdUser = Users::create([
-                'email' => $validate['email'],
-                'password' => Hash::make($validate['password']),
+                'email'     => $validate['email'],
+                'password'  => Hash::make($validate['password']),
                 'is_active' => true
             ]);
 
             $createdUser->roles()->attach('pasien');
 
             return Pasien::create([
-                'id_user' => $createdUser->id_user,
-                'nama_lengkap' => $validate['nama_lengkap'],
-                'no_hp' => $validate['no_hp'] ?? null,
-                'nik' => $validate['nik'],
+                'id_user'        => $createdUser->id_user,
+                'nama_lengkap'   => $validate['nama_lengkap'],
+                'no_hp'          => $validate['no_hp'] ?? null,
+                'nik'            => $validate['nik'],
                 'golongan_darah' => $validate['golongan_darah'] ?? null,
-                'jenis_kelamin' => $validate['jenis_kelamin'],
-                'alamat_utama' => $validate['alamat_utama']
+                'jenis_kelamin'  => $validate['jenis_kelamin'],
+                'alamat_utama'   => $validate['alamat_utama'] ?? null,
+                'latitude'       => $validate['latitude'] ?? null,
+                'longitude'      => $validate['longitude'] ?? null,
             ]);
         });
 
@@ -105,7 +110,7 @@ class CoreAuthController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Registrasi berhasil! Silakan periksa inbox email Anda untuk verifikasi akun.',
-            'data' => $pasien
+            'data'    => $pasien
         ], 201);
     }
 

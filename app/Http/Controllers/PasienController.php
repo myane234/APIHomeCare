@@ -50,63 +50,63 @@ class PasienController extends Controller
     // }
 
     public function update(Request $request)
-{
-    $user = $request->user();
+    {
+        $user = $request->user();
 
-    if (!$user) {
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User tidak ditemukan'
+            ], 401);
+        }
+
+        $pasien = Pasien::query()->where('id_user', $user->id_user)->first();
+
+        if (!$pasien) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data pasien tidak ditemukan'
+            ], 404);
+        }
+
+        // 1. Validasi Input Profil
+        $rules = [
+            'nama_lengkap'   => 'nullable|string',
+            'nik'            => 'nullable|string',
+            'golongan_darah' => ['nullable', Rule::enum(KategoriGoldar::class)],
+            'no_hp'          => 'nullable|string',
+            'jenis_kelamin'  => ['nullable', 'string', Rule::enum(JenisKelamin::class)],
+
+            'alamat_utama'   => ['nullable', 'string', 'required_with:latitude,longitude'],
+            'latitude'       => ['nullable', 'numeric', 'between:-90,90', 'required_with:alamat_utama,longitude'],
+            'longitude'      => ['nullable', 'numeric', 'between:-180,180', 'required_with:alamat_utama,latitude'],
+        ];
+
+        if ($request->hasFile('avatar')) {
+            $rules['avatar'] = 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048';
+        } else {
+            $rules['avatar'] = 'nullable|string';
+        }
+
+        $validate = $request->validate($rules);
+
+        $dataToUpdate = array_filter($validate, fn ($value) => $value !== null);
+
+
+        if ($request->hasFile('avatar')) {
+            $file = $request->file('avatar');
+            $path = $file->store('avatars', 'public');
+            $dataToUpdate['avatar'] = asset('storage/' . $path);
+        }
+
+        $pasien->update($dataToUpdate);
+
         return response()->json([
-            'success' => false,
-            'message' => 'User tidak ditemukan'
-        ], 401);
+            'success' => true,
+            'message' => 'Data Pasien Berhasil Di-update',
+            'data'    => $pasien->fresh()
+        ], 200);
     }
-
-    $pasien = Pasien::query()->where('id_user', $user->id_user)->first();
-
-    if (!$pasien) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Data pasien tidak ditemukan'
-        ], 404);
-    }
-
-    // 1. Validasi Input Profil
-    $rules = [
-        'nama_lengkap' => 'nullable|string',
-        'nik'            => 'nullable|string',
-        'golongan_darah' => ['nullable', Rule::enum(KategoriGoldar::class)],
-        'no_hp'          => 'nullable|string',
-        'jenis_kelamin'  => ['nullable', 'string', Rule::enum(JenisKelamin::class)],
-        'alamat_utama'   => 'nullable|string',
-    ];
-
-    // Conditional validation untuk avatar: bisa file atau string URL
-    if ($request->hasFile('avatar')) {
-        $rules['avatar'] = 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048';
-    } else {
-        $rules['avatar'] = 'nullable|string';
-    }
-
-    $validate = $request->validate($rules);
-
-    // 2. Filter data agar hanya meng-update field yang benar-benar dikirimkan
-    $dataToUpdate = array_filter($validate, fn ($value) => $value !== null);
-
-    // 3. Jika avatar adalah file, convert ke string URL
-    if ($request->hasFile('avatar')) {
-        $file = $request->file('avatar');
-        $path = $file->store('avatars', 'public');
-        $dataToUpdate['avatar'] = asset('storage/' . $path);
-    }
-
-    $pasien->update($dataToUpdate);
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Data Pasien Berhasil Di-update',
-        'data'    => $pasien->fresh()
-    ], 200);
-}
-
     
 
     public function destroy(Request $request)
@@ -132,11 +132,12 @@ class PasienController extends Controller
         ]);
     }
 
+
     public function completeProfile(Request $request)
     {
         $user = $request->user();
 
-        if(!$user) {
+        if (!$user) {
             return response()->json([
                 'success' => false,
                 'message' => 'User tidak ditemukan'
@@ -152,7 +153,6 @@ class PasienController extends Controller
             ], 404);
         }
 
-        // Buat rules dinamis: hanya wajibkan (required) yang masih kosong
         $rules = [];
 
         if (empty($user->password)) {
@@ -167,11 +167,13 @@ class PasienController extends Controller
         if (empty($pasien->jenis_kelamin)) {
             $rules['jenis_kelamin'] = 'required|string';
         }
-        if (empty($pasien->alamat_utama)) {
-            $rules['alamat_utama'] = 'required|string';
+
+        if (empty($pasien->alamat_utama) || is_null($pasien->latitude) || is_null($pasien->longitude)) {
+            $rules['alamat_utama'] = ['required', 'string'];
+            $rules['latitude']     = ['required', 'numeric', 'between:-90,90'];
+            $rules['longitude']    = ['required', 'numeric', 'between:-180,180'];
         }
 
-        // Jika tidak ada rule berarti sudah lengkap semua
         if (empty($rules)) {
             return response()->json([
                 'success' => true,
@@ -182,16 +184,14 @@ class PasienController extends Controller
 
         $validate = $request->validate($rules);
 
-        // Update ke User jika field password terisi
         if (isset($validate['password'])) {
             $user->update([
                 'password' => bcrypt($validate['password'])
             ]);
         }
 
-        // Update ke Pasien untuk data-data yang dikirim
         $pasienDataToUpdate = [];
-        foreach (['nik', 'golongan_darah', 'jenis_kelamin', 'alamat_utama'] as $field) {
+        foreach (['nik', 'golongan_darah', 'jenis_kelamin', 'alamat_utama', 'latitude', 'longitude'] as $field) {
             if (isset($validate[$field])) {
                 $pasienDataToUpdate[$field] = $validate[$field];
             }
@@ -204,7 +204,7 @@ class PasienController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Profil Pasien Berhasil Dilengkapi',
-            'data' => $pasien
+            'data' => $pasien->fresh()
         ]);
     }
 }
