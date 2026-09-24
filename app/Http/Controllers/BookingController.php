@@ -2361,7 +2361,7 @@ class BookingController extends Controller
             ], 403);
         }
 
-        $booking = Booking::with(['pasien', 'layanan.kategori', 'layananItems.layanan.kategori', 'tenagaMedis', 'transaksi'])->find($id);
+        $booking = Booking::with(['pasien', 'layanan.kategori', 'layananItems.layanan.kategori', 'tenagaMedis', 'transaksi', 'bookingBhp.bhpItem', 'transaksiTambahanTerakhir'])->find($id);
 
         if (!$booking) {
             return response()->json([
