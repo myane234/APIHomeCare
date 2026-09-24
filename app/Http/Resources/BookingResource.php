@@ -68,7 +68,7 @@ class BookingResource extends JsonResource
             'pasien'            => $this->when($this->relationLoaded('pasien') && $this->pasien, [
                 'id_pasien'     => $this->pasien?->id_pasien,
                 'nama_lengkap'  => $this->pasien?->nama_lengkap,
-                'no_telp'       => $this->pasien?->no_telp,
+                'no_telp'       => $this->pasien?->no_hp,
                 'alamat_utama'  => $this->pasien?->alamat_utama,
             ]),
 
