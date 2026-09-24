@@ -48,19 +48,23 @@ class PointSetting extends Model
      * Di-cache selamanya; di-invalidate saat save().
      */
     public static function current(): static
-    {
-        return Cache::rememberForever(self::CACHE_KEY, function () {
-            return static::firstOrCreate(
-                ['id' => 1],
-                [
-                    'point_rate'                 => 10000,
-                    'point_expiry_days'          => 365,
-                    'is_active'                  => true,
-                    'max_point_discount_percent' => 50,
-                ]
-            );
-        });
-    }
+{
+    $attributes = Cache::rememberForever(self::CACHE_KEY, function () {
+        $model = static::firstOrCreate(
+            ['id' => 1],
+            [
+                'point_rate'                 => 10000,
+                'point_expiry_days'          => 365,
+                'is_active'                  => true,
+                'max_point_discount_percent' => 50,
+            ]
+        );
+
+        return $model->toArray();
+    });
+
+    return (new static())->forceFill($attributes);
+}
 
     /**
      * Hitung poin yang didapat dari suatu nominal transaksi.
