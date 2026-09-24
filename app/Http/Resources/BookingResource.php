@@ -2,6 +2,8 @@
 
 namespace App\Http\Resources;
 
+use App\Models\PointSetting;
+use App\Models\PointTransaction;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -139,6 +141,12 @@ class BookingResource extends JsonResource
 
             // ─── Laporan Transaksi ───────────────────────────────────────
             'transaksi'         => $this->when($this->relationLoaded('transaksi') && $transaksi, function () use ($transaksi) {
+                // Estimasi poin yang didapat dari transaksi ini
+                $pointsEarned = \App\Models\PointSetting::calculateEarn((float) $transaksi->jumlah_total);
+                $isEarned = \App\Models\PointTransaction::where('id_booking', $this->id_booking)
+                    ->where('type', \App\Models\PointTransaction::TYPE_EARN)
+                    ->exists();
+
                 return [
                     'id_transaksi'      => $transaksi->id_transaksi,
                     'status_transaksi'  => $transaksi->status_transaksi,
@@ -170,6 +178,15 @@ class BookingResource extends JsonResource
                     ],
                     'jumlah_total'      => (float) $transaksi->jumlah_total,
                     'jumlah_total_format' => 'Rp ' . number_format((float) $transaksi->jumlah_total, 0, ',', '.'),
+                    'points_info'       => [
+                        'points_used'           => (int) ($transaksi->points_used ?? 0),
+                        'points_discount'       => (float) ($transaksi->points_discount ?? 0),
+                        'points_discount_format'=> ($transaksi->points_discount ?? 0) > 0
+                            ? 'Rp ' . number_format((float) $transaksi->points_discount, 0, ',', '.')
+                            : null,
+                        'points_earned'         => $pointsEarned,
+                        'is_earned'             => $isEarned,
+                    ],
                 ];
             }),
 

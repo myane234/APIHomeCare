@@ -1764,6 +1764,9 @@ class BookingController extends Controller
         }
 
         if (in_array(strtolower($transaksi->status_transaksi), $lunasStatuses)) {
+            // Hitung poin yang akan/sudah didapat dari transaksi ini
+            $pointsInfo = $this->buildPointsInfo($transaksi, $booking);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Pembayaran untuk booking ini sudah lunas.',
@@ -1776,6 +1779,7 @@ class BookingController extends Controller
                     'jumlah_total' => $jumlahTotal,
                     'jumlah_total_format' => $jumlahFormat,
                     'waktu_bayar' => $transaksi->waktu_bayar,
+                    'points_info' => $pointsInfo,
                 ]
             ], 200);
         }
@@ -1812,6 +1816,7 @@ class BookingController extends Controller
                 'jumlah_total_format' => $jumlahFormat,
                 'payment_details' => $paymentDetails,
                 'created_at' => $booking->created_at,
+                'points_info' => $this->buildPointsInfo($transaksi, $booking),
             ]
         ], 200);
     }
@@ -1905,8 +1910,51 @@ class BookingController extends Controller
                     'hpp_bhp' => (float) $t->hpp_bhp,
                     'hpp_bhp_tambahan' => (float) ($t->hpp_bhp_tambahan ?? 0),
                 ] : null,
+                'points_info' => $t ? $this->buildPointsInfo($t, $booking) : null,
             ],
         ]);
+    }
+
+
+    /**
+     * Build info poin untuk response invoice/laporan.
+     *
+     * Menampilkan:
+     * - points_used     : Poin yang dipakai untuk diskon (sudah terjadi saat booking)
+     * - points_discount : Nilai diskon dalam rupiah dari poin yang dipakai
+     * - points_earned   : Estimasi poin yang akan/sudah didapat dari transaksi ini
+     * - is_earned       : Apakah poin sudah benar-benar diberikan (ada record di point_transactions)
+     */
+    private function buildPointsInfo(Transaksi $transaksi, Booking $booking): array
+    {
+        $pointsUsed     = (int) ($transaksi->points_used ?? 0);
+        $pointsDiscount = (float) ($transaksi->points_discount ?? 0);
+        $jumlahTotal    = (float) $transaksi->jumlah_total;
+
+        // Kalkulasi poin yang akan didapat (berdasarkan setting aktif)
+        $pointsEarned = \App\Models\PointSetting::calculateEarn($jumlahTotal);
+
+        // Cek apakah poin sudah benar-benar dicatat di point_transactions
+        $isEarned = \App\Models\PointTransaction::where('id_booking', $booking->id_booking)
+            ->where('type', \App\Models\PointTransaction::TYPE_EARN)
+            ->exists();
+
+        // Ambil point_rate dari setting untuk info ke user
+        $setting = \App\Models\PointSetting::current();
+
+        return [
+            'is_active'        => $setting->is_active,
+            'points_used'      => $pointsUsed,
+            'points_discount'  => $pointsDiscount,
+            'points_discount_format' => $pointsDiscount > 0
+                ? 'Rp ' . number_format($pointsDiscount, 0, ',', '.')
+                : null,
+            'points_earned'    => $pointsEarned,
+            'is_earned'        => $isEarned,
+            'earn_note'        => $setting->is_active && $pointsEarned > 0
+                ? "Kamu akan mendapatkan {$pointsEarned} poin setelah layanan selesai"
+                : ($setting->is_active ? 'Transaksi ini tidak menghasilkan poin' : 'Fitur poin tidak aktif'),
+        ];
     }
 
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Booking;
 use App\Models\Transaksi;
 use App\Models\TransaksiTambahan;
+use App\Services\PointService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Midtrans\Config;
@@ -15,6 +16,10 @@ use App\Http\Resources\TransaksiDetailResource;
 
 class TransaksiController extends Controller
 {
+    public function __construct(protected PointService $pointService)
+    {
+    }
+
     /**
      * Daftar Transaksi Pasien
      *
@@ -333,6 +338,10 @@ class TransaksiController extends Controller
                     'waktu_bayar' => now(),
                 ]);
                 $booking->update(['status_booking' => 'Diproses']);
+
+                // Jangan trigger EARN di sini — EARN baru diberikan saat booking berstatus "Selesai".
+                // BookingObserver::updated() akan menangani EARN ketika admin/nakes mengubah
+                // status_booking menjadi "Selesai" setelah tindakan selesai dilakukan.
             } elseif (in_array($transactionStatus, ['deny', 'cancel', 'expire'])) {
                 $transaction->update(['status_transaksi' => 'Gagal']);
                 $booking->update(['status_booking' => 'Dibatalkan']);
@@ -439,6 +448,11 @@ class TransaksiController extends Controller
                     'waktu_bayar' => now(),
                 ]);
                 $booking->update(['status_booking' => 'Diproses']);
+
+                // EARN poin tidak diberikan di sini.
+                // Poin diberikan via BookingObserver saat status_booking berubah menjadi "Selesai"
+                // (setelah nakes selesai melakukan tindakan).
+                // Guard di BookingObserver memastikan transaksi sudah Lunas sebelum EARN diberikan.
             } elseif (in_array($transactionStatus, ['deny', 'cancel', 'expire'])) {
                 $transaction->update(['status_transaksi' => 'Gagal']);
                 $booking->update(['status_booking' => 'Dibatalkan']);

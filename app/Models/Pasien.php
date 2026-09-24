@@ -24,6 +24,11 @@ class Pasien extends Model
         'jenis_kelamin',
         'alamat_utama',
         'avatar',
+        'points_balance',  // saldo poin aktif pasien
+    ];
+
+    protected $casts = [
+        'points_balance' => 'integer',
     ];
 
     /**

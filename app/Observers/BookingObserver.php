@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Models\Booking;
+use App\Models\Transaksi;
 use App\Services\PointService;
 use Illuminate\Support\Facades\Log;
 
@@ -10,8 +11,11 @@ use Illuminate\Support\Facades\Log;
  * BookingObserver
  *
  * Memantau perubahan pada model Booking.
- * Trigger EARN poin saat status_booking berubah menjadi "Selesai"
- * dan booking memiliki transaksi yang sudah Paid.
+ *
+ * LOGIKA EARN POIN:
+ *  - Poin diberikan saat booking berstatus "Selesai" DAN transaksinya sudah "Lunas".
+ *  - Jika booking "Selesai" tapi belum bayar, poin di-skip (tidak ada uang masuk).
+ *  - Duplikasi dicegah oleh PointService::earn() via cek PointTransaction.
  */
 class BookingObserver
 {
@@ -24,7 +28,7 @@ class BookingObserver
      */
     public function updated(Booking $booking): void
     {
-        // Hanya proses jika status_booking baru saja berubah menjadi "Selesai"
+        // Trigger EARN saat status berubah menjadi "Selesai"
         if (
             $booking->wasChanged('status_booking') &&
             $booking->status_booking === 'Selesai'
@@ -35,6 +39,9 @@ class BookingObserver
 
     /**
      * Proses penambahan poin dari booking yang selesai.
+     *
+     * Guard: hanya jalankan EARN jika transaksi sudah Lunas.
+     * Ini mencegah poin diberikan pada booking yang belum dibayar.
      */
     private function triggerEarn(Booking $booking): void
     {
@@ -45,12 +52,19 @@ class BookingObserver
             return;
         }
 
-        // Ambil transaksi terkait
-        $transaksi = $booking->transaksi;
+        // Ambil transaksi terkait (lazy load jika belum di-load)
+        $transaksi = $booking->transaksi ?? $booking->load('transaksi')->transaksi;
+
+        // Guard: hanya berikan poin jika transaksi sudah Lunas
+        $lunasStatuses = ['Lunas', 'lunas', 'settlement', 'capture'];
+        if (!$transaksi || !in_array($transaksi->status_transaksi, $lunasStatuses)) {
+            Log::info("[BookingObserver] Booking #{$booking->id_booking} status transaksi bukan Lunas ('{$transaksi?->status_transaksi}'), skip earn.");
+            return;
+        }
 
         // Tentukan nominal yang dipakai untuk menghitung poin.
-        // Prioritas: transaksi utama (jumlah_total), fallback 0.
-        $jumlahTotal = $transaksi?->jumlah_total ?? 0;
+        // Gunakan jumlah setelah dikurangi diskon poin yang sudah dipakai.
+        $jumlahTotal = (float) ($transaksi->jumlah_total ?? 0);
 
         if ($jumlahTotal <= 0) {
             Log::info("[BookingObserver] Booking #{$booking->id_booking} jumlah_total = 0, skip earn.");
@@ -60,7 +74,7 @@ class BookingObserver
         try {
             $result = $this->pointService->earn(
                 pasien: $pasien,
-                jumlahTransaksi: (float) $jumlahTotal,
+                jumlahTransaksi: $jumlahTotal,
                 booking: $booking,
                 transaksi: $transaksi,
             );

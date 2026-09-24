@@ -137,6 +137,14 @@ class TransaksiDetailResource extends JsonResource
                     'persentase_ppn' => (float) $transaksi->persen_ppn,
                     'total' => $this->moneyData($transaksi->jumlah_total),
                 ],
+                'points_info' => [
+                    'points_used'           => (int) ($transaksi->points_used ?? 0),
+                    'points_discount'       => $this->moneyData($transaksi->points_discount ?? 0),
+                    'points_earned'         => \App\Models\PointSetting::calculateEarn((float) $transaksi->jumlah_total),
+                    'is_earned'             => \App\Models\PointTransaction::where('id_booking', $booking->id_booking)
+                                                ->where('type', \App\Models\PointTransaction::TYPE_EARN)
+                                                ->exists(),
+                ],
             ] : null,
         ];
     }
