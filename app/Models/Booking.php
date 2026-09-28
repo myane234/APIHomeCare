@@ -71,6 +71,14 @@ class Booking extends Model
     }
 
     /**
+     * Relasi ke Ulasan / Rating Pasca Pelayanan
+     */
+    public function ulasan()
+    {
+        return $this->hasOne(Ulasan::class, 'id_booking', 'id_booking');
+    }
+
+    /**
      * Detail per-layanan dalam booking (multi-layanan).
      * Diurutkan berdasarkan kolom `urutan` (layanan utama = 1).
      */

@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\WebSocketController;
+use App\Http\Controllers\UlasanController;
 
 Route::post('/booking/charge', [BookingController::class, 'charge']);
 Route::get('/booking/nakes-terdekat', [BookingController::class, 'getNearestNakesList']);
@@ -13,6 +14,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/booking/{id}/chat', [WebSocketController::class, 'adminRoomDetail']);
     Route::post('/booking/{id}/chat', [WebSocketController::class, 'sendChatMessage']);
     Route::delete('/booking/{id}/chat-room', [WebSocketController::class, 'closeChatRoom']);
+
+    // Mini Ulasan Pasca Pelayanan Endpoints
+    Route::get('/booking/pending-review', [UlasanController::class, 'getPendingReviews']);
+    Route::post('/booking/{id}/mini-ulasan', [UlasanController::class, 'storeMiniUlasan']);
 
     // Booking Endpoints
     Route::post('/booking', [BookingController::class, 'store']);

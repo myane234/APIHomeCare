@@ -47,6 +47,7 @@ class ContentManagement extends Model
         // Ulasan Section Header
         'ulasan_heading',
         'ulasan_subheading',
+        'mini_ulasan_config',
 
         // Hubungi Kami Page Content
         'hubungi_banner',
@@ -64,7 +65,51 @@ class ContentManagement extends Model
     protected $casts = [
         'footer_socials' => 'array',
         'footer_links' => 'array',
+        'mini_ulasan_config' => 'array',
     ];
+
+    /**
+     * Default konfigurasi Mini Ulasan Pasca Pelayanan
+     */
+    public static function defaultMiniUlasanConfig(): array
+    {
+        return [
+            'is_active' => true,
+            'title' => 'Bagaimana Pelayanan Kami?',
+            'subtitle' => 'Beri tahu kami pengalaman Anda setelah pelayanan selesai untuk membantu kami meningkatkan kualitas layanan.',
+            'rating_labels' => [
+                '1' => 'Sangat Kecewa',
+                '2' => 'Kurang Memuaskan',
+                '3' => 'Cukup Baik',
+                '4' => 'Memuaskan',
+                '5' => 'Sangat Puas & Profesional',
+            ],
+            'quick_tags' => [
+                'Tepat Waktu',
+                'Ramah & Sopan',
+                'Sangat Teliti',
+                'Penjelasan Jelas',
+                'Higienis & Rapi',
+                'Cepat Tanggap',
+            ],
+            'comment_placeholder' => 'Ceritakan pengalaman atau masukan Anda mengenai pelayanan tenaga medis...',
+            'submit_button_text' => 'Kirim Ulasan',
+            'skip_button_text' => 'Nanti Saja',
+            'success_title' => 'Terima Kasih!',
+            'success_message' => 'Ulasan Anda sangat berharga bagi kami dan telah berhasil disimpan.',
+        ];
+    }
+
+    /**
+     * Mengambil konfigurasi mini ulasan dengan merge default values
+     */
+    public function getMiniUlasanFormattedAttribute(): array
+    {
+        $defaults = self::defaultMiniUlasanConfig();
+        $custom = is_array($this->mini_ulasan_config) ? $this->mini_ulasan_config : [];
+
+        return array_merge($defaults, $custom);
+    }
 
     public function getHomeBannerUrlAttribute()
     {

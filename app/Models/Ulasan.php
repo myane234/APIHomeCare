@@ -14,12 +14,15 @@ class Ulasan extends Model
 
     protected $fillable = [
         'id_user',
+        'id_booking',
+        'id_tenaga_medis',
         'nama_pengulas',
         'email',
         'profesi_peran',
         'foto',
         'rating',
         'komentar',
+        'quick_tags',
         'layanan_id',
         'is_published',
         'urutan',
@@ -29,6 +32,7 @@ class Ulasan extends Model
         'rating' => 'integer',
         'is_published' => 'boolean',
         'urutan' => 'integer',
+        'quick_tags' => 'array',
     ];
 
     protected $appends = [
@@ -65,5 +69,21 @@ class Ulasan extends Model
     public function user()
     {
         return $this->belongsTo(Users::class, 'id_user', 'id_user');
+    }
+
+    /**
+     * Relasi ke Booking
+     */
+    public function booking()
+    {
+        return $this->belongsTo(Booking::class, 'id_booking', 'id_booking');
+    }
+
+    /**
+     * Relasi ke Tenaga Medis
+     */
+    public function tenagaMedis()
+    {
+        return $this->belongsTo(TenagaMedis::class, 'id_tenaga_medis', 'id_tenaga_medis');
     }
 }

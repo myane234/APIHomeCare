@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Ulasan;
 use App\Models\ContentManagement;
+use App\Models\Booking;
+use App\Models\TenagaMedis;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -350,5 +352,167 @@ class UlasanController extends Controller
             'success' => true,
             'message' => 'Ulasan berhasil dihapus.',
         ], 200);
+    }
+
+    /**
+     * Authenticated Patient API: Mengecek booking yang berstatus 'Selesai' dan belum diulas (Pending Mini Review)
+     */
+    public function getPendingReviews(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthenticated',
+            ], 401);
+        }
+
+        $pasien = $user->pasien;
+        if (!$pasien) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Tidak ada booking yang memerlukan ulasan',
+                'data'    => [],
+            ], 200);
+        }
+
+        // Cari booking dengan status Selesai yang belum memiliki record ulasan
+        $pendingBookings = Booking::with([
+                'layanan',
+                'tenagaMedis',
+                'layananItems.layanan',
+            ])
+            ->where('id_pasien', $pasien->id_pasien)
+            ->where('status_booking', 'Selesai')
+            ->doesntHave('ulasan')
+            ->orderBy('tanggal_kunjungan', 'desc')
+            ->orderBy('jam_kunjungan', 'desc')
+            ->get();
+
+        $formatted = $pendingBookings->map(function ($booking) {
+            $nakes = $booking->tenagaMedis;
+            $fotoNakes = $nakes?->foto_profile ?? $nakes?->pas_foto;
+            $fotoNakesUrl = $fotoNakes ? (str_starts_with($fotoNakes, 'http') ? $fotoNakes : url(Storage::url($fotoNakes))) : null;
+
+            return [
+                'id_booking'             => $booking->id_booking,
+                'booking_code'           => $booking->booking_code,
+                'tanggal_kunjungan'      => $booking->tanggal_kunjungan,
+                'jam_kunjungan'          => $booking->jam_kunjungan,
+                'id_layanan'             => $booking->id_layanan,
+                'nama_layanan'           => $booking->layanan?->nama_layanan ?? 'Pelayanan Home Care',
+                'tenaga_medis'           => $nakes ? [
+                    'id_tenaga_medis'    => $nakes->id_tenaga_medis,
+                    'nama_lengkap'       => $nakes->nama_lengkap,
+                    'jenis_tenaga_medis' => $nakes->jenis_tenaga_medis,
+                    'foto_url'           => $fotoNakesUrl,
+                ] : null,
+            ];
+        });
+
+        // Ambil konfigurasi UI mini ulasan agar FE bisa langsung render
+        $content = ContentManagement::firstOrCreate([]);
+
+        return response()->json([
+            'success'     => true,
+            'message'     => 'Berhasil memeriksa status ulasan pelayanan',
+            'has_pending' => $formatted->isNotEmpty(),
+            'ui_config'   => $content->mini_ulasan_formatted,
+            'data'        => $formatted,
+        ], 200);
+    }
+
+    /**
+     * Authenticated Patient API: Mengirimkan Mini Ulasan Pasca Pelayanan untuk Booking tertentu
+     */
+    public function storeMiniUlasan(Request $request, $id_booking)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthenticated',
+            ], 401);
+        }
+
+        $booking = Booking::with(['tenagaMedis', 'layanan', 'ulasan'])->find($id_booking);
+
+        if (!$booking) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data booking tidak ditemukan.',
+            ], 404);
+        }
+
+        // Cek kepemilikan booking (jika user adalah pasien)
+        $pasien = $user->pasien;
+        if ($pasien && $booking->id_pasien != $pasien->id_pasien && $user->role !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda tidak memiliki akses untuk mengulas booking ini.',
+            ], 403);
+        }
+
+        // Cek status booking
+        if ($booking->status_booking !== 'Selesai') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Ulasan hanya dapat diberikan setelah pelayanan berstatus Selesai.',
+            ], 422);
+        }
+
+        // Cek apakah booking sudah pernah diulas
+        if ($booking->ulasan) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda sudah memberikan ulasan untuk pelayanan ini.',
+                'data'    => $booking->ulasan,
+            ], 409);
+        }
+
+        $validated = $request->validate([
+            'rating'        => 'required|integer|min:1|max:5',
+            'komentar'      => 'nullable|string',
+            'quick_tags'    => 'nullable|array',
+            'quick_tags.*'  => 'string|max:100',
+            'foto'          => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
+            'nama_pengulas' => 'nullable|string|max:255',
+            'profesi_peran' => 'nullable|string|max:255',
+        ]);
+
+        $namaPengulas = $validated['nama_pengulas'] ?? $pasien?->nama_lengkap ?? $user->name ?? $user->email;
+        $profesiPeran = $validated['profesi_peran'] ?? 'Pasien';
+
+        $fotoPath = null;
+        if ($request->hasFile('foto')) {
+            $fotoPath = $request->file('foto')->store('ulasan', 'public');
+        } else {
+            $fotoPath = $pasien?->avatar ?? $user->avatar;
+        }
+
+        $content = ContentManagement::firstOrCreate([]);
+        $uiConfig = $content->mini_ulasan_formatted;
+
+        $ulasan = Ulasan::create([
+            'id_user'         => $user->id_user,
+            'id_booking'      => $booking->id_booking,
+            'id_tenaga_medis' => $booking->id_tenaga_medis,
+            'layanan_id'      => $booking->id_layanan,
+            'nama_pengulas'   => $namaPengulas,
+            'email'           => $user->email,
+            'profesi_peran'   => $profesiPeran,
+            'foto'            => $fotoPath,
+            'rating'          => $validated['rating'],
+            'komentar'        => $validated['komentar'] ?? 'Pelayanan sangat baik dan memuaskan.',
+            'quick_tags'      => $validated['quick_tags'] ?? [],
+            'is_published'    => true,
+            'urutan'          => 0,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => $uiConfig['success_message'] ?? 'Terima kasih! Ulasan Anda berhasil dikirim.',
+            'data'    => $ulasan->load(['booking', 'tenagaMedis', 'layanan']),
+        ], 201);
     }
 }

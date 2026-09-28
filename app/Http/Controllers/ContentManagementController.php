@@ -305,4 +305,63 @@ class ContentManagementController extends Controller
             ]
         ], 200);
     }
+
+    /**
+     * Public / Client API: Mengambil konfigurasi UI teks dinamis untuk Mini Ulasan Pasca Pelayanan
+     */
+    public function getMiniUlasanConfig()
+    {
+        $content = ContentManagement::firstOrCreate([]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Berhasil mengambil konfigurasi UI Mini Ulasan',
+            'data'    => $content->mini_ulasan_formatted,
+        ], 200);
+    }
+
+    /**
+     * Admin API: Mengupdate konfigurasi UI teks dinamis untuk Mini Ulasan Pasca Pelayanan
+     */
+    public function updateMiniUlasanConfig(Request $request)
+    {
+        $content = ContentManagement::firstOrCreate([]);
+
+        $validated = $request->validate([
+            'is_active'           => ['nullable', 'boolean'],
+            'title'               => ['nullable', 'string', 'max:255'],
+            'subtitle'            => ['nullable', 'string'],
+            'rating_labels'       => ['nullable', 'array'],
+            'rating_labels.1'     => ['nullable', 'string', 'max:100'],
+            'rating_labels.2'     => ['nullable', 'string', 'max:100'],
+            'rating_labels.3'     => ['nullable', 'string', 'max:100'],
+            'rating_labels.4'     => ['nullable', 'string', 'max:100'],
+            'rating_labels.5'     => ['nullable', 'string', 'max:100'],
+            'quick_tags'          => ['nullable', 'array'],
+            'quick_tags.*'        => ['required_with:quick_tags', 'string', 'max:100'],
+            'comment_placeholder' => ['nullable', 'string', 'max:255'],
+            'submit_button_text'  => ['nullable', 'string', 'max:100'],
+            'skip_button_text'    => ['nullable', 'string', 'max:100'],
+            'success_title'       => ['nullable', 'string', 'max:255'],
+            'success_message'     => ['nullable', 'string'],
+        ]);
+
+        // Merge dengan setting yang sudah ada
+        $currentConfig = $content->mini_ulasan_formatted;
+        $mergedConfig = array_merge($currentConfig, array_filter($validated, fn($val) => !is_null($val)));
+
+        // Boolean check jika ada string 'true'/'false'
+        if ($request->has('is_active')) {
+            $mergedConfig['is_active'] = filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN);
+        }
+
+        $content->mini_ulasan_config = $mergedConfig;
+        $content->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Konfigurasi UI Mini Ulasan berhasil diperbarui',
+            'data'    => $content->mini_ulasan_formatted,
+        ], 200);
+    }
 }
