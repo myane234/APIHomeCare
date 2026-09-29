@@ -4,6 +4,8 @@ namespace App\Observers;
 
 use App\Models\Booking;
 use App\Models\Transaksi;
+use App\Services\EmailNotificationService;
+use App\Services\NotificationService;
 use App\Services\PointService;
 use Illuminate\Support\Facades\Log;
 
@@ -12,15 +14,18 @@ use Illuminate\Support\Facades\Log;
  *
  * Memantau perubahan pada model Booking.
  *
- * LOGIKA EARN POIN:
- *  - Poin diberikan saat booking berstatus "Selesai" DAN transaksinya sudah "Lunas".
- *  - Jika booking "Selesai" tapi belum bayar, poin di-skip (tidak ada uang masuk).
- *  - Duplikasi dicegah oleh PointService::earn() via cek PointTransaction.
+ * TRIGGER AKSI (Action-Based):
+ *  1. Booking Selesai -> Kirim Email Invoice ke pasien via Resend.
+ *  2. Booking Selesai -> Kirim In-App Notification ke pasien & nakes.
+ *  3. Booking Selesai & Lunas -> Berikan earn reward point.
  */
 class BookingObserver
 {
-    public function __construct(protected PointService $pointService)
-    {
+    public function __construct(
+        protected PointService $pointService,
+        protected EmailNotificationService $emailService,
+        protected NotificationService $notificationService
+    ) {
     }
 
     /**
@@ -28,12 +33,52 @@ class BookingObserver
      */
     public function updated(Booking $booking): void
     {
-        // Trigger EARN saat status berubah menjadi "Selesai"
+        // Trigger saat status berubah menjadi "Selesai"
         if (
             $booking->wasChanged('status_booking') &&
             $booking->status_booking === 'Selesai'
         ) {
             $this->triggerEarn($booking);
+            $this->triggerInvoiceEmail($booking);
+            $this->triggerInAppNotification($booking);
+        }
+    }
+
+    /**
+     * Trigger pengiriman email invoice resmi ke pasien.
+     */
+    private function triggerInvoiceEmail(Booking $booking): void
+    {
+        try {
+            $this->emailService->sendInvoice($booking, createdBy: 'booking_observer');
+        } catch (\Throwable $e) {
+            Log::error("[BookingObserver] Gagal trigger email invoice #{$booking->id_booking}: {$e->getMessage()}");
+        }
+    }
+
+    /**
+     * Trigger notifikasi in-app ke pasien.
+     */
+    private function triggerInAppNotification(Booking $booking): void
+    {
+        try {
+            $pasien = $booking->pasien;
+            if ($pasien && $pasien->id_user) {
+                $kodeBooking = $booking->kode_booking ?? ('#' . $booking->id_booking);
+                $this->notificationService->send(
+                    userId: $pasien->id_user,
+                    userRole: 'pasien',
+                    title: 'Layanan Selesai & Invoice Telah Terbit',
+                    body: "Pelayanan untuk booking {$kodeBooking} telah selesai. Bukti invoice telah dikirimkan ke email Anda.",
+                    options: [
+                        'action_url' => "/booking/{$booking->id_booking}",
+                        'data'       => ['id_booking' => $booking->id_booking, 'type' => 'booking_selesai'],
+                        'created_by' => 'system',
+                    ]
+                );
+            }
+        } catch (\Throwable $e) {
+            Log::error("[BookingObserver] Gagal trigger in-app notification booking #{$booking->id_booking}: {$e->getMessage()}");
         }
     }
 

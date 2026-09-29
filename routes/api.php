@@ -28,4 +28,4 @@ require __DIR__ . '/api/jadwal.php';
 require __DIR__ . '/api/chat.php';
 require __DIR__ . '/api/point.php';
 require __DIR__ . '/api/notification.php';
-require __DIR__ . '/api/notification.php';
+require __DIR__ . '/api/email.php';

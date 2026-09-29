@@ -23,3 +23,8 @@ Schedule::command('points:expire')
     ->dailyAt('00:05')
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/points-expire.log'));
+
+Schedule::command('emails:process-scheduled')
+    ->everyThirtyMinutes()
+    ->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/scheduled-emails.log'));

@@ -182,7 +182,7 @@ class NotificationController extends Controller
 
         // Guard Admin
         if ($user instanceof \App\Models\Admin) {
-            return [$user->id, 'admin'];
+            return [$user->id_admin, 'admin'];
         }
 
         // Guard Users (pasien atau nakes ditentukan dari role di DB)

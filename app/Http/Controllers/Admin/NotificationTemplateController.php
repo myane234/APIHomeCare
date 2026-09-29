@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Admin;
 use App\Models\Notification;
 use App\Models\NotificationSchedule;
 use App\Models\NotificationTemplate;
-use App\Models\Pasien;
-use App\Models\TenagaMedis;
+use App\Models\Users;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -346,22 +346,31 @@ class NotificationTemplateController extends Controller
         $recipients = [];
 
         if (in_array($role, ['pasien', 'all'])) {
-            $pasiens = Pasien::where('is_active', true)
-                ->select('id_user')
-                ->get();
+            $pasienUserIds = Users::where('is_active', true)
+                ->whereHas('roles', fn ($q) => $q->where('roles.nama_role', 'pasien'))
+                ->pluck('id_user');
 
-            foreach ($pasiens as $p) {
-                $recipients[] = ['user_id' => $p->id_user, 'user_role' => 'pasien'];
+            foreach ($pasienUserIds as $userId) {
+                $recipients[] = ['user_id' => $userId, 'user_role' => 'pasien'];
             }
         }
 
         if (in_array($role, ['nakes', 'all'])) {
-            $nakes = TenagaMedis::where('is_active', true)
-                ->select('id_user')
-                ->get();
+            $nakesUserIds = Users::where('is_active', true)
+                ->whereHas('roles', fn ($q) => $q->where('roles.nama_role', 'nakes'))
+                ->pluck('id_user');
 
-            foreach ($nakes as $n) {
-                $recipients[] = ['user_id' => $n->id_user, 'user_role' => 'nakes'];
+            foreach ($nakesUserIds as $userId) {
+                $recipients[] = ['user_id' => $userId, 'user_role' => 'nakes'];
+            }
+        }
+
+        if (in_array($role, ['admin', 'all'])) {
+            $adminIds = Admin::where('is_active', true)
+                ->pluck('id_admin');
+
+            foreach ($adminIds as $adminId) {
+                $recipients[] = ['user_id' => $adminId, 'user_role' => 'admin'];
             }
         }
 
