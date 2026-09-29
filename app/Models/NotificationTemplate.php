@@ -14,8 +14,11 @@ class NotificationTemplate extends Model
     protected $fillable = [
         'code',
         'name',
+        'target_role',
+        'trigger_type',
         'title',
         'body',
+        'action_url',
         'channel',
         'is_active',
     ];
@@ -23,4 +26,16 @@ class NotificationTemplate extends Model
     protected $casts = [
         'is_active' => 'boolean',
     ];
+
+    // ─── Relationships ────────────────────────────────────────────────────────
+
+    public function schedules()
+    {
+        return $this->hasMany(NotificationSchedule::class, 'template_id');
+    }
+
+    public function notifications()
+    {
+        return $this->hasMany(Notification::class, 'template_id');
+    }
 }
