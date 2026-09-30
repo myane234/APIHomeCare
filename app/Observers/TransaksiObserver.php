@@ -49,12 +49,18 @@ class TransaksiObserver
 
             $kodeBooking = $booking->kode_booking ?? ('#' . $booking->id_booking);
             $totalFormat = 'Rp ' . number_format((float) $transaksi->jumlah_total, 0, ',', '.');
+            $namaLayanan = $booking->layanan?->nama_layanan ?? 'Layanan HomeCare';
 
-            $this->notificationService->send(
+            $this->notificationService->sendByCode(
+                templateCode: 'payment_success',
                 userId: $pasien->id_user,
                 userRole: 'pasien',
-                title: 'Pembayaran Berhasil',
-                body: "Pembayaran sebesar {$totalFormat} untuk booking {$kodeBooking} telah berhasil diterima. Pesanan Anda akan segera diproses.",
+                variables: [
+                    'booking_id'   => $kodeBooking,
+                    'pasien_name'  => $pasien->nama_lengkap ?? 'Pasien',
+                    'amount'       => $totalFormat,
+                    'nama_layanan' => $namaLayanan,
+                ],
                 options: [
                     'action_url' => "/booking/{$booking->id_booking}",
                     'data'       => [

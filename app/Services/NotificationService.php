@@ -264,8 +264,13 @@ class NotificationService
         $replace = [];
 
         foreach ($variables as $key => $value) {
+            $valStr = (string) $value;
+            // Support both ${key} (CMS/JS format) and {key} (Laravel format)
+            $search[]  = '${' . $key . '}';
+            $replace[] = $valStr;
+
             $search[]  = '{' . $key . '}';
-            $replace[] = (string) $value;
+            $replace[] = $valStr;
         }
 
         return str_replace($search, $replace, $text);

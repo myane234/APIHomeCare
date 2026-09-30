@@ -108,17 +108,22 @@ class BookingObserver
     private function triggerBookingCreatedNotification(Booking $booking): void
     {
         try {
-            $booking->loadMissing(['pasien.user', 'tenagaMedis.user']);
+            $booking->loadMissing(['pasien.user', 'tenagaMedis.user', 'layanan']);
             $pasien = $booking->pasien;
             $kodeBooking = $booking->kode_booking ?? ('#' . $booking->id_booking);
+            $namaLayanan = $booking->layanan?->nama_layanan ?? 'Layanan HomeCare';
 
-            // 1. Notifikasi ke Pasien
+            // 1. Notifikasi ke Pasien (booking_created)
             if ($pasien && $pasien->id_user) {
-                $this->notificationService->send(
+                $this->notificationService->sendByCode(
+                    templateCode: 'booking_created',
                     userId: $pasien->id_user,
                     userRole: 'pasien',
-                    title: 'Booking Berhasil Dibuat',
-                    body: "Pesanan booking {$kodeBooking} berhasil dibuat. Silakan selesaikan pembayaran untuk memproses pesanan.",
+                    variables: [
+                        'booking_id'   => $kodeBooking,
+                        'pasien_name'  => $pasien->nama_lengkap ?? 'Pasien',
+                        'nama_layanan' => $namaLayanan,
+                    ],
                     options: [
                         'action_url' => "/booking/{$booking->id_booking}",
                         'data'       => ['id_booking' => $booking->id_booking, 'type' => 'booking_created'],
@@ -127,14 +132,19 @@ class BookingObserver
                 );
             }
 
-            // 2. Notifikasi ke Nakes (jika nakes sudah ditentukan)
+            // 2. Notifikasi ke Nakes jika nakes sudah ditentukan (booking_assigned)
             $nakes = $booking->tenagaMedis;
             if ($nakes && $nakes->id_user) {
-                $this->notificationService->send(
+                $this->notificationService->sendByCode(
+                    templateCode: 'booking_assigned',
                     userId: $nakes->id_user,
                     userRole: 'nakes',
-                    title: 'Pesanan Layanan Baru',
-                    body: "Anda memiliki pesanan layanan baru {$kodeBooking} dari pasien {$pasien?->nama_lengkap}.",
+                    variables: [
+                        'booking_id'   => $kodeBooking,
+                        'nakes_name'   => $nakes->nama_lengkap ?? 'Tenaga Medis',
+                        'pasien_name'  => $pasien?->nama_lengkap ?? 'Pasien',
+                        'nama_layanan' => $namaLayanan,
+                    ],
                     options: [
                         'action_url' => "/nakes/booking/{$booking->id_booking}",
                         'data'       => ['id_booking' => $booking->id_booking, 'type' => 'booking_assigned'],
@@ -153,17 +163,27 @@ class BookingObserver
     private function triggerStatusNotification(Booking $booking, string $title, string $bodySuffix, string $type): void
     {
         try {
-            $booking->loadMissing(['pasien.user', 'tenagaMedis.user']);
+            $booking->loadMissing(['pasien.user', 'tenagaMedis.user', 'layanan']);
             $pasien = $booking->pasien;
+            $nakes  = $booking->tenagaMedis;
             $kodeBooking = $booking->kode_booking ?? ('#' . $booking->id_booking);
+            $namaNakes = $nakes?->nama_lengkap ?? 'Tenaga Medis';
+            $namaLayanan = $booking->layanan?->nama_layanan ?? 'Layanan HomeCare';
+
+            $variables = [
+                'booking_id'   => $kodeBooking,
+                'pasien_name'  => $pasien?->nama_lengkap ?? 'Pasien',
+                'nakes_name'   => $namaNakes,
+                'nama_layanan' => $namaLayanan,
+            ];
 
             // Notifikasi ke Pasien
             if ($pasien && $pasien->id_user) {
-                $this->notificationService->send(
+                $this->notificationService->sendByCode(
+                    templateCode: $type,
                     userId: $pasien->id_user,
                     userRole: 'pasien',
-                    title: $title,
-                    body: "Booking {$kodeBooking}: {$bodySuffix}",
+                    variables: $variables,
                     options: [
                         'action_url' => "/booking/{$booking->id_booking}",
                         'data'       => ['id_booking' => $booking->id_booking, 'status' => $booking->status_booking, 'type' => $type],
@@ -173,13 +193,12 @@ class BookingObserver
             }
 
             // Notifikasi ke Nakes jika status Dibatalkan atau Selesai
-            $nakes = $booking->tenagaMedis;
             if ($nakes && $nakes->id_user && in_array($type, ['booking_dibatalkan', 'booking_selesai'])) {
-                $this->notificationService->send(
+                $this->notificationService->sendByCode(
+                    templateCode: $type,
                     userId: $nakes->id_user,
                     userRole: 'nakes',
-                    title: $title,
-                    body: "Booking {$kodeBooking}: {$bodySuffix}",
+                    variables: $variables,
                     options: [
                         'action_url' => "/nakes/booking/{$booking->id_booking}",
                         'data'       => ['id_booking' => $booking->id_booking, 'status' => $booking->status_booking, 'type' => $type],
