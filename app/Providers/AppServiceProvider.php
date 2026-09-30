@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use App\Models\Booking;
+use App\Models\Transaksi;
 use App\Observers\BookingObserver;
+use App\Observers\TransaksiObserver;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
@@ -17,8 +19,8 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-       
         Booking::observe(BookingObserver::class);
+        Transaksi::observe(TransaksiObserver::class);
 
         
         VerifyEmail::createUrlUsing(function (object $notifiable) {
