@@ -5,6 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\NotificationTemplate;
 use Illuminate\Http\Request;
 
+/**
+ * Controller untuk mengelola template notifikasi.
+ * @group NotificationTemplate
+ */
+
 class NotificationTemplateController extends Controller
 {
     /**
