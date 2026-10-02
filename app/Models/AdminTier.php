@@ -7,10 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class AdminTier extends Model
 {
-    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
+    use HasFactory;
 
     protected $table = 'admin_tiers';
-    protected $primaryKey = 'id_admin_tier'; // Menyesuaikan nama primary key
+    protected $primaryKey = 'id_admin_tier'; 
 
     protected $fillable = [
         'nama_tier',
