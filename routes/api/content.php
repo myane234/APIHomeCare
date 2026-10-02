@@ -19,6 +19,7 @@ Route::prefix('resource/content')->group(function () {
     // Ulasan (Public Read & Submit)
     Route::get('/ulasan', [UlasanController::class, 'indexPublic']);
     Route::post('/ulasan', [UlasanController::class, 'storePublic']);
+    Route::get('/mini-ulasan', [ContentManagementController::class, 'getMiniUlasanConfig']);
 
     // Hubungi Kami (Public Read & Submit Pesan)
     Route::get('/hubungi-kami', [HubungiKamiController::class, 'getContentPublic']);
@@ -38,6 +39,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('resource/content')->g
     Route::post('/mitra', [ContentManagementController::class, 'updateMitra']);
     Route::post('/footer', [ContentManagementController::class, 'updateFooter']);
     Route::post('/ulasan/header', [ContentManagementController::class, 'updateUlasanContent']);
+    Route::post('/mini-ulasan', [ContentManagementController::class, 'updateMiniUlasanConfig']);
 
     // Kategori Artikel CRUD (Admin only)
     Route::post('/artikel/kategori', [KategoriArtikelController::class, 'store']);

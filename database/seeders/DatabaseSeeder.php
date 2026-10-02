@@ -41,6 +41,7 @@ class DatabaseSeeder extends Seeder
             MasterTarifTransportSeeder::class,
             MasterTarifSeeder::class,
             UlasanSeeder::class,
+            NotificationTemplateSeeder::class,
         ]);
 
         Pasien::factory(10)->create();
