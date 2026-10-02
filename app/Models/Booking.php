@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Booking extends Model
 {
-    use HasFactory, \App\Models\Concerns\AuditableSoftDeletes;
+    use HasFactory;
 
     protected $table = 'bookings';
     protected $primaryKey = 'id_booking';
