@@ -47,6 +47,20 @@ class TransaksiObserver
                 return;
             }
 
+            // Guard idempotensi: pastikan tidak mengirim notifikasi duplikat untuk transaksi yang sama
+            $exists = \App\Models\Notification::where('user_id', $pasien->id_user)
+                ->where('user_role', 'pasien')
+                ->where(function ($q) use ($transaksi) {
+                    $q->whereJsonContains('data->id_transaksi', $transaksi->id_transaksi)
+                      ->orWhereJsonContains('data->id_transaksi', (string) $transaksi->id_transaksi);
+                })
+                ->exists();
+
+            if ($exists) {
+                Log::info("[TransaksiObserver] Notifikasi payment_success untuk transaksi #{$transaksi->id_transaksi} sudah ada, skip duplicate.");
+                return;
+            }
+
             $kodeBooking = $booking->kode_booking ?? ('#' . $booking->id_booking);
             $totalFormat = 'Rp ' . number_format((float) $transaksi->jumlah_total, 0, ',', '.');
             $namaLayanan = $booking->layanan?->nama_layanan ?? 'Layanan HomeCare';
