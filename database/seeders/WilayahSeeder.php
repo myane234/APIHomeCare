@@ -43,80 +43,68 @@ class WilayahSeeder extends Seeder
             $progress('source_loaded', ['total_provinces' => count($provinces)]);
         }
 
-        // Iterasi Provinsi
+        $now = now();
+        $provBatch = [];
+        $cityBatch = [];
+        $districtBatch = [];
+        $villageBatch = [];
+
         foreach ($provinces as $prov) {
-            $this->command?->info("=== Provinsi: {$prov['name']} ===");
-            
-            if ($progress) {
-                $progress('province_started', ['province' => $prov]);
-            }
+            $provBatch[] = [
+                'id_provinsi'   => $prov['id'],
+                'nama_provinsi' => $prov['name'],
+                'is_active'     => true,
+                'created_at'    => $now,
+                'updated_at'    => $now,
+            ];
 
-            // 1. Save / Update Provinsi
-            WilayahLayanan::updateOrCreate(
-                ['id_provinsi' => $prov['id']],
-                [
-                    'nama_provinsi' => $prov['name'],
-                    'is_active'     => true
-                ]
-            );
+            foreach ($prov['regencies'] ?? [] as $city) {
+                $cityBatch[] = [
+                    'id_kota'     => $city['id'],
+                    'id_provinsi' => $prov['id'],
+                    'nama_kota'   => $city['name'],
+                    'created_at'  => $now,
+                    'updated_at'  => $now,
+                ];
 
-            $regencies = $prov['regencies'] ?? [];
+                foreach ($city['districts'] ?? [] as $district) {
+                    $districtBatch[] = [
+                        'id_kecamatan'   => $district['id'],
+                        'regency_id'     => $city['id'],
+                        'nama_kecamatan' => $district['name'],
+                        'created_at'     => $now,
+                        'updated_at'     => $now,
+                    ];
 
-            // 2. Iterasi Kabupaten/Kota
-            foreach ($regencies as $city) {
-                KotaKabupaten::updateOrCreate(
-                    ['id_kota' => $city['id']],
-                    [
-                        'nama_kota'   => $city['name'],
-                        'id_provinsi' => $prov['id']
-                    ]
-                );
-
-                $districts = $city['districts'] ?? [];
-
-                // 3. Iterasi Kecamatan
-                foreach ($districts as $district) {
-                    Kecamatan::updateOrCreate(
-                        ['id_kecamatan' => $district['id']],
-                        [
-                            'regency_id'     => $city['id'],
-                            'nama_kecamatan' => $district['name'],
-                        ]
-                    );
-
-                    $villages = $district['villages'] ?? [];
-                    $kelurahanBatch = [];
-
-                    // Prepare batch data untuk Kelurahan per kecamatan
-                    foreach ($villages as $village) {
-                        $kelurahanBatch[] = [
+                    foreach ($district['villages'] ?? [] as $village) {
+                        $villageBatch[] = [
                             'id_kelurahan'   => $village['id'],
                             'id_kecamatan'   => $district['id'],
                             'nama_kelurahan' => $village['name'],
-                            'created_at'     => now(),
-                            'updated_at'     => now(),
+                            'created_at'     => $now,
+                            'updated_at'     => $now,
                         ];
                     }
-
-                    // 4. Upsert Kelurahan sekaligus per Kecamatan (lebih cepat dari updateOrCreate satu per satu)
-                    if (!empty($kelurahanBatch)) {
-                        Kelurahan::upsert(
-                            $kelurahanBatch,
-                            ['id_kelurahan'],
-                            ['id_kecamatan', 'nama_kelurahan', 'updated_at']
-                        );
-                    }
-                }
-
-                $this->command?->info("  -> Selesai: {$city['name']}");
-
-                if ($progress) {
-                    $progress('city_processed', [
-                        'city' => $city, 
-                        'districts' => count($districts)
-                    ]);
                 }
             }
+        }
+
+        $this->command?->info("Upserting " . count($provBatch) . " provinsi...");
+        WilayahLayanan::upsert($provBatch, ['id_provinsi'], ['nama_provinsi', 'is_active', 'updated_at']);
+
+        $this->command?->info("Upserting " . count($cityBatch) . " kota/kabupaten...");
+        foreach (array_chunk($cityBatch, 250) as $chunk) {
+            KotaKabupaten::upsert($chunk, ['id_kota'], ['id_provinsi', 'nama_kota', 'updated_at']);
+        }
+
+        $this->command?->info("Upserting " . count($districtBatch) . " kecamatan...");
+        foreach (array_chunk($districtBatch, 500) as $chunk) {
+            Kecamatan::upsert($chunk, ['id_kecamatan'], ['regency_id', 'nama_kecamatan', 'updated_at']);
+        }
+
+        $this->command?->info("Upserting " . count($villageBatch) . " kelurahan...");
+        foreach (array_chunk($villageBatch, 1000) as $chunk) {
+            Kelurahan::upsert($chunk, ['id_kelurahan'], ['id_kecamatan', 'nama_kelurahan', 'updated_at']);
         }
 
         $this->command?->info("==================================================");
