@@ -148,12 +148,10 @@ class NotificationService
         array $variables = [],
         array $options = []
     ): ?Notification {
-        $template = NotificationTemplate::where('code', $templateCode)
-            ->where('is_active', true)
-            ->first();
+        $template = $this->findTemplateForRole($templateCode, $userRole);
 
         if (!$template) {
-            Log::warning("NotificationService: template '{$templateCode}' tidak ditemukan atau tidak aktif.");
+            Log::warning("NotificationService: template '{$templateCode}' (role: {$userRole}) tidak ditemukan atau tidak aktif.");
             return null;
         }
 
@@ -179,19 +177,26 @@ class NotificationService
         array $recipients,
         array $options = []
     ): int {
-        $template = NotificationTemplate::where('code', $templateCode)
-            ->where('is_active', true)
-            ->first();
-
-        if (!$template) {
-            Log::warning("NotificationService: template '{$templateCode}' tidak ditemukan atau tidak aktif.");
+        if (empty($recipients)) {
             return 0;
         }
 
         $now  = now();
         $rows = [];
+        $loadedTemplates = [];
 
         foreach ($recipients as $recipient) {
+            $userRole = $recipient['user_role'] ?? 'pasien';
+            if (!array_key_exists($userRole, $loadedTemplates)) {
+                $loadedTemplates[$userRole] = $this->findTemplateForRole($templateCode, $userRole);
+            }
+
+            $template = $loadedTemplates[$userRole];
+            if (!$template) {
+                Log::warning("NotificationService: template '{$templateCode}' (role: {$userRole}) tidak ditemukan atau tidak aktif.");
+                continue;
+            }
+
             $variables = $recipient['variables'] ?? [];
             $rows[] = [
                 'user_id'    => $recipient['user_id'],
@@ -209,6 +214,10 @@ class NotificationService
             ];
         }
 
+        if (empty($rows)) {
+            return 0;
+        }
+
         $inserted = 0;
         $chunks   = array_chunk($rows, 500);
 
@@ -221,7 +230,8 @@ class NotificationService
 
         // Broadcast per penerima
         try {
-            $latestNotifs = Notification::where('template_id', $template->id)
+            $templateIds = array_filter(array_map(fn($t) => $t?->id, $loadedTemplates));
+            $latestNotifs = Notification::whereIn('template_id', $templateIds)
                 ->where('created_at', '>=', now()->subSeconds(5))
                 ->whereIn('user_id', array_column($recipients, 'user_id'))
                 ->orderByDesc('id')
@@ -236,6 +246,61 @@ class NotificationService
         }
 
         return $inserted;
+    }
+
+    /**
+     * Cari template notifikasi terbaik yang sesuai dengan kode dan target role penerima.
+     * Mendukung pemencilan kode unik CMS seperti 'booking_selesai_nakes' atau '.booking_selesai'.
+     */
+    public function findTemplateForRole(string $templateCode, string $userRole): ?NotificationTemplate
+    {
+        $cleanCode = ltrim($templateCode, '.');
+        $userRole  = strtolower($userRole);
+
+        $possibleCodes = [
+            $cleanCode,
+            "{$cleanCode}_{$userRole}",
+            ".{$cleanCode}",
+            ".{$cleanCode}_{$userRole}",
+        ];
+
+        $templates = NotificationTemplate::where('is_active', true)
+            ->whereIn('code', $possibleCodes)
+            ->get();
+
+        if ($templates->isEmpty()) {
+            return null;
+        }
+
+        return $templates->sort(function ($a, $b) use ($cleanCode, $userRole) {
+            $scoreA = $this->calculateTemplateScore($a, $cleanCode, $userRole);
+            $scoreB = $this->calculateTemplateScore($b, $cleanCode, $userRole);
+            return $scoreA <=> $scoreB;
+        })->first();
+    }
+
+    private function calculateTemplateScore(NotificationTemplate $template, string $code, string $role): int
+    {
+        $tRole = strtolower($template->target_role ?? '');
+        $uRole = strtolower($role);
+        $cleanTemplateCode = ltrim($template->code, '.');
+
+        if ($cleanTemplateCode === "{$code}_{$uRole}" && $tRole === $uRole) {
+            return 1;
+        }
+        if ($cleanTemplateCode === "{$code}_{$uRole}") {
+            return 2;
+        }
+        if ($cleanTemplateCode === $code && $tRole === $uRole) {
+            return 3;
+        }
+        if ($cleanTemplateCode === $code && $tRole === 'all') {
+            return 4;
+        }
+        if ($cleanTemplateCode === $code && empty($tRole)) {
+            return 5;
+        }
+        return 99;
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
