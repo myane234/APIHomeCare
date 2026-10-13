@@ -37,12 +37,12 @@ class TransaksiObserver
     private function triggerPaymentSuccessNotification(Transaksi $transaksi): void
     {
         try {
-            $booking = $transaksi->booking;
+            $booking = $transaksi->booking ?? \App\Models\Booking::find($transaksi->id_booking);
             if (!$booking) {
                 return;
             }
 
-            $pasien = $booking->pasien;
+            $pasien = $booking->pasien ?? \App\Models\Pasien::find($booking->id_pasien);
             if (!$pasien || !$pasien->id_user) {
                 return;
             }
@@ -76,7 +76,7 @@ class TransaksiObserver
                     'nama_layanan' => $namaLayanan,
                 ],
                 options: [
-                    'action_url' => "/booking/{$booking->id_booking}",
+                    'action_url' => "/booking/aktif?id={$booking->id_booking}",
                     'data'       => [
                         'id_booking'   => $booking->id_booking,
                         'id_transaksi' => $transaksi->id_transaksi,
