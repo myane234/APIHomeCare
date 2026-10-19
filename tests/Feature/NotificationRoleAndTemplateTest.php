@@ -28,10 +28,15 @@ class NotificationRoleAndTemplateTest extends TestCase
     {
         parent::setUp();
 
-        \Illuminate\Support\Facades\DB::table('master_provinsi')->insertOrIgnore([
-            'id_provinsi' => 1,
-            'nama_provinsi' => 'DKI Jakarta',
-        ]);
+        $prov = \App\Models\WilayahLayanan::first();
+        if (!$prov) {
+            $prov = \App\Models\WilayahLayanan::create([
+                'id_provinsi' => 1,
+                'nama_provinsi' => 'DKI Jakarta',
+                'is_active' => true,
+            ]);
+        }
+        $idWilayah = $prov->id_provinsi;
 
         Role::firstOrCreate(['nama_role' => 'pasien']);
         Role::firstOrCreate(['nama_role' => 'nakes']);
@@ -54,7 +59,7 @@ class NotificationRoleAndTemplateTest extends TestCase
         $this->nakesProfile = TenagaMedis::create([
             'id_user'            => $this->dualRoleUser->id_user,
             'id_pasien'          => $this->pasienProfile->id_pasien,
-            'id_wilayah_layanan' => 1,
+            'id_wilayah_layanan' => $idWilayah,
             'nama_lengkap'       => 'Nakes Dual Role',
             'nama_panggilan'     => 'Nakes',
             'jenis_kelamin'      => 'L',
@@ -86,26 +91,29 @@ class NotificationRoleAndTemplateTest extends TestCase
      */
     public function test_send_by_code_selects_correct_target_role_template()
     {
-        // Create 2 templates: one base 'booking_selesai' (pasien) and one role-suffixed 'booking_selesai_nakes' (nakes)
-        NotificationTemplate::create([
-            'code'         => 'booking_selesai',
-            'name'         => 'Booking Selesai Pasien',
-            'target_role'  => 'pasien',
-            'title'        => 'Layanan Pasien Selesai',
-            'body'         => 'Terima kasih telah menggunakan layanan kami.',
-            'action_url'   => '/booking/123',
-            'is_active'    => true,
-        ]);
+        NotificationTemplate::updateOrCreate(
+            ['code' => 'booking_selesai'],
+            [
+                'name'         => 'Booking Selesai Pasien',
+                'target_role'  => 'pasien',
+                'title'        => 'Layanan Pasien Selesai',
+                'body'         => 'Terima kasih telah menggunakan layanan kami.',
+                'action_url'   => '/booking/123',
+                'is_active'    => true,
+            ]
+        );
 
-        NotificationTemplate::create([
-            'code'         => 'booking_selesai_nakes',
-            'name'         => 'Booking Selesai Nakes',
-            'target_role'  => 'nakes',
-            'title'        => 'Tindakan Nakes Selesai',
-            'body'         => 'Laporan tindakan Anda telah disimpan.',
-            'action_url'   => '/nakes/booking/123',
-            'is_active'    => true,
-        ]);
+        NotificationTemplate::updateOrCreate(
+            ['code' => 'booking_selesai_nakes'],
+            [
+                'name'         => 'Booking Selesai Nakes',
+                'target_role'  => 'nakes',
+                'title'        => 'Tindakan Nakes Selesai',
+                'body'         => 'Laporan tindakan Anda telah disimpan.',
+                'action_url'   => '/nakes/booking/123',
+                'is_active'    => true,
+            ]
+        );
 
         $service = new NotificationService();
 
@@ -183,14 +191,16 @@ class NotificationRoleAndTemplateTest extends TestCase
      */
     public function test_transaksi_payment_success_notification_and_idempotency()
     {
-        NotificationTemplate::create([
-            'code'         => 'payment_success',
-            'name'         => 'Pembayaran Berhasil',
-            'target_role'  => 'pasien',
-            'title'        => 'Pembayaran Berhasil',
-            'body'         => 'Pembayaran Rp {amount} untuk {booking_id} berhasil.',
-            'is_active'    => true,
-        ]);
+        NotificationTemplate::updateOrCreate(
+            ['code' => 'payment_success'],
+            [
+                'name'         => 'Pembayaran Berhasil',
+                'target_role'  => 'pasien',
+                'title'        => 'Pembayaran Berhasil',
+                'body'         => 'Pembayaran Rp {amount} untuk {booking_id} berhasil.',
+                'is_active'    => true,
+            ]
+        );
 
         $booking = Booking::create([
             'id_pasien'          => $this->pasienProfile->id_pasien,
@@ -222,6 +232,7 @@ class NotificationRoleAndTemplateTest extends TestCase
 
         $countBefore = Notification::where('user_id', $this->dualRoleUser->id_user)
             ->where('user_role', 'pasien')
+            ->where('title', 'Pembayaran Berhasil')
             ->count();
         $this->assertEquals(1, $countBefore);
 
@@ -231,6 +242,7 @@ class NotificationRoleAndTemplateTest extends TestCase
 
         $countAfter = Notification::where('user_id', $this->dualRoleUser->id_user)
             ->where('user_role', 'pasien')
+            ->where('title', 'Pembayaran Berhasil')
             ->count();
 
         // Count should remain 1 (no duplicate created)

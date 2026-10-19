@@ -187,16 +187,23 @@ class NotificationController extends Controller
         }
 
         // Cek role yang diminta via query param (?role=pasien), body, atau header
-        $requestedRole = strtolower(
-            $request->query('role')
+        $rawRole = $request->query('role')
             ?? $request->input('role')
             ?? $request->header('X-Active-Role')
-            ?? $request->header('X-Role')
-            ?? ''
-        );
+            ?? $request->header('X-Role');
+
+        $requestedRole = !empty($rawRole) ? strtolower(trim((string) $rawRole)) : '';
 
         /** @var \App\Models\Users $user */
-        $roles = array_map('strtolower', $user->roles()->pluck('roles.nama_role')->toArray());
+        $roles = DB::table('user_roles')
+            ->where('id_user', $user->id_user)
+            ->pluck('nama_role')
+            ->map(fn($r) => strtolower(trim((string) $r)))
+            ->toArray();
+
+        if (empty($roles)) {
+            $roles = array_map('strtolower', $user->roles()->pluck('roles.nama_role')->toArray());
+        }
 
         // Jika requestedRole ada dan user memang memiliki role tersebut
         if (!empty($requestedRole) && in_array($requestedRole, $roles)) {

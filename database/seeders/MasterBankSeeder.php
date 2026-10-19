@@ -41,18 +41,17 @@ class MasterBankSeeder extends Seeder
         ];
 
         foreach ($banks as $bank) {
-            DB::table('master_bank')->insertOrIgnore([
-                'nama_bank'  => $bank['nama_bank'],
-                'kode_bank'  => $bank['kode_bank'],
-                'gambar'     => null,
-                'is_active'  => $bank['is_active'],
-                'created_by' => null,
-                'deleted_by' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+            DB::table('master_bank')->updateOrInsert(
+                ['kode_bank' => $bank['kode_bank']],
+                [
+                    'nama_bank'  => $bank['nama_bank'],
+                    'gambar'     => null,
+                    'is_active'  => $bank['is_active'],
+                    'updated_at' => now(),
+                ]
+            );
         }
 
-        $this->command->info('✅ MasterBankSeeder: ' . count($banks) . ' bank berhasil diseed.');
+        $this->command?->info('✅ MasterBankSeeder: ' . count($banks) . ' bank berhasil diseed.');
     }
 }

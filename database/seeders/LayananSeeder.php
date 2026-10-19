@@ -185,13 +185,20 @@ class LayananSeeder extends Seeder
             }
 
             // Tentukan path gambar
+            $filename = basename($service['source_image']);
             $sourcePath = base_path('../FEHomeCare/public/images/' . $service['source_image']);
             $fotoPath = 'layanan/default.jpg'; // fallback
 
             if (file_exists($sourcePath)) {
-                $filename = basename($sourcePath);
                 $destPath = 'layanan/' . $filename;
                 Storage::disk('public')->put($destPath, file_get_contents($sourcePath));
+                $fotoPath = $destPath;
+            } elseif (Storage::disk('public')->exists('layanan/' . $filename)) {
+                $fotoPath = 'layanan/' . $filename;
+            } elseif (file_exists(base_path('../smarthomecare/cms-admin/public/images/' . $service['source_image']))) {
+                $cmsPath = base_path('../smarthomecare/cms-admin/public/images/' . $service['source_image']);
+                $destPath = 'layanan/' . $filename;
+                Storage::disk('public')->put($destPath, file_get_contents($cmsPath));
                 $fotoPath = $destPath;
             }
 

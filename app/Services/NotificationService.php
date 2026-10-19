@@ -158,10 +158,18 @@ class NotificationService
         $title = $this->parsePlaceholders($template->title, $variables);
         $body  = $this->parsePlaceholders($template->body, $variables);
 
-        return $this->send($userId, $userRole, $title, $body, array_merge([
+        $actionUrl = $options['action_url'] ?? $template->action_url;
+        if (!empty($actionUrl)) {
+            $actionUrl = $this->parsePlaceholders($actionUrl, $variables);
+        }
+
+        $mergedOptions = array_merge([
             'template_id' => $template->id,
-            'action_url'  => $template->action_url,
-        ], $options));
+        ], $options, [
+            'action_url' => $actionUrl,
+        ]);
+
+        return $this->send($userId, $userRole, $title, $body, $mergedOptions);
     }
 
     /**
@@ -197,14 +205,17 @@ class NotificationService
                 continue;
             }
 
-            $variables = $recipient['variables'] ?? [];
+            $variables    = $recipient['variables'] ?? [];
+            $rawActionUrl = $options['action_url'] ?? $template->action_url;
+            $actionUrl    = !empty($rawActionUrl) ? $this->parsePlaceholders($rawActionUrl, $variables) : null;
+
             $rows[] = [
                 'user_id'    => $recipient['user_id'],
                 'user_role'  => $recipient['user_role'],
                 'template_id'=> $template->id,
                 'title'      => $this->parsePlaceholders($template->title, $variables),
                 'body'       => $this->parsePlaceholders($template->body, $variables),
-                'action_url' => $options['action_url'] ?? $template->action_url,
+                'action_url' => $actionUrl,
                 'data'       => isset($options['data']) ? json_encode($options['data']) : null,
                 'is_read'    => false,
                 'created_by' => $options['created_by'] ?? 'system',
@@ -272,7 +283,15 @@ class NotificationService
             return null;
         }
 
-        return $templates->sort(function ($a, $b) use ($cleanCode, $userRole) {
+        $compatible = $templates->filter(function ($t) use ($cleanCode, $userRole) {
+            return $this->calculateTemplateScore($t, $cleanCode, $userRole) < 90;
+        });
+
+        if ($compatible->isEmpty()) {
+            return null;
+        }
+
+        return $compatible->sort(function ($a, $b) use ($cleanCode, $userRole) {
             $scoreA = $this->calculateTemplateScore($a, $cleanCode, $userRole);
             $scoreB = $this->calculateTemplateScore($b, $cleanCode, $userRole);
             return $scoreA <=> $scoreB;
@@ -281,8 +300,8 @@ class NotificationService
 
     private function calculateTemplateScore(NotificationTemplate $template, string $code, string $role): int
     {
-        $tRole = strtolower($template->target_role ?? '');
-        $uRole = strtolower($role);
+        $tRole = strtolower(trim($template->target_role ?? ''));
+        $uRole = strtolower(trim($role));
         $cleanTemplateCode = ltrim($template->code, '.');
 
         if ($cleanTemplateCode === "{$code}_{$uRole}" && $tRole === $uRole) {
