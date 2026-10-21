@@ -27,6 +27,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/booking/transaksi/{id_transaksi}', [BookingController::class, 'checkStatus']);
     Route::get('/booking/{id}/laporan', [BookingController::class, 'laporan']);
     Route::get('/booking/{id}/payment-details', [BookingController::class, 'getPaymentDetails']);
+    Route::post('/booking/kalkulasi-harga', [BookingController::class, 'kalkulasiHarga']); // Preview harga akhir berdasarkan metode pembayaran
     Route::get('/booking/{booking_code}/biaya-tambahan', [BookingController::class, 'additionalBhpPaymentStatus']);
     Route::post('/booking/charge-biaya-tambahan', [BookingController::class, 'chargeAdditionalBhp']);
     Route::get('/booking/{id}', [BookingController::class, 'show']);

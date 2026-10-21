@@ -1378,6 +1378,172 @@ class BookingController extends Controller
 
 
     /**
+     * Kalkulasi Harga Akhir Berdasarkan Metode Pembayaran
+     *
+     * Menghitung rincian biaya akhir dari sebuah booking berdasarkan metode pembayaran
+     * yang dipilih pasien. API ini TIDAK membuat transaksi atau memanggil Midtrans —
+     * hanya kalkulasi preview sebelum pasien konfirmasi pembayaran.
+     *
+     * @group Booking Management
+     * @authenticated
+     *
+     * @bodyParam id_booking integer required ID booking yang ingin dikalkulasi. Example: 1
+     * @bodyParam id_metode integer required ID metode pembayaran dari master_metode_pembayaran. Example: 3
+     *
+     * @response 200 {
+     *   "success": true,
+     *   "message": "Kalkulasi harga berhasil",
+     *   "data": {
+     *     "id_booking": 1,
+     *     "booking_code": "B-261021-0000001",
+     *     "metode_pembayaran": {
+     *       "id_metode": 3,
+     *       "nama_metode": "QRIS",
+     *       "payment_type": "qris",
+     *       "tipe_potongan": "persen",
+     *       "nilai_potongan": "0.70",
+     *       "logo": "http://example.com/storage/metode_pembayaran/qris.png"
+     *     },
+     *     "rincian_biaya": {
+     *       "sl": 150000,
+     *       "sb": 20000,
+     *       "st": 15000,
+     *       "ba": 5000,
+     *       "ppn": 10000,
+     *       "total_dasar": 200000,
+     *       "biaya_metode_pembayaran": 1400,
+     *       "keterangan_biaya_metode": "0.7% dari total dasar"
+     *     },
+     *     "total_akhir": 201400,
+     *     "total_akhir_format": "Rp 201.400"
+     *   }
+     * }
+     *
+     * @response 403 {
+     *   "success": false,
+     *   "message": "Anda tidak memiliki akses ke booking ini."
+     * }
+     *
+     * @response 404 {
+     *   "success": false,
+     *   "message": "Booking atau data transaksi tidak ditemukan."
+     * }
+     *
+     * @response 422 {
+     *   "success": false,
+     *   "message": "Metode pembayaran tidak tersedia atau sedang dinonaktifkan."
+     * }
+     */
+    public function kalkulasiHarga(Request $request)
+    {
+        $validated = $request->validate([
+            'id_booking' => 'required|exists:bookings,id_booking',
+            'id_metode'  => 'required|exists:master_metode_pembayaran,id_metode',
+        ]);
+
+        // Pastikan booking milik pasien yang login
+        $user   = $request->user();
+        $pasien = $user?->pasien;
+
+        $booking = Booking::with(['transaksi', 'pasien'])
+            ->find($validated['id_booking']);
+
+        if (!$booking || !$booking->transaksi) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking atau data transaksi tidak ditemukan.',
+            ], 404);
+        }
+
+        // Pastikan booking milik pasien yang sedang login (jika bukan admin/nakes)
+        if ($pasien && $booking->id_pasien !== $pasien->id_pasien) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda tidak memiliki akses ke booking ini.',
+            ], 403);
+        }
+
+        // Ambil metode pembayaran dan pastikan aktif
+        $metode = MasterMetodePembayaran::with('kategori')
+            ->where('id_metode', $validated['id_metode'])
+            ->where('is_active', true)
+            ->whereHas('kategori', fn($q) => $q->where('is_active', true))
+            ->first();
+
+        if (!$metode) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Metode pembayaran tidak tersedia atau sedang dinonaktifkan.',
+            ], 422);
+        }
+
+        $transaksi = $booking->transaksi;
+
+        // Hitung total dasar (konsisten dengan logika di fungsi charge)
+        $stTransport  = (float) $transaksi->st;
+        $totalDasar   = (float) $transaksi->sl
+                      + (float) $transaksi->sb
+                      + $stTransport
+                      + (float) $transaksi->ba
+                      + (float) $transaksi->ppn;
+
+        if ($totalDasar <= 0) {
+            $totalDasar = max(0, (float) $transaksi->jumlah_total - (float) ($transaksi->sb_tambahan ?? 0));
+        }
+
+        // Hitung biaya tambahan dari metode pembayaran
+        $nilaiPotongan = max(0, (float) $metode->nilai_potongan);
+        $biayaMetode   = $metode->tipe_potongan === 'persen'
+            ? $totalDasar * min(100, $nilaiPotongan) / 100
+            : $nilaiPotongan;
+
+        $totalAkhir = (int) round($totalDasar + $biayaMetode);
+
+        // Keterangan biaya metode untuk tampilan
+        if ($metode->tipe_potongan === 'persen') {
+            $keteranganBiaya = $nilaiPotongan . '% dari total dasar';
+        } else {
+            $keteranganBiaya = $nilaiPotongan > 0
+                ? 'Biaya tetap Rp ' . number_format($nilaiPotongan, 0, ',', '.')
+                : 'Gratis (tidak ada biaya tambahan)';
+        }
+
+        // Format logo
+        $logoUrl = $metode->logo
+            ? url(\Illuminate\Support\Facades\Storage::url($metode->logo))
+            : null;
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Kalkulasi harga berhasil',
+            'data'    => [
+                'id_booking'   => $booking->id_booking,
+                'booking_code' => $booking->booking_code,
+                'metode_pembayaran' => [
+                    'id_metode'      => $metode->id_metode,
+                    'nama_metode'    => $metode->nama_metode,
+                    'payment_type'   => $metode->payment_type,
+                    'tipe_potongan'  => $metode->tipe_potongan,
+                    'nilai_potongan' => $metode->nilai_potongan,
+                    'logo'           => $logoUrl,
+                ],
+                'rincian_biaya' => [
+                    'sl'                      => (float) $transaksi->sl,
+                    'sb'                      => (float) $transaksi->sb,
+                    'st'                      => $stTransport,
+                    'ba'                      => (float) $transaksi->ba,
+                    'ppn'                     => (float) $transaksi->ppn,
+                    'total_dasar'             => $totalDasar,
+                    'biaya_metode_pembayaran' => round($biayaMetode),
+                    'keterangan_biaya_metode' => $keteranganBiaya,
+                ],
+                'total_akhir'        => $totalAkhir,
+                'total_akhir_format' => 'Rp ' . number_format($totalAkhir, 0, ',', '.'),
+            ],
+        ]);
+    }
+
+    /**
      * Step 2: API Direct Midtrans Charge (Eksekusi Pembayaran via Core API)
      * POST /api/booking/charge
      */
