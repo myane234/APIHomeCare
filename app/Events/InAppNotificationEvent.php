@@ -39,6 +39,8 @@ class InAppNotificationEvent implements ShouldBroadcast
 
         $this->payload = [
             'id'         => $notification->id,
+            'user_id'    => $notification->user_id,
+            'user_role'  => $notification->user_role,
             'title'      => $notification->title,
             'body'       => $notification->body,
             'action_url' => $notification->action_url,

@@ -125,7 +125,7 @@ class BookingObserver
                         'nama_layanan' => $namaLayanan,
                     ],
                     options: [
-                        'action_url' => "/booking/{$booking->id_booking}",
+                        'action_url' => "/booking/aktif?id={$booking->id_booking}",
                         'data'       => ['id_booking' => $booking->id_booking, 'type' => 'booking_created'],
                         'created_by' => 'system',
                     ]
@@ -146,7 +146,7 @@ class BookingObserver
                         'nama_layanan' => $namaLayanan,
                     ],
                     options: [
-                        'action_url' => "/nakes/booking/{$booking->id_booking}",
+                        'action_url' => '/nakes/dashboard',
                         'data'       => ['id_booking' => $booking->id_booking, 'type' => 'booking_assigned'],
                         'created_by' => 'system',
                     ]
@@ -177,6 +177,11 @@ class BookingObserver
                 'nama_layanan' => $namaLayanan,
             ];
 
+            // Tentukan action_url yang valid untuk pasien
+            $pasienActionUrl = in_array($type, ['booking_selesai', 'booking_dibatalkan'])
+                ? "/transaksi/{$booking->id_booking}"
+                : "/booking/aktif?id={$booking->id_booking}";
+
             // Notifikasi ke Pasien
             if ($pasien && $pasien->id_user) {
                 $this->notificationService->sendByCode(
@@ -185,7 +190,7 @@ class BookingObserver
                     userRole: 'pasien',
                     variables: $variables,
                     options: [
-                        'action_url' => "/booking/{$booking->id_booking}",
+                        'action_url' => $pasienActionUrl,
                         'data'       => ['id_booking' => $booking->id_booking, 'status' => $booking->status_booking, 'type' => $type],
                         'created_by' => 'system',
                     ]
@@ -194,13 +199,17 @@ class BookingObserver
 
             // Notifikasi ke Nakes jika status Dibatalkan atau Selesai
             if ($nakes && $nakes->id_user && in_array($type, ['booking_dibatalkan', 'booking_selesai'])) {
+                $nakesActionUrl = $type === 'booking_selesai'
+                    ? "/nakes/riwayat-kunjungan/detail?id={$booking->id_booking}"
+                    : '/nakes/riwayat-kunjungan';
+
                 $this->notificationService->sendByCode(
                     templateCode: $type,
                     userId: $nakes->id_user,
                     userRole: 'nakes',
                     variables: $variables,
                     options: [
-                        'action_url' => "/nakes/booking/{$booking->id_booking}",
+                        'action_url' => $nakesActionUrl,
                         'data'       => ['id_booking' => $booking->id_booking, 'status' => $booking->status_booking, 'type' => $type],
                         'created_by' => 'system',
                     ]

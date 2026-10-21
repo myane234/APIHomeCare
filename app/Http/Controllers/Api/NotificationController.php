@@ -173,6 +173,7 @@ class NotificationController extends Controller
      * Resolve user_id dan user_role dari user yang sedang login.
      *
      * Mendukung multi-guard: Users (pasien/nakes), Admin.
+     * Mendukung penentuan active role via query parameter (?role=pasien/nakes) atau header X-Active-Role.
      *
      * @return array  [int $userId, string $userRole]
      */
@@ -185,11 +186,34 @@ class NotificationController extends Controller
             return [$user->id_admin, 'admin'];
         }
 
-        // Guard Users (pasien atau nakes ditentukan dari role di DB)
-        /** @var \App\Models\Users $user */
-        $roles = $user->roles()->pluck('roles.nama_role')->toArray();
+        // Cek role yang diminta via query param (?role=pasien), body, atau header
+        $rawRole = $request->query('role')
+            ?? $request->input('role')
+            ?? $request->header('X-Active-Role')
+            ?? $request->header('X-Role');
 
-        if (in_array('nakes', $roles)) {
+        $requestedRole = !empty($rawRole) ? strtolower(trim((string) $rawRole)) : '';
+
+        /** @var \App\Models\Users $user */
+        $roles = DB::table('user_roles')
+            ->where('id_user', $user->id_user)
+            ->pluck('nama_role')
+            ->map(fn($r) => strtolower(trim((string) $r)))
+            ->toArray();
+
+        if (empty($roles)) {
+            $roles = array_map('strtolower', $user->roles()->pluck('roles.nama_role')->toArray());
+        }
+
+        // Jika requestedRole ada dan user memang memiliki role tersebut
+        if (!empty($requestedRole) && in_array($requestedRole, $roles)) {
+            return [$user->id_user, $requestedRole];
+        }
+
+        // Fallback jika role tidak diberikan dalam request:
+        // Jika hanya nakes -> nakes
+        // Jika pasien saja atau dual-role (pasien & nakes) -> default 'pasien'
+        if (in_array('nakes', $roles) && !in_array('pasien', $roles)) {
             $role = 'nakes';
         } else {
             $role = 'pasien';

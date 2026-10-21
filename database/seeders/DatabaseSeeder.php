@@ -32,9 +32,7 @@ class DatabaseSeeder extends Seeder
             WilayahSeeder::class,
             MasterPendidikanSeeder::class,
             MasterUniversitasSeeder::class,
-            
-            
-            
+            MasterBhpSeeder::class,
             GlobalConfigSeeder::class,
             PointSettingSeeder::class,
             LegalitySeeder::class,
