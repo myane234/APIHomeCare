@@ -5,6 +5,7 @@ use App\Http\Controllers\TenagaMedisController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\NakesOperasionalController;
 use App\Http\Controllers\NakesBookingController;
+use App\Http\Controllers\NakesPenghasilanController;
 use App\Http\Controllers\RiwayatKunjunganController;
 use App\Http\Controllers\WebSocketController;
 
@@ -29,6 +30,11 @@ Route::middleware(['auth:sanctum', 'role:nakes,tenaga medis'])->group(function (
     Route::get('/nakes/booking/{booking_code}/bhp', [NakesBookingController::class, 'getBhpList']);
     Route::post('/nakes/booking/{booking_code}/bhp', [NakesBookingController::class, 'updateBhp']);
     Route::post('/nakes/booking/{id}/selesai', [NakesBookingController::class, 'completeBooking']);
+
+    // Penghasilan Nakes — route statis harus di atas route dengan parameter {booking_code}
+    Route::get('/nakes/penghasilan/ringkasan', [NakesPenghasilanController::class, 'ringkasan']);
+    Route::get('/nakes/penghasilan/riwayat', [NakesPenghasilanController::class, 'riwayat']);
+    Route::get('/nakes/penghasilan/{booking_code}', [NakesPenghasilanController::class, 'show']);
 });
 
 // Route untuk nakes (termasuk yang butuh endpoint nakes order)
