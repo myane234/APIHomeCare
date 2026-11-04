@@ -8,6 +8,7 @@ use App\Http\Controllers\NakesBookingController;
 use App\Http\Controllers\NakesPenghasilanController;
 use App\Http\Controllers\RiwayatKunjunganController;
 use App\Http\Controllers\WebSocketController;
+use App\Http\Controllers\WithdrawalController;
 
 Route::middleware(['auth:sanctum', 'role:nakes,tenaga medis'])->group(function () {
     Route::get('/tenaga-medis', [TenagaMedisController::class, 'show']);
@@ -35,6 +36,13 @@ Route::middleware(['auth:sanctum', 'role:nakes,tenaga medis'])->group(function (
     Route::get('/nakes/penghasilan/ringkasan', [NakesPenghasilanController::class, 'ringkasan']);
     Route::get('/nakes/penghasilan/riwayat', [NakesPenghasilanController::class, 'riwayat']);
     Route::get('/nakes/penghasilan/{booking_code}', [NakesPenghasilanController::class, 'show']);
+
+    // Withdraw / Payout saldo nakes via Midtrans Iris
+    // PENTING: route statis (/riwayat, /status) harus di atas agar tidak terbentur route param lain
+    Route::get('/nakes/saldo', [WithdrawalController::class, 'saldo']);
+    Route::post('/nakes/withdraw', [WithdrawalController::class, 'requestWithdraw']);
+    Route::get('/nakes/withdraw/riwayat', [WithdrawalController::class, 'riwayat']);
+    Route::get('/nakes/withdraw/status', [WithdrawalController::class, 'detail']); // ?reference_no=xxx
 });
 
 // Route untuk nakes (termasuk yang butuh endpoint nakes order)

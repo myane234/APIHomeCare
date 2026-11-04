@@ -53,12 +53,28 @@ return [
     ],
 
     'midtrans' => [
-    'merchant_id' => env('MIDTRANS_MERCHANT_ID'),
-    'client_key' => env('MIDTRANS_CLIENT_KEY'),
-    'server_key' => env('MIDTRANS_SERVER_KEY'),
-    'is_production' => env('MIDTRANS_IS_PRODUCTION', false),
-    'is_sanitized' => env('MIDTRANS_IS_SANITIZED', true),
-    'is_3ds' => env('MIDTRANS_IS_3DS', true),
-    ]
+        'merchant_id'   => env('MIDTRANS_MERCHANT_ID'),
+        'client_key'    => env('MIDTRANS_CLIENT_KEY'),
+        'server_key'    => env('MIDTRANS_SERVER_KEY'),
+        'is_production' => env('MIDTRANS_IS_PRODUCTION', false),
+        'is_sanitized'  => env('MIDTRANS_IS_SANITIZED', true),
+        'is_3ds'        => env('MIDTRANS_IS_3DS', true),
+    ],
+
+    // Midtrans Iris — Disbursement / Payout ke rekening nakes
+    'iris' => [
+        // API Key Iris (dari dashboard Iris Midtrans)
+        'api_key'      => env('IRIS_API_KEY'),
+
+        // Merchant Key Iris (untuk validasi webhook/callback)
+        'merchant_key' => env('IRIS_MERCHANT_KEY'),
+
+        // Base URL API Iris
+        'base_url'     => env('IRIS_IS_PRODUCTION', false)
+            ? 'https://app.iris.midtrans.com/api/v1'
+            : 'https://app.sandbox.iris.midtrans.com/api/v1',
+
+        'is_production' => env('IRIS_IS_PRODUCTION', false),
+    ],
 
 ];

@@ -41,6 +41,7 @@ use App\Http\Controllers\HubungiKamiController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\LaporanController;
 use App\Http\Controllers\DashboardStatistikController;
+use App\Http\Controllers\MasterDataImportController;
 
 Route::middleware(['auth:sanctum'])->group(function () {
 
@@ -294,5 +295,28 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Dashboard Statistik Agregat - Admin
     Route::get('/admin/dashboard-stats', [DashboardStatistikController::class, 'index']);
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Import Excel Master Data
+    // Download template : GET  /master-data/template/{entity}
+    // Import file       : POST /master-data/import/{entity}
+    // ──────────────────────────────────────────────────────────────────────
+    Route::prefix('master-data')->group(function () {
+        // Download template Excel
+        Route::get('/template/bank',            [MasterDataImportController::class, 'templateBank']);
+        Route::get('/template/universitas',     [MasterDataImportController::class, 'templateUniversitas']);
+        Route::get('/template/agama',           [MasterDataImportController::class, 'templateAgama']);
+        Route::get('/template/pendidikan',      [MasterDataImportController::class, 'templatePendidikan']);
+        Route::get('/template/bhp',             [MasterDataImportController::class, 'templateBhp']);
+        Route::get('/template/tarif-transport', [MasterDataImportController::class, 'templateTarifTransport']);
+
+        // Import via file Excel
+        Route::post('/import/bank',            [MasterDataImportController::class, 'importBank']);
+        Route::post('/import/universitas',     [MasterDataImportController::class, 'importUniversitas']);
+        Route::post('/import/agama',           [MasterDataImportController::class, 'importAgama']);
+        Route::post('/import/pendidikan',      [MasterDataImportController::class, 'importPendidikan']);
+        Route::post('/import/bhp',             [MasterDataImportController::class, 'importBhp']);
+        Route::post('/import/tarif-transport', [MasterDataImportController::class, 'importTarifTransport']);
+    });
 
 });

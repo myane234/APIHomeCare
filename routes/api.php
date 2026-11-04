@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 
 use App\Http\Controllers\CoreAuthController;
+use App\Http\Controllers\IrisWebhookController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TenagaMedisController;
 use App\Http\Controllers\testHapus\paymentTestController;
@@ -15,6 +16,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/logout', [CoreAuthController::class, 'logout']);
     Route::get('/profile/me', [CoreAuthController::class, 'me']);
 });
+
+// Webhook Midtrans Iris — tidak butuh auth, divalidasi via HMAC-SHA512 signature
+Route::post('/webhook/iris', [IrisWebhookController::class, 'handle']);
 
 require __DIR__ . '/api/public.php';
 require __DIR__ . '/api/content.php';

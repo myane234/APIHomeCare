@@ -65,12 +65,16 @@ class TenagaMedis extends Model
         'is_data_complete',
         'latitude',
         'longitude',
+
+        // Saldo withdraw
+        'saldo',
     ];
 
     protected $casts = [
         'dokumen_tambahan' => 'array',
         'tanggal_lahir'    => 'date',
         'is_data_complete' => 'boolean',
+        'saldo'            => 'decimal:2',
     ];
 
     public function user()
@@ -116,5 +120,20 @@ class TenagaMedis extends Model
     public function bank()
     {
         return $this->belongsTo(MasterBank::class, 'id_bank', 'id_bank');
+    }
+
+    public function withdrawals()
+    {
+        return $this->hasMany(Withdrawal::class, 'id_tenaga_medis', 'id_tenaga_medis');
+    }
+
+    /**
+     * Cek apakah nakes memiliki data rekening yang lengkap untuk withdraw.
+     */
+    public function hasCompleteRekening(): bool
+    {
+        return !empty($this->id_bank)
+            && !empty($this->nama_pemilik_rekening)
+            && !empty($this->no_rekening);
     }
 }
