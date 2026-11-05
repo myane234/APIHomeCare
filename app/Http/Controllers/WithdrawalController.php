@@ -4,25 +4,22 @@ namespace App\Http\Controllers;
 
 use App\Models\TenagaMedis;
 use App\Models\Withdrawal;
-use App\Services\IrisService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * WithdrawalController
  *
- * Mengelola fitur withdraw saldo nakes via Midtrans Iris.
+ * Mengelola fitur withdraw saldo nakes.
+ * Withdraw langsung tercatat sebagai berhasil (mock disbursement).
  * Semua aksi dilakukan otomatis tanpa approval admin.
  *
  * @group Nakes - Withdraw
  */
 class WithdrawalController extends Controller
 {
-    public function __construct(protected IrisService $irisService)
-    {
-    }
-
     // ──────────────────────────────────────────────────────────────────────
     // Helper: ambil TenagaMedis dari user yang login
     // ──────────────────────────────────────────────────────────────────────
@@ -119,8 +116,8 @@ class WithdrawalController extends Controller
     /**
      * Request Withdraw
      *
-     * Nakes mengajukan penarikan saldo. Saldo langsung di-hold dan
-     * dikirim otomatis ke rekening nakes via Midtrans Iris.
+     * Nakes mengajukan penarikan saldo. Saldo langsung dikurangi dan
+     * transfer dicatat sebagai berhasil secara otomatis.
      * Minimal withdraw Rp 50.000.
      *
      * @authenticated
@@ -129,19 +126,22 @@ class WithdrawalController extends Controller
      *
      * @response 200 {
      *   "success": true,
-     *   "message": "Withdraw berhasil diajukan dan sedang diproses.",
+     *   "message": "Withdraw berhasil diproses.",
      *   "data": {
      *     "id_withdrawal": 1,
+     *     "reference_no": "WD-20261105-A1B2C3D4",
      *     "jumlah": 150000,
      *     "jumlah_format": "Rp 150.000",
-     *     "status": "processing",
-     *     "status_label": "Diproses",
+     *     "status": "success",
+     *     "status_label": "Berhasil",
      *     "rekening_tujuan": {
      *       "nama_bank": "Bank Central Asia (BCA)",
+     *       "kode_bank": "BCA",
      *       "nama_pemilik": "John Doe",
      *       "no_rekening": "1234567890"
      *     },
-     *     "created_at": "2026-11-04T10:00:00+07:00"
+     *     "created_at": "2026-11-05T13:46:00+07:00",
+     *     "processed_at": "2026-11-05T13:46:00+07:00"
      *   }
      * }
      *
@@ -184,8 +184,6 @@ class WithdrawalController extends Controller
         }
 
         $jumlah = (int) $request->jumlah;
-
-        // Load bank untuk dapat kode_bank
         $nakes->loadMissing('bank');
 
         if (!$nakes->bank) {
@@ -208,49 +206,36 @@ class WithdrawalController extends Controller
                 ], 422);
             }
 
-            // Hold saldo (kurangi dulu sebelum kirim ke Iris)
+            // Kurangi saldo
             $nakesFresh->decrement('saldo', $jumlah);
 
-            // Buat record withdrawal dengan snapshot rekening saat ini
+            // Generate reference number unik
+            $referenceNo = 'WD-' . now()->format('Ymd') . '-' . strtoupper(Str::random(8));
+
+            // Catat withdrawal langsung sebagai success
             $withdrawal = Withdrawal::create([
-                'id_tenaga_medis'      => $nakes->id_tenaga_medis,
-                'jumlah'               => $jumlah,
-                'status'               => Withdrawal::STATUS_PENDING,
-                'beneficiary_name'     => $nakes->nama_pemilik_rekening,
-                'beneficiary_account'  => $nakes->no_rekening,
-                'beneficiary_bank'     => strtolower($nakes->bank->kode_bank), // Iris pakai lowercase
-                'beneficiary_bank_name'=> $nakes->bank->nama_bank,
+                'id_tenaga_medis'       => $nakes->id_tenaga_medis,
+                'jumlah'                => $jumlah,
+                'status'                => Withdrawal::STATUS_SUCCESS,
+                'beneficiary_name'      => $nakes->nama_pemilik_rekening,
+                'beneficiary_account'   => $nakes->no_rekening,
+                'beneficiary_bank'      => strtolower($nakes->bank->kode_bank),
+                'beneficiary_bank_name' => $nakes->bank->nama_bank,
+                'iris_reference_no'     => $referenceNo,
+                'iris_response'         => [
+                    'mock'         => true,
+                    'reference_no' => $referenceNo,
+                    'status'       => 'success',
+                    'processed_at' => now()->toIso8601String(),
+                ],
+                'processed_at' => now(),
             ]);
 
-            // Kirim ke Midtrans Iris
-            $result = $this->irisService->sendPayout($withdrawal);
-
-            if ($result['success']) {
-                $withdrawal->update([
-                    'status'          => Withdrawal::STATUS_PROCESSING,
-                    'iris_reference_no' => $result['reference_no'],
-                    'iris_response'   => $result['response'],
-                ]);
-            } else {
-                // Iris gagal — rollback saldo
-                $nakesFresh->increment('saldo', $jumlah);
-                $withdrawal->update([
-                    'status'         => Withdrawal::STATUS_FAILED,
-                    'iris_response'  => $result['response'],
-                    'failure_reason' => $result['error'] ?? 'Gagal mengirim ke Midtrans Iris.',
-                ]);
-
-                Log::error("[WithdrawalController] Iris gagal untuk withdrawal #{$withdrawal->id_withdrawal}: {$result['error']}");
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Gagal memproses withdraw. Silakan coba lagi beberapa saat.',
-                ], 502);
-            }
+            Log::info("[WithdrawalController] Withdraw #{$withdrawal->id_withdrawal} berhasil. Nakes #{$nakes->id_tenaga_medis}, Rp " . number_format($jumlah, 0, ',', '.') . ", ref: {$referenceNo}");
 
             return response()->json([
                 'success' => true,
-                'message' => 'Withdraw berhasil diajukan dan sedang diproses.',
+                'message' => 'Withdraw berhasil diproses.',
                 'data'    => $this->formatWithdrawal($withdrawal),
             ]);
         });
@@ -270,7 +255,7 @@ class WithdrawalController extends Controller
      *
      * @queryParam page integer Halaman. Default: 1. Example: 1
      * @queryParam per_page integer Jumlah per halaman (max 50). Default: 15. Example: 15
-     * @queryParam status string Filter status (pending|processing|success|failed). Example: success
+     * @queryParam status string Filter status (success|failed). Example: success
      *
      * @response 200 {
      *   "success": true,
@@ -288,7 +273,7 @@ class WithdrawalController extends Controller
         $request->validate([
             'page'     => 'nullable|integer|min:1',
             'per_page' => 'nullable|integer|min:1|max:50',
-            'status'   => 'nullable|in:pending,processing,success,failed',
+            'status'   => 'nullable|in:success,failed',
         ]);
 
         $nakes = $this->getNakes($request);
@@ -328,26 +313,25 @@ class WithdrawalController extends Controller
     /**
      * Detail Status Withdraw
      *
-     * Menampilkan detail satu transaksi withdraw berdasarkan reference_no
-     * dari Midtrans Iris. Endpoint ini tidak mengekspos id_withdrawal secara
-     * publik — hanya nakes yang bersangkutan yang bisa mengakses.
+     * Menampilkan detail satu transaksi withdraw berdasarkan reference_no.
+     * Hanya nakes yang bersangkutan yang bisa mengakses.
      *
      * @authenticated
      *
-     * @queryParam reference_no string required Reference number dari Iris (ada di riwayat). Example: ytfbs8af9ghz40xhab
+     * @queryParam reference_no string required Reference number withdraw (ada di riwayat). Example: WD-20261105-A1B2C3D4
      *
      * @response 200 {
      *   "success": true,
      *   "data": {
      *     "id_withdrawal": 1,
+     *     "reference_no": "WD-20261105-A1B2C3D4",
      *     "jumlah": 150000,
      *     "jumlah_format": "Rp 150.000",
      *     "status": "success",
      *     "status_label": "Berhasil",
-     *     "iris_reference_no": "ytfbs8af9ghz40xhab",
      *     "rekening_tujuan": {},
-     *     "created_at": "2026-11-04T10:00:00+07:00",
-     *     "processed_at": "2026-11-04T10:05:00+07:00"
+     *     "created_at": "2026-11-05T13:46:00+07:00",
+     *     "processed_at": "2026-11-05T13:46:00+07:00"
      *   }
      * }
      */
@@ -386,20 +370,20 @@ class WithdrawalController extends Controller
     private function formatWithdrawal(Withdrawal $w, bool $detail = false): array
     {
         $data = [
-            'id_withdrawal'    => $w->id_withdrawal,
-            'jumlah'           => (float) $w->jumlah,
-            'jumlah_format'    => $w->jumlahFormat(),
-            'status'           => $w->status,
-            'status_label'     => $w->statusLabel(),
-            'iris_reference_no'=> $w->iris_reference_no,
-            'rekening_tujuan'  => [
+            'id_withdrawal' => $w->id_withdrawal,
+            'reference_no'  => $w->iris_reference_no,
+            'jumlah'        => (float) $w->jumlah,
+            'jumlah_format' => $w->jumlahFormat(),
+            'status'        => $w->status,
+            'status_label'  => $w->statusLabel(),
+            'rekening_tujuan' => [
                 'nama_bank'    => $w->beneficiary_bank_name,
                 'kode_bank'    => strtoupper($w->beneficiary_bank),
                 'nama_pemilik' => $w->beneficiary_name,
                 'no_rekening'  => $w->beneficiary_account,
             ],
-            'created_at'    => $w->created_at?->toIso8601String(),
-            'processed_at'  => $w->processed_at?->toIso8601String(),
+            'created_at'   => $w->created_at?->toIso8601String(),
+            'processed_at' => $w->processed_at?->toIso8601String(),
         ];
 
         if ($detail) {
