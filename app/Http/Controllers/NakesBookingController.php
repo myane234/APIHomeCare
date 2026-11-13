@@ -15,6 +15,8 @@ use App\Models\Transaksi;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Controller terpisah khusus untuk Workflow Booking & Tindakan Tenaga Medis (Nakes).
@@ -176,7 +178,13 @@ class NakesBookingController extends Controller
     }
 
     /**
-     * API Nakes: Antrean Order Masuk yang tersedia untuk Nakes.
+     * API Nakes: Antrean Order Masuk yang tersedia untuk Nakes (berbasis Tier Broadcast).
+     *
+     * Hanya menampilkan booking yang broadcast_tier-nya sesuai dengan tier jarak antara
+     * lokasi nakes ke lokasi kunjungan pasien. Nakes hanya melihat order yang broadcast
+     * ke tier mereka.
+     *
+     * Tier: 1 = 0–10 km | 2 = 10–20 km | 3 = 20–30 km | 4 = 30–40 km
      */
     public function ordersQueue(Request $request)
     {
@@ -190,27 +198,230 @@ class NakesBookingController extends Controller
             ], 404);
         }
 
+        // Cek koordinat nakes. Jika belum ada, return peringatan.
+        if (!$nakes->latitude || !$nakes->longitude
+            || (float) $nakes->latitude === 0.0 || (float) $nakes->longitude === 0.0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Lokasi nakes belum diatur. Perbarui lokasi Anda agar bisa menerima order.',
+                'data' => []
+            ], 422);
+        }
+
+        // Ambil semua booking Pending yang sudah lunas & belum di-assign
         $bookings = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'transaksi'])
             ->where(function ($q) use ($nakes) {
                 $q->where('id_tenaga_medis', $nakes->id_tenaga_medis)
                     ->orWhereNull('id_tenaga_medis');
             })
+            ->where('status_booking', 'Pending')
+            ->whereNull('fraud_at')           // abaikan booking fraud
             ->whereHas('transaksi', function ($query) {
                 $query->whereRaw("LOWER(status_transaksi) IN ('lunas', 'sudah bayar', 'settlement', 'success')");
             })
             ->orderByDesc('created_at')
             ->get();
 
+        // Filter: hanya booking yang belum pernah ditolak nakes ini
         $bookings = $bookings
             ->reject(fn(Booking $booking) => $this->hasRejectedOrder($booking, $nakes))
             ->values();
 
+        // Filter berdasarkan tier broadcast:
+        // - Hitung jarak nakes ke lokasi kunjungan booking
+        // - Tentukan tier nakes (ceil(distance/10))
+        // - Tampilkan booking hanya jika broadcast_tier booking == tier nakes ATAU
+        //   booking belum punya broadcast_tier (auto-assign tier pertama)
+        $result = [];
+
+        foreach ($bookings as $booking) {
+            $bookingLat = (float) $booking->latitude_kunjungan;
+            $bookingLng = (float) $booking->longitude_kunjungan;
+
+            if (!$bookingLat || !$bookingLng) {
+                // Jika koordinat booking belum ada, skip
+                continue;
+            }
+
+            $distanceKm = $this->calculateDistance(
+                (float) $nakes->latitude,
+                (float) $nakes->longitude,
+                $bookingLat,
+                $bookingLng
+            );
+
+            if ($distanceKm > 40) {
+                continue; // Melebihi batas maksimum
+            }
+
+            // Tentukan tier nakes ini relatif ke booking
+            $nakesTier = (int) ceil($distanceKm / 10);
+            if ($nakesTier < 1) {
+                $nakesTier = 1;
+            }
+
+            // Jika booking belum punya broadcast_tier, set ke tier nakes pertama yang ada
+            if (is_null($booking->broadcast_tier)) {
+                // Hitung tier terkecil dari semua nakes approved terhadap booking ini
+                $minTier = $this->resolveInitialBroadcastTier($booking);
+                if ($minTier) {
+                    $booking->broadcast_tier = $minTier;
+                    $booking->save();
+                }
+            }
+
+            // Tampilkan ke nakes jika tier nakes == broadcast_tier booking
+            if ($booking->broadcast_tier && $nakesTier === (int) $booking->broadcast_tier) {
+                $result[] = [
+                    'booking'       => new \App\Http\Resources\BookingResource($booking),
+                    'jarak_km'      => round($distanceKm, 2),
+                    'tier_nakes'    => $nakesTier,
+                    'tier_broadcast'=> (int) $booking->broadcast_tier,
+                    'tier_label'    => "Tier {$nakesTier} (" . (($nakesTier - 1) * 10) . "-" . ($nakesTier * 10) . " km)",
+                ];
+            }
+        }
+
         return response()->json([
             'success' => true,
-            'message' => 'Daftar order / booking untuk Tenaga Medis',
-            'total' => $bookings->count(),
-            'data' => BookingResource::collection($bookings),
+            'message' => 'Daftar order / booking untuk Tenaga Medis (berbasis tier terdekat)',
+            'total' => count($result),
+            'data' => $result,
         ]);
+    }
+
+    /**
+     * Helper: Menentukan broadcast_tier awal dari sebuah booking berdasarkan
+     * tier terkecil (terdekat) dari semua nakes approved yang memiliki koordinat.
+     * Tier 1 = 0-10km, Tier 2 = 10-20km, dst.
+     */
+    private function resolveInitialBroadcastTier(Booking $booking): ?int
+    {
+        $bookingLat = (float) $booking->latitude_kunjungan;
+        $bookingLng = (float) $booking->longitude_kunjungan;
+
+        if (!$bookingLat || !$bookingLng) {
+            return null;
+        }
+
+        // Dapatkan semua nakes approved yang punya koordinat
+        $nakesList = TenagaMedis::where('status', 'approved')
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->where('latitude', '!=', 0)
+            ->where('longitude', '!=', 0)
+            ->get();
+
+        $minTier = null;
+
+        foreach ($nakesList as $nakes) {
+            $dist = $this->calculateDistance(
+                (float) $nakes->latitude,
+                (float) $nakes->longitude,
+                $bookingLat,
+                $bookingLng
+            );
+
+            if ($dist > 40) {
+                continue;
+            }
+
+            $tier = max(1, (int) ceil($dist / 10));
+
+            if ($minTier === null || $tier < $minTier) {
+                $minTier = $tier;
+            }
+        }
+
+        return $minTier;
+    }
+
+    /**
+     * Helper: Hitung berapa nakes yang ada di tier tertentu relatif ke booking.
+     * Nakes yang sudah menolak booking ini tidak dihitung.
+     */
+    private function countNakesInTier(Booking $booking, int $tier): int
+    {
+        $bookingLat = (float) $booking->latitude_kunjungan;
+        $bookingLng = (float) $booking->longitude_kunjungan;
+
+        if (!$bookingLat || !$bookingLng) {
+            return 0;
+        }
+
+        $minKm = ($tier - 1) * 10;
+        $maxKm = $tier * 10;
+
+        $rejectedIds = collect(is_array($booking->catatan_penolakan) ? $booking->catatan_penolakan : [])
+            ->pluck('id_tenaga_medis')
+            ->filter()
+            ->map(fn($id) => (int) $id)
+            ->toArray();
+
+        $nakesList = TenagaMedis::where('status', 'approved')
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->where('latitude', '!=', 0)
+            ->where('longitude', '!=', 0)
+            ->when(!empty($rejectedIds), fn($q) => $q->whereNotIn('id_tenaga_medis', $rejectedIds))
+            ->get();
+
+        $count = 0;
+        foreach ($nakesList as $nakes) {
+            $dist = $this->calculateDistance(
+                (float) $nakes->latitude,
+                (float) $nakes->longitude,
+                $bookingLat,
+                $bookingLng
+            );
+
+            if ($tier === 1 && $dist <= 10) {
+                $count++;
+            } elseif ($tier > 1 && $dist > $minKm && $dist <= $maxKm) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * Helper: Trigger void/cancel transaksi di Midtrans dan mark booking sebagai fraud.
+     */
+    private function markBookingFraud(Booking $booking): void
+    {
+        $transaksi = $booking->transaksi;
+
+        // Void/refund di Midtrans jika ada order_id
+        if ($transaksi && $transaksi->midtrans_order_id) {
+            $serverKey = config('services.midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY');
+            $baseUrl   = config('services.midtrans.is_production', false)
+                ? 'https://api.midtrans.com/v2/'
+                : 'https://api.sandbox.midtrans.com/v2/';
+            $orderId   = $transaksi->midtrans_order_id;
+
+            try {
+                // Coba cancel dulu, lalu refund jika sudah settlement
+                \Illuminate\Support\Facades\Http::withBasicAuth($serverKey, '')
+                    ->withHeaders(['Accept' => 'application/json', 'Content-Type' => 'application/json'])
+                    ->withoutVerifying()
+                    ->post($baseUrl . $orderId . '/cancel');
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error("[FraudDetect] Gagal void transaksi booking #{$booking->id_booking}: " . $e->getMessage());
+            }
+
+            // Update status transaksi
+            $transaksi->update(['status_transaksi' => 'Dibatalkan']);
+        }
+
+        // Mark booking fraud
+        $booking->update([
+            'fraud_at'       => now(),
+            'status_booking' => 'Dibatalkan',
+            'id_tenaga_medis' => null,
+        ]);
+
+        \Illuminate\Support\Facades\Log::warning("[FraudDetect] Booking #{$booking->id_booking} dinyatakan FRAUD — semua nakes menolak di semua tier.");
     }
 
     /**
@@ -276,6 +487,31 @@ class NakesBookingController extends Controller
                 'success' => false,
                 'message' => 'Order belum dapat diterima karena pembayaran belum selesai.',
             ], 422);
+        }
+
+        // Guard: booking fraud tidak bisa diterima
+        if (!is_null($booking->fraud_at)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Order ini sudah dinyatakan fraud dan tidak dapat diterima.',
+            ], 422);
+        }
+
+        // Guard tier: nakes hanya bisa terima booking yang broadcast ke tier mereka
+        if ($booking->broadcast_tier && $nakes->latitude && $nakes->longitude
+            && $booking->latitude_kunjungan && $booking->longitude_kunjungan) {
+            $distKm   = $this->calculateDistance(
+                (float) $nakes->latitude, (float) $nakes->longitude,
+                (float) $booking->latitude_kunjungan, (float) $booking->longitude_kunjungan
+            );
+            $nakesTier = max(1, (int) ceil($distKm / 10));
+
+            if ($nakesTier !== (int) $booking->broadcast_tier) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Order ini sedang dibroadcast ke Tier {$booking->broadcast_tier}. Jarak Anda saat ini masuk Tier {$nakesTier} dan belum mendapat giliran.",
+                ], 422);
+            }
         }
 
         DB::beginTransaction();
@@ -362,6 +598,14 @@ class NakesBookingController extends Controller
 
     /**
      * API Nakes: Tolak Order Booking.
+     *
+     * Alur setelah tolak:
+     * 1. Catat penolakan nakes ini ke catatan_penolakan.
+     * 2. Cek apakah masih ada nakes lain di tier yang sama (broadcast_tier saat ini).
+     * 3. Jika masih ada nakes → tetap Pending, broadcast_tier tidak berubah.
+     * 4. Jika tidak ada nakes lagi di tier ini → ORDER FRAUD langsung.
+     *    TIDAK ADA tier escalation — ST yang sudah dibayar harus 100% sama,
+     *    jika tier naik maka ST berubah → transaksi tidak valid → fraud.
      */
     public function rejectBooking(Request $request, $id)
     {
@@ -374,7 +618,7 @@ class NakesBookingController extends Controller
             ], 403);
         }
 
-        $booking = Booking::find($id);
+        $booking = Booking::with(['transaksi'])->find($id);
         if (!$booking) {
             return response()->json([
                 'success' => false,
@@ -382,12 +626,21 @@ class NakesBookingController extends Controller
             ], 404);
         }
 
-        $rejections = is_array($booking->catatan_penolakan) ? $booking->catatan_penolakan : [];
+        if (!is_null($booking->fraud_at)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking ini sudah dinyatakan fraud dan tidak dapat diproses.'
+            ], 422);
+        }
+
+        // ── Catat penolakan ───────────────────────────────────────────────
+        $rejections   = is_array($booking->catatan_penolakan) ? $booking->catatan_penolakan : [];
         $rejections[] = [
-            'id_tenaga_medis' => $nakes->id_tenaga_medis,
+            'id_tenaga_medis'   => $nakes->id_tenaga_medis,
             'nama_tenaga_medis' => $nakes->nama_lengkap,
-            'alasan' => $request->input('alasan', 'Menolak order'),
-            'waktu' => now()->toIso8601String(),
+            'alasan'            => $request->input('alasan', 'Menolak order'),
+            'tier_saat_tolak'   => $booking->broadcast_tier,
+            'waktu'             => now()->toIso8601String(),
         ];
 
         $booking->catatan_penolakan = $rejections;
@@ -396,9 +649,53 @@ class NakesBookingController extends Controller
         }
         $booking->save();
 
+        // ── Tentukan broadcast_tier jika belum ada ────────────────────────
+        $currentTier = $booking->broadcast_tier;
+
+        if (!$currentTier) {
+            $currentTier = $this->resolveInitialBroadcastTier($booking);
+            if ($currentTier) {
+                $booking->broadcast_tier = $currentTier;
+                $booking->save();
+            }
+        }
+
+        // Jika tidak ada tier sama sekali (tidak ada nakes di radius 40km) → fraud
+        if (!$currentTier) {
+            $this->markBookingFraud($booking);
+            return response()->json([
+                'success' => true,
+                'message' => 'Order ditolak. Tidak ada nakes tersedia di area mana pun. Order dinyatakan fraud dan dana dikembalikan.',
+                'fraud'   => true,
+            ]);
+        }
+
+        // ── Cek sisa nakes di tier yang sama ─────────────────────────────
+        $remainingInCurrentTier = $this->countNakesInTier($booking, $currentTier);
+
+        if ($remainingInCurrentTier > 0) {
+            // Masih ada nakes lain di tier ini → tetap Pending di tier yang sama
+            return response()->json([
+                'success'         => true,
+                'message'         => 'Order berhasil ditolak. Masih ada nakes lain di tier ini yang akan dibroadcast.',
+                'fraud'           => false,
+                'tier_broadcast'  => $currentTier,
+                'sisa_nakes_tier' => $remainingInCurrentTier,
+            ]);
+        }
+
+        // ── Tidak ada nakes tersisa di tier ini → FRAUD ───────────────────
+        // Tier tidak boleh dinaikkan karena ST yang sudah dibayar pasien
+        // dihitung berdasarkan tier awal. Menaikkan tier = ST berbeda = transaksi tidak valid.
+        $this->markBookingFraud($booking);
+
         return response()->json([
             'success' => true,
-            'message' => 'Order berhasil ditolak.',
+            'message' => 'Order ditolak. Semua nakes di Tier ' . $currentTier . ' telah menolak. '
+                       . 'Tier tidak dapat dinaikkan karena akan mengubah biaya transport yang sudah dibayar. '
+                       . 'Order dinyatakan FRAUD dan dana dikembalikan ke pasien.',
+            'fraud'           => true,
+            'tier_broadcast'  => $currentTier,
         ]);
     }
 
@@ -801,5 +1098,84 @@ class NakesBookingController extends Controller
                 'message' => 'Gagal menyelesaikan booking: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * API Nakes: Info detail tier broadcast sebuah booking.
+     * GET /api/nakes/booking-queue-info/{id}
+     *
+     * Nakes dapat melihat booking ini di tier berapa, berapa sisa nakes di tier tsb,
+     * dan apakah booking ini sudah dinyatakan fraud.
+     */
+    public function bookingQueueInfo(Request $request, $id)
+    {
+        $nakes = $this->getLoggedNakes($request);
+
+        if (!$nakes) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Profil Tenaga Medis tidak ditemukan.',
+            ], 404);
+        }
+
+        $booking = Booking::with(['pasien', 'layanan', 'layananItems.layanan', 'transaksi'])->find($id);
+
+        if (!$booking) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking tidak ditemukan.',
+            ], 404);
+        }
+
+        $bookingLat = (float) $booking->latitude_kunjungan;
+        $bookingLng = (float) $booking->longitude_kunjungan;
+
+        $distanceKm = null;
+        $nakesTier  = null;
+
+        if ($nakes->latitude && $nakes->longitude && $bookingLat && $bookingLng) {
+            $distanceKm = $this->calculateDistance(
+                (float) $nakes->latitude,
+                (float) $nakes->longitude,
+                $bookingLat,
+                $bookingLng
+            );
+            $nakesTier = max(1, (int) ceil($distanceKm / 10));
+        }
+
+        $currentTier  = $booking->broadcast_tier;
+        $nakesPerTier = [];
+
+        for ($t = 1; $t <= 4; $t++) {
+            $countTier = $this->countNakesInTier($booking, $t);
+            $nakesPerTier[] = [
+                'tier'         => $t,
+                'label'        => "Tier {$t} (" . (($t - 1) * 10) . "–" . ($t * 10) . " km)",
+                'jumlah_nakes' => $countTier,
+            ];
+        }
+
+        $totalRejections = count(is_array($booking->catatan_penolakan) ? $booking->catatan_penolakan : []);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Info tier broadcast booking.',
+            'data' => [
+                'id_booking'           => $booking->id_booking,
+                'booking_code'         => $booking->booking_code,
+                'status_booking'       => $booking->status_booking,
+                'fraud_at'             => $booking->fraud_at,
+                'is_fraud'             => !is_null($booking->fraud_at),
+                'broadcast_tier'       => $currentTier,
+                'broadcast_tier_label' => $currentTier
+                    ? "Tier {$currentTier} (" . (($currentTier - 1) * 10) . "–" . ($currentTier * 10) . " km)"
+                    : null,
+                'nakes_jarak_km'       => $distanceKm !== null ? round($distanceKm, 2) : null,
+                'tier_nakes_ini'       => $nakesTier,
+                'masuk_broadcast'      => $nakesTier !== null && $currentTier !== null && $nakesTier === $currentTier,
+                'total_penolakan'      => $totalRejections,
+                'nakes_per_tier'       => $nakesPerTier,
+            ],
+        ]);
     }
 }

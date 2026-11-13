@@ -2912,6 +2912,293 @@ class BookingController extends Controller
         ]);
     }
 
+    // =========================================================================
+    // API KALKULASI BIAYA (Tanpa Auth) — Task #2
+    // GET /api/booking/kalkulasi-biaya
+    // Menghitung total ST + SL + SB beserta tier transport nakes terdekat.
+    // Biaya admin/metode pembayaran TIDAK dimasukkan.
+    // =========================================================================
+
+    /**
+     * API Publik: Kalkulasi biaya booking (SL + SB + ST) beserta tier transport nakes terdekat.
+     *
+     * Tidak memerlukan autentikasi. Cocok digunakan sebelum pasien memutuskan membuat booking.
+     *
+     * @group Booking Management
+     * @unauthenticated
+     *
+     * @queryParam layanan_ids[]  integer[] Wajib — ID layanan yang ingin dipesan. Example: [1,2]
+     * @queryParam latitude_kunjungan  numeric  Wajib — Latitude lokasi kunjungan. Example: -6.200000
+     * @queryParam longitude_kunjungan numeric  Wajib — Longitude lokasi kunjungan. Example: 106.816666
+     * @queryParam tanggal_kunjungan   date     Opsional — Tanggal kunjungan (Y-m-d), untuk menentukan kategori tarif. Example: 2026-11-20
+     * @queryParam jam_kunjungan       string   Opsional — Jam kunjungan (H:i), untuk menentukan kategori tarif. Example: 09:00
+     * @queryParam id_kategori_tarif   integer  Opsional — Override kategori tarif.
+     * @queryParam durasi_layanan      object   Opsional — Map {id_layanan: durasi_menit} untuk layanan bertipe "durasi".
+     */
+    public function kalkulasiBiaya(Request $request)
+    {
+        $request->validate([
+            'layanan_ids'            => 'required|array|min:1',
+            'layanan_ids.*'          => 'integer|exists:master_layanan,id_layanan',
+            'latitude_kunjungan'     => 'required|numeric',
+            'longitude_kunjungan'    => 'required|numeric',
+            'tanggal_kunjungan'      => 'nullable|date',
+            'jam_kunjungan'          => 'nullable|string',
+            'id_kategori_tarif'      => 'nullable|exists:master_kategori_tarif,id_kategori_tarif',
+            'durasi_layanan'         => 'nullable|array',
+            'durasi_layanan.*'       => 'nullable|integer|min:1',
+        ]);
+
+        $layananIds       = array_values(array_unique(array_map('intval', $request->input('layanan_ids'))));
+        $patientLat       = (float) $request->input('latitude_kunjungan');
+        $patientLng       = (float) $request->input('longitude_kunjungan');
+        $tanggal          = $request->input('tanggal_kunjungan');
+        $jam              = $request->input('jam_kunjungan');
+        $durasiLayananInput = $request->input('durasi_layanan', []);
+
+        // ── Kategori Tarif ────────────────────────────────────────────────
+        $idKategoriTarif  = $request->input('id_kategori_tarif');
+        $kategoriTarifObj = $idKategoriTarif
+            ? MasterKategoriTarif::find($idKategoriTarif)
+            : $this->findTriggeredTariffCategory($tanggal, $jam);
+        $idKategoriTarif  = $kategoriTarifObj?->id_kategori_tarif;
+
+        // ── Layanan ───────────────────────────────────────────────────────
+        $semuaLayanan = MasterLayanan::with(['bhpItems'])
+            ->whereIn('id_layanan', $layananIds)
+            ->get()
+            ->keyBy('id_layanan');
+
+        if ($semuaLayanan->count() !== count($layananIds)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Salah satu layanan tidak ditemukan.',
+            ], 422);
+        }
+
+        // ── Promo aktif ───────────────────────────────────────────────────
+        $promo = Promo::whereIn('id_layanan', $layananIds)
+            ->where('status_promo', 'Aktif')
+            ->whereDate('tanggal_mulai', '<=', now()->toDateString())
+            ->whereDate('tanggal_berakhir', '>=', now()->toDateString())
+            ->orderByDesc('created_at')
+            ->first();
+
+        // ── Hitung SL & SB per layanan ────────────────────────────────────
+        $totalSl      = 0.0;
+        $totalSb      = 0.0;
+        $isTransport  = false;
+        $perLayananDetail = [];
+
+        foreach ($layananIds as $urutan => $idLyn) {
+            /** @var \App\Models\MasterLayanan $layanan */
+            $layanan = $semuaLayanan->get($idLyn);
+
+            // Cari master tarif
+            $matchLayanan = function ($q) use ($idLyn) {
+                $q->where('id_layanan', $idLyn)
+                    ->orWhereHas('layananTermasuk', fn($q2) => $q2->where('master_layanan.id_layanan', $idLyn));
+            };
+            $masterTarifQuery = MasterTarif::with(['komponenTarif', 'kategoriTarif'])
+                ->where('is_active', true)
+                ->where($matchLayanan);
+            if ($idKategoriTarif) {
+                $masterTarifQuery->where('id_kategori_tarif', $idKategoriTarif);
+            }
+            $masterTarif = $masterTarifQuery->first();
+
+            if ($urutan === 0 && !$kategoriTarifObj) {
+                $kategoriTarifObj = $masterTarif?->kategoriTarif
+                    ?? MasterKategoriTarif::where('is_default', true)->first();
+            }
+
+            // SL
+            $sl = (float) $layanan->harga;
+            $durasiMenit = null;
+            if ($layanan->tipe_layanan === 'durasi') {
+                $durasiDasar  = max(60, (int) ($layanan->durasi_menit ?: 60));
+                $durasiMenit  = isset($durasiLayananInput[$idLyn])
+                    ? (int) $durasiLayananInput[$idLyn]
+                    : $durasiDasar;
+                $sl *= $durasiMenit / $durasiDasar;
+            }
+            if ($kategoriTarifObj && (float) $kategoriTarifObj->biaya_tambahan > 0) {
+                $sl += (float) $kategoriTarifObj->biaya_tambahan;
+            }
+
+            $diskonLayanan = 0.0;
+            if ($promo && (int) $promo->id_layanan === (int) $idLyn) {
+                $diskonLayanan = $promo->tipe_diskon === 'nominal'
+                    ? min($sl, (float) $promo->nilai_diskon)
+                    : $sl * ((float) $promo->nilai_diskon / 100);
+                $sl -= $diskonLayanan;
+            }
+
+            // SB
+            $sb = 0.0;
+            foreach ($layanan->bhpItems as $bhpItem) {
+                $qty = (int) ($bhpItem->pivot->qty_default ?? 1);
+                $sb += (float) $bhpItem->harga_jual * $qty;
+            }
+
+            if ($masterTarif?->is_transport) {
+                $isTransport = true;
+            }
+
+            $totalSl += $sl;
+            $totalSb += $sb;
+
+            $perLayananDetail[] = [
+                'id_layanan'    => $idLyn,
+                'nama_layanan'  => $layanan->nama_layanan,
+                'sl'            => (int) round($sl),
+                'sb'            => (int) round($sb),
+                'diskon_promo'  => (int) round($diskonLayanan),
+                'durasi_menit'  => $durasiMenit,
+                'is_transport'  => (bool) ($masterTarif?->is_transport),
+            ];
+        }
+
+        // ── Hitung tier transport & ST ────────────────────────────────────
+        // Cari nakes terdekat dari lokasi pasien — ST dihitung dari jarak
+        // AKTUAL nakes terdekat, identik dengan logika saat store() booking.
+        // Tier yang ditampilkan hanya informasi, bukan pengali terpisah.
+        $nearestInfo  = $this->getClosestNakesInfo($patientLat, $patientLng, $layananIds);
+        $st           = 0;
+        $tierTransport = null;
+        $namaTransport = null;
+        $nakesCount   = 0;
+        $jarakNakes   = null;
+
+        if ($isTransport && $nearestInfo) {
+            $transportMaster = MasterTarifTransport::first();
+            if ($transportMaster) {
+                // ST = ceil(jarak/10) * tarif_per_10km — identik dengan calculateTransportTariff()
+                $jarakNakes    = $nearestInfo['jarak_km'];
+                $st            = (int) round($this->calculateTransportTariff($transportMaster, $jarakNakes));
+                $tierTransport = $nearestInfo['tier'];
+                $namaTransport = "Tier {$tierTransport} (" . (($tierTransport - 1) * 10) . "–" . ($tierTransport * 10) . " km)";
+                $nakesCount    = $nearestInfo['nakes_count_tier'];
+            }
+        }
+
+        $totalBiaya = (int) round($totalSl + $totalSb + $st);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Kalkulasi biaya berhasil.',
+            'data' => [
+                'rincian_biaya' => [
+                    'total_sl'           => (int) round($totalSl),
+                    'total_sb'           => (int) round($totalSb),
+                    'st'                 => $st,
+                    'total_biaya'        => $totalBiaya,
+                    'total_biaya_format' => 'Rp ' . number_format($totalBiaya, 0, ',', '.'),
+                    'catatan'            => 'Biaya admin/metode pembayaran belum termasuk dalam total ini.',
+                ],
+                'transport' => $isTransport ? [
+                    'tier'            => $tierTransport,
+                    'nama_tier'       => $namaTransport,
+                    'st_format'       => 'Rp ' . number_format($st, 0, ',', '.'),
+                    'jarak_nakes_km'  => $jarakNakes !== null ? round($jarakNakes, 2) : null,
+                    'nakes_tersedia'  => $nakesCount,
+                    'keterangan'      => $nakesCount > 0
+                        ? "Tersedia {$nakesCount} nakes di {$namaTransport}. ST dihitung dari jarak nakes terdekat."
+                        : 'Tidak ada nakes tersedia di area ini.',
+                    'peringatan'      => $nakesCount === 0
+                        ? 'Booking mungkin tidak dapat dilayani karena tidak ada nakes di area ini.'
+                        : null,
+                ] : [
+                    'tier'      => null,
+                    'nama_tier' => null,
+                    'st_format' => 'Rp 0',
+                    'keterangan'=> 'Layanan ini tidak menggunakan biaya transport.',
+                ],
+                'kategori_tarif' => $kategoriTarifObj ? [
+                    'id_kategori_tarif' => $kategoriTarifObj->id_kategori_tarif,
+                    'nama_kategori'     => $kategoriTarifObj->nama_kategori,
+                    'is_default'        => (bool) $kategoriTarifObj->is_default,
+                ] : null,
+                'layanan' => $perLayananDetail,
+            ],
+        ]);
+    }
+
+    /**
+     * Helper: Cari nakes terdekat dari lokasi pasien dan kembalikan info jarak aktual + tier.
+     *
+     * ST dihitung berdasarkan JARAK NAKES TERDEKAT yang aktual, identik dengan
+     * logika calculateTransportTariff() saat booking dibuat. Tier hanya label informasi.
+     *
+     * Returns: ['jarak_km' => float, 'tier' => int, 'nakes_count_tier' => int] atau null.
+     */
+    private function getClosestNakesInfo(float $lat, float $lng, array $layananIds = []): ?array
+    {
+        $query = TenagaMedis::where('status', 'approved')
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->where('latitude', '!=', 0)
+            ->where('longitude', '!=', 0);
+
+        // Filter berdasarkan kategori layanan jika ada
+        if (!empty($layananIds)) {
+            $kategoriIds = MasterLayanan::whereIn('id_layanan', $layananIds)
+                ->pluck('id_kategori_layanan')
+                ->filter()
+                ->unique()
+                ->values()
+                ->toArray();
+
+            if (!empty($kategoriIds)) {
+                $query->whereHas('kategoriLayanan', function ($q) use ($kategoriIds) {
+                    $q->whereIn('kategori_layanans.id_kategori_layanan', $kategoriIds);
+                });
+            }
+        }
+
+        $driver = DB::connection()->getDriverName();
+
+        if (in_array($driver, ['mysql', 'pgsql'])) {
+            $nakesList = $query->selectRaw(
+                '*, (6371 * acos(greatest(-1.0, least(1.0, cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))))) AS distance_km',
+                [$lat, $lng, $lat]
+            )->orderBy('distance_km')->get();
+        } else {
+            $nakesList = $query->get()->map(function ($nakes) use ($lat, $lng) {
+                $nakes->distance_km = $this->calculateDistance($lat, $lng, (float) $nakes->latitude, (float) $nakes->longitude);
+                return $nakes;
+            })->sortBy('distance_km')->values();
+        }
+
+        // Filter nakes dalam radius max 40km
+        $nakesDalam40km = $nakesList->filter(fn($n) => (float) $n->distance_km <= 40);
+
+        if ($nakesDalam40km->isEmpty()) {
+            return null;
+        }
+
+        // Ambil jarak nakes terdekat
+        $nakesTermdekat = $nakesDalam40km->first();
+        $jarakTermdekat = (float) $nakesTermdekat->distance_km;
+
+        // Tier berdasarkan jarak nakes terdekat — sama persis dengan calculateTransportTariff()
+        $tier = max(1, (int) ceil($jarakTermdekat / 10));
+
+        // Hitung jumlah nakes di tier yang sama dengan nakes terdekat
+        $minKm = ($tier - 1) * 10;
+        $maxKm = $tier * 10;
+        $countTier = $nakesDalam40km->filter(function ($n) use ($tier, $minKm, $maxKm) {
+            $d = (float) $n->distance_km;
+            return $tier === 1 ? $d <= 10 : ($d > $minKm && $d <= $maxKm);
+        })->count();
+
+        return [
+            'jarak_km'        => round($jarakTermdekat, 2),
+            'tier'            => $tier,
+            'nakes_count_tier'=> $countTier,
+        ];
+    }
+
     public function batalkanBooking($id)
     {
         $booking = Booking::with(['layananItems.layanan', 'transaksi'])->find($id);

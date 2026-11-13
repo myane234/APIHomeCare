@@ -28,10 +28,14 @@ class Booking extends Model
         'longitude_kunjungan',
         'status_booking',
         'catatan_penolakan',
+        'broadcast_tier',
+        'fraud_at',
     ];
 
     protected $casts = [
         'catatan_penolakan' => 'json',
+        'broadcast_tier'    => 'integer',
+        'fraud_at'          => 'datetime',
     ];
 
     public function pasien()

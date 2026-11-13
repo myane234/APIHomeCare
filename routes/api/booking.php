@@ -8,6 +8,9 @@ use App\Http\Controllers\UlasanController;
 Route::post('/booking/charge', [BookingController::class, 'charge']);
 Route::get('/booking/nakes-terdekat', [BookingController::class, 'getNearestNakesList']);
 
+// API kalkulasi biaya (SL+SB+ST) tanpa biaya admin — tidak butuh auth
+Route::get('/booking/kalkulasi-biaya', [BookingController::class, 'kalkulasiBiaya']);
+
 Route::middleware(['auth:sanctum'])->group(function () {
     // WebSocket & Real-time Chat
     Route::get('/websocket/config', [WebSocketController::class, 'getConfig']);

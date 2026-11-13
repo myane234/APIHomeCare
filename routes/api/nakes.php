@@ -24,6 +24,7 @@ Route::middleware(['auth:sanctum', 'role:nakes,tenaga medis'])->group(function (
     Route::get('/nakes/riwayat-kunjungan/{id}', [RiwayatKunjunganController::class, 'show']);
     Route::get('/nakes/orders', [NakesBookingController::class, 'ordersQueue']);
     Route::get('/nakes/order/{id}', [NakesBookingController::class, 'show']);
+    Route::get('/nakes/booking-queue-info/{id}', [NakesBookingController::class, 'bookingQueueInfo']); // Info tier broadcast
     Route::post('/nakes/booking/{id}/status', [BookingController::class, 'nakesUpdateStatus']);
     Route::post('/nakes/booking/{id}/terima', [NakesBookingController::class, 'acceptBooking']);
     Route::post('/nakes/booking/{id}/tolak', [NakesBookingController::class, 'rejectBooking']);
