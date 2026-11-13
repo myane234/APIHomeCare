@@ -719,9 +719,7 @@ class BookingController extends Controller
         }
 
         $promo = Promo::whereIn('id_layanan', $layananIds)
-            ->where('status_promo', 'Aktif')
-            ->whereDate('tanggal_mulai', '<=', now()->toDateString())
-            ->whereDate('tanggal_berakhir', '>=', now()->toDateString())
+            ->aktifSekarang()
             ->orderByDesc('created_at')
             ->first();
 
@@ -2978,9 +2976,7 @@ class BookingController extends Controller
 
         // ── Promo aktif ───────────────────────────────────────────────────
         $promo = Promo::whereIn('id_layanan', $layananIds)
-            ->where('status_promo', 'Aktif')
-            ->whereDate('tanggal_mulai', '<=', now()->toDateString())
-            ->whereDate('tanggal_berakhir', '>=', now()->toDateString())
+            ->aktifSekarang()
             ->orderByDesc('created_at')
             ->first();
 

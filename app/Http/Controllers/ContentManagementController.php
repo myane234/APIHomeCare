@@ -17,9 +17,7 @@ class ContentManagementController extends Controller
 
         // Fetch active promos
         $promos = \App\Models\Promo::with('layanans')
-            ->where('status_promo', 'Aktif')
-            ->whereDate('tanggal_mulai', '<=', now()->toDateString())
-            ->whereDate('tanggal_berakhir', '>=', now()->toDateString())
+            ->aktifSekarang()
             ->orderBy('created_at', 'desc')
             ->get();
 

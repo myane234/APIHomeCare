@@ -19,6 +19,7 @@ class PromoController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
+        // Tambahkan status_aktual (computed dari tanggal) agar admin bisa lihat mana yang sudah kedaluwarsa
         return response()->json([
             'success' => true,
             'data' => $promos,
@@ -125,9 +126,7 @@ class PromoController extends Controller
     public function getActivePromos()
     {
         $promos = Promo::with('layanan')
-            ->where('status_promo', 'Aktif')
-            ->whereDate('tanggal_mulai', '<=', now()->toDateString())
-            ->whereDate('tanggal_berakhir', '>=', now()->toDateString())
+            ->aktifSekarang()
             ->orderBy('created_at', 'desc')
             ->get();
 
