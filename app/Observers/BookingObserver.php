@@ -3,10 +3,12 @@
 namespace App\Observers;
 
 use App\Models\Booking;
+use App\Models\TenagaMedis;
 use App\Models\Transaksi;
 use App\Services\EmailNotificationService;
 use App\Services\NotificationService;
 use App\Services\PointService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -50,6 +52,7 @@ class BookingObserver
 
             switch ($newStatus) {
                 case 'Selesai':
+                    $this->triggerCreditSaldoNakes($booking);
                     $this->triggerEarn($booking);
                     $this->triggerInvoiceEmail($booking);
                     $this->triggerStatusNotification(
@@ -229,6 +232,66 @@ class BookingObserver
             $this->emailService->sendInvoice($booking, createdBy: 'booking_observer');
         } catch (\Throwable $e) {
             Log::error("[BookingObserver] Gagal trigger email invoice #{$booking->id_booking}: {$e->getMessage()}");
+        }
+    }
+
+    /**
+     * Kredit saldo nakes dari hak_nakes saat booking berstatus Selesai.
+     *
+     * Kredit dilakukan di sini (bukan di TransaksiObserver) karena pada saat pembayaran
+     * dikonfirmasi (transaksi → Lunas), nakes bisa saja belum ter-assign ke booking.
+     * Saat status booking berubah menjadi 'Selesai', nakes sudah pasti ter-assign.
+     *
+     * Guard idempotency: kolom transaksi.saldo_credited_at diisi secara atomik menggunakan
+     * whereNull() untuk mencegah double-credit meski method ini dipanggil lebih dari sekali.
+     */
+    private function triggerCreditSaldoNakes(Booking $booking): void
+    {
+        try {
+            $booking->loadMissing('transaksi');
+            $transaksi = $booking->transaksi;
+
+            if (!$transaksi) {
+                Log::warning("[BookingObserver] Booking #{$booking->id_booking} tidak memiliki transaksi, skip credit saldo nakes.");
+                return;
+            }
+
+            $lunasStatuses = ['Lunas', 'lunas', 'settlement', 'capture'];
+            if (!in_array($transaksi->status_transaksi, $lunasStatuses)) {
+                Log::info("[BookingObserver] Booking #{$booking->id_booking} status transaksi bukan Lunas ('{$transaksi->status_transaksi}'), skip credit saldo nakes.");
+                return;
+            }
+
+            if (!$booking->id_tenaga_medis) {
+                Log::warning("[BookingObserver] Booking #{$booking->id_booking} tidak memiliki id_tenaga_medis, skip credit saldo nakes.");
+                return;
+            }
+
+            $hakNakes = (float) $transaksi->hak_nakes;
+            if ($hakNakes <= 0) {
+                Log::info("[BookingObserver] hak_nakes = 0 untuk transaksi #{$transaksi->id_transaksi}, skip credit saldo nakes.");
+                return;
+            }
+
+            // Guard idempotency: gunakan whereNull untuk atomic check-and-update.
+            // Jika saldo_credited_at sudah terisi (sudah pernah dikreditkan), affected = 0.
+            $affected = DB::table('transaksis')
+                ->where('id_transaksi', $transaksi->id_transaksi)
+                ->whereNull('saldo_credited_at')
+                ->update(['saldo_credited_at' => now()]);
+
+            if (!$affected) {
+                Log::info("[BookingObserver] Saldo nakes untuk transaksi #{$transaksi->id_transaksi} sudah dikreditkan sebelumnya (saldo_credited_at tidak NULL), skip duplicate.");
+                return;
+            }
+
+            // Kredit saldo menggunakan DB-level increment agar aman dari race condition.
+            TenagaMedis::where('id_tenaga_medis', $booking->id_tenaga_medis)
+                        ->increment('saldo', $hakNakes);
+
+            Log::info("[BookingObserver] Saldo nakes #{$booking->id_tenaga_medis} dikreditkan Rp " . number_format($hakNakes, 0, ',', '.') . " dari booking #{$booking->id_booking} (transaksi #{$transaksi->id_transaksi}).");
+        } catch (\Throwable $e) {
+            Log::error("[BookingObserver] Gagal credit saldo nakes untuk booking #{$booking->id_booking}: " . $e->getMessage());
         }
     }
 
